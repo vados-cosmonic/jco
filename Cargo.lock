@@ -92,10 +92,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67ba02a97a2bd10f4b59b25c7973101c79642302776489e030cd13cdab09ed15"
 
 [[package]]
+name = "cranelift-bitset"
+version = "0.110.0"
+source = "git+https://github.com/bytecodealliance/wasmtime?rev=9bdb731ab653a3845a1fa6cb6fcb20505c049ee8#9bdb731ab653a3845a1fa6cb6fcb20505c049ee8"
+dependencies = [
+ "serde",
+ "serde_derive",
+]
+
+[[package]]
 name = "cranelift-entity"
-version = "0.109.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8cfdc315e5d18997093e040a8d234bea1ac1e118a716d3e30f40d449e78207b"
+version = "0.110.0"
+source = "git+https://github.com/bytecodealliance/wasmtime?rev=9bdb731ab653a3845a1fa6cb6fcb20505c049ee8#9bdb731ab653a3845a1fa6cb6fcb20505c049ee8"
 dependencies = [
  "serde",
  "serde_derive",
@@ -334,6 +342,9 @@ name = "semver"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "61697e0a1c7e512e84a621326239844a24d8207b4669b41bc18b32ea5cbf988b"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "serde"
@@ -562,23 +573,23 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-component-util"
-version = "22.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f9d2912c53d9054984b380dfbd7579f9c3681b2a73b903a56bd71a1c4f175f1e"
+version = "23.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime?rev=9bdb731ab653a3845a1fa6cb6fcb20505c049ee8#9bdb731ab653a3845a1fa6cb6fcb20505c049ee8"
 
 [[package]]
 name = "wasmtime-environ"
-version = "22.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f444e900e848b884d8a8a2949b6f5b92af642a3e663ff8fbe78731143a55be61"
+version = "23.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime?rev=9bdb731ab653a3845a1fa6cb6fcb20505c049ee8#9bdb731ab653a3845a1fa6cb6fcb20505c049ee8"
 dependencies = [
  "anyhow",
+ "cranelift-bitset",
  "cranelift-entity",
  "gimli",
  "indexmap",
  "log",
  "object",
  "postcard",
+ "semver",
  "serde",
  "serde_derive",
  "target-lexicon",
@@ -591,10 +602,10 @@ dependencies = [
 
 [[package]]
 name = "wasmtime-types"
-version = "22.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "412463e9000e14cf6856be48628d2213c20c153e29ffc22b036980c892ea6964"
+version = "23.0.0"
+source = "git+https://github.com/bytecodealliance/wasmtime?rev=9bdb731ab653a3845a1fa6cb6fcb20505c049ee8#9bdb731ab653a3845a1fa6cb6fcb20505c049ee8"
 dependencies = [
+ "anyhow",
  "cranelift-entity",
  "serde",
  "serde_derive",

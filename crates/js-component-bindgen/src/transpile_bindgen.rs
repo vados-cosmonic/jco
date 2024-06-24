@@ -14,7 +14,6 @@ use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fmt::Write;
 use std::mem;
-use wasmparser::collections::IndexMap;
 use wasmtime_environ::component::Transcode;
 use wasmtime_environ::{
     component,
@@ -191,11 +190,23 @@ pub fn transpile_bindgen(
         .exports()
         .iter()
         .map(|(export_name, canon_export_name)| {
-            let export = if canon_export_name.contains(':') {
-                &instantiator.component.exports[*canon_export_name]
-            } else {
-                &instantiator.component.exports[&canon_export_name.to_kebab_case()]
-            };
+            let mut canon_export_name: String = String::from(*canon_export_name);
+            if !canon_export_name.contains(':') {
+                canon_export_name = canon_export_name.to_kebab_case();
+            }
+
+            let export_idx = instantiator
+                .component
+                .exports
+                .get(&canon_export_name, &component::NameMapNoIntern)
+                .expect("missing export");
+
+            let export = instantiator
+                .component
+                .export_items
+                .get(*export_idx)
+                .expect("missing");
+
             (export_name.to_string(), export.clone())
         })
         .collect();
@@ -502,20 +513,32 @@ impl<'a> Instantiator<'a, '_> {
         self.exports_resource_types = self.imports_resource_types.clone();
         for (key, item) in &self.resolve.worlds[self.world].exports {
             let name = &self.resolve.name_world_key(key);
-            let (_, export) = self
+            let (_, export_idx) = self
                 .component
                 .exports
-                .iter()
+                .raw_iter()
                 .find(|(expt_name, _)| *expt_name == name)
                 .unwrap();
             match item {
                 WorldItem::Interface { id, stability: _ } => {
                     let iface = &self.resolve.interfaces[*id];
+                    let export = self
+                        .component
+                        .export_items
+                        .get(*export_idx)
+                        .expect("failed to find export");
                     let Export::Instance { exports, .. } = &export else {
                         unreachable!()
                     };
+
                     for (ty_name, ty) in &iface.types {
-                        match exports.get(ty_name).unwrap() {
+                        match self
+                            .component
+                            .export_items
+                            // TODO: do we need to do name map interning here?
+                            .get(*exports.get(ty_name, &component::NameMapNoIntern).unwrap())
+                            .unwrap()
+                        {
                             Export::Type(TypeDef::Resource(resource)) => {
                                 let ty = crate::dealias(self.resolve, *ty);
                                 let resource_idx = self.types[*resource].ty;
@@ -523,7 +546,7 @@ impl<'a> Instantiator<'a, '_> {
                             }
                             Export::Type(_) => {}
                             _ => unreachable!(),
-                        }
+                        };
                     }
                 }
                 WorldItem::Function(_) => {}
@@ -1737,11 +1760,17 @@ impl<'a> Instantiator<'a, '_> {
         format!("exports{i}{}", maybe_quote_member(name))
     }
 
-    fn exports(&mut self, exports: &IndexMap<String, Export>) {
-        for (export_name, export) in exports.iter() {
+    fn exports(&mut self, exports: &component::NameMap<String, component::ExportIndex>) {
+        // TODO: support semver checking here on exports
+        for (export_name, export_idx) in exports.raw_iter() {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut resource_map = ResourceMap::new();
+            let export = self
+                .component
+                .export_items
+                .get(*export_idx)
+                .expect("failed to find export");
             match export {
                 Export::LiftedFunction {
                     func: def,
@@ -1773,7 +1802,7 @@ impl<'a> Instantiator<'a, '_> {
                         &def,
                         &options,
                         func,
-                        export_name,
+                        &export_name.to_string(),
                         &resource_map,
                     );
                     if let FunctionKind::Constructor(ty)
@@ -1799,7 +1828,12 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Interface { id, stability: _ } => *id,
                         WorldItem::Function(_) | WorldItem::Type(_) => unreachable!(),
                     };
-                    for (func_name, export) in exports {
+                    for (func_name, export_idx) in exports.raw_iter() {
+                        let export = self
+                            .component
+                            .export_items
+                            .get(*export_idx)
+                            .expect("missing export");
                         let (def, options, func_ty) = match export {
                             Export::LiftedFunction { func, options, ty } => (func, options, ty),
                             Export::Type(_) => continue, // ignored
@@ -1859,7 +1893,7 @@ impl<'a> Instantiator<'a, '_> {
                 Export::Type(_) => {}
 
                 // This can't be tested at this time so leave it unimplemented
-                Export::ModuleStatic(_) => unimplemented!(),
+                Export::ModuleStatic { .. } => unimplemented!(),
                 Export::ModuleImport { .. } => unimplemented!(),
             }
         }

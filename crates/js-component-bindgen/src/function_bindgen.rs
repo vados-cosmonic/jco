@@ -1,15 +1,17 @@
-use crate::intrinsics::Intrinsic;
-use crate::source;
-use crate::{uwrite, uwriteln};
-use heck::*;
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 use std::mem;
+
+use heck::*;
 use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
 use wit_parser::*;
+
+use crate::intrinsics::Intrinsic;
+use crate::source;
+use crate::{uwrite, uwriteln};
 
 #[derive(PartialEq)]
 pub enum ErrHandling {
