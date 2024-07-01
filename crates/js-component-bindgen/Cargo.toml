@@ -29,4 +29,3 @@ wasm-encoder = { workspace = true }
 wasmtime-environ = { workspace = true, features = ['component-model'] }
 wit-bindgen-core = { workspace = true }
 wit-component = { workspace = true }
-wit-parser = { workspace = true }

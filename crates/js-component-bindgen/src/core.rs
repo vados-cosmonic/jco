@@ -702,10 +702,10 @@ macro_rules! define_translate {
     });
     (mk CallIndirect $ty:ident $table:ident $table_byte:ident) => ({
         let _ = $table_byte;
-        CallIndirect { ty: $ty, table: $table }
+        CallIndirect { type_index: $ty, table_index: $table }
     });
     (mk ReturnCallIndirect $ty:ident $table:ident) => (
-        ReturnCallIndirect { ty: $ty, table: $table }
+        ReturnCallIndirect { type_index: $ty, table_index: $table }
     );
     (mk I32Const $v:ident) => (I32Const($v));
     (mk I64Const $v:ident) => (I64Const($v));

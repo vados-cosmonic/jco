@@ -28,10 +28,11 @@ use wasmtime_environ::{
 };
 use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
-use wit_parser::abi::AbiVariant;
-use wit_parser::{
-    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, WorldId,
-    WorldItem, WorldKey,
+
+use wit_bindgen_core::wit_parser::abi::AbiVariant;
+use wit_bindgen_core::wit_parser::{
+    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, TypeOwner,
+    WorldId, WorldItem, WorldKey,
 };
 
 #[derive(Default, Clone)]
@@ -1377,7 +1378,7 @@ impl<'a> Instantiator<'a, '_> {
 
         let local_name = if imported {
             let (world_key, iface_name) = match ty.owner {
-                wit_parser::TypeOwner::World(world) => (
+                TypeOwner::World(world) => (
                     self.resolve.worlds[world]
                         .imports
                         .iter()
@@ -1387,25 +1388,23 @@ impl<'a> Instantiator<'a, '_> {
                         .clone(),
                     None,
                 ),
-                wit_parser::TypeOwner::Interface(iface) => {
-                    match &self.resolve.interfaces[iface].name {
-                        Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
-                        None => (
-                            self.resolve.worlds[self.world]
-                                .imports
-                                .iter()
-                                .find(|&(_, item)| match item {
-                                    WorldItem::Interface { id, .. } => *id == iface,
-                                    _ => false,
-                                })
-                                .unwrap()
-                                .0
-                                .clone(),
-                            None,
-                        ),
-                    }
-                }
-                wit_parser::TypeOwner::None => unimplemented!(),
+                TypeOwner::Interface(iface) => match &self.resolve.interfaces[iface].name {
+                    Some(name) => (WorldKey::Interface(iface), Some(name.as_str())),
+                    None => (
+                        self.resolve.worlds[self.world]
+                            .imports
+                            .iter()
+                            .find(|&(_, item)| match item {
+                                WorldItem::Interface { id, .. } => *id == iface,
+                                _ => false,
+                            })
+                            .unwrap()
+                            .0
+                            .clone(),
+                        None,
+                    ),
+                },
+                TypeOwner::None => unimplemented!(),
             };
 
             let import_name = self.resolve.name_world_key(&world_key);

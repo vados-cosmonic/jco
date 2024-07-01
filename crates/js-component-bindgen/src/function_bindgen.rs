@@ -6,8 +6,9 @@ use heck::*;
 use wasmtime_environ::component::{ResourceIndex, TypeResourceTableIndex};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
-use wit_parser::abi::WasmType;
-use wit_parser::*;
+
+use wit_bindgen_core::wit_parser::abi::WasmType;
+use wit_bindgen_core::wit_parser::{Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId};
 
 use crate::intrinsics::Intrinsic;
 use crate::source;
