@@ -400,7 +400,7 @@ pub fn render_intrinsics(
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError(JSON.stringify({ own, rep, val, scope, T_FLAG, bitOr: scope & T_FLAG, handle }, 2));
+                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError('invalid handle: ' + JSON.stringify({ own, rep, val, scope, T_FLAG, bitOr: scope & T_FLAG, handle }, 2));
                     table[handle << 1] = table[0] | T_FLAG;
                     table[0] = handle | T_FLAG;
                     return { rep, scope, own };
