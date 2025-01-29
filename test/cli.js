@@ -49,493 +49,493 @@ export async function cliTest(_fixtures) {
       } catch {}
     });
 
-    // test("Transcoding", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/env-allow.composed.wasm`,
-    //     ...multiMemory,
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   await writeFile(
-    //     `${outDir}/package.json`,
-    //     JSON.stringify({ type: "module" }),
-    //   );
-    //   const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
-    //   deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
-    // });
+    test("Transcoding", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/env-allow.composed.wasm`,
+        ...multiMemory,
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" }),
+      );
+      const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
+      deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
+    });
 
-    // test("Resource transfer", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/stdio.composed.wasm`,
-    //     ...multiMemory,
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   await writeFile(
-    //     `${outDir}/package.json`,
-    //     JSON.stringify({ type: "module" }),
-    //   );
-    //   const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
-    //   m.testStdio();
-    // });
+    test("Resource transfer", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/stdio.composed.wasm`,
+        ...multiMemory,
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" }),
+      );
+      const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
+      m.testStdio();
+    });
 
-    // test("Resource transfer valid lifting", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/stdio.composed.wasm`,
-    //     ...multiMemory,
-    //     "--valid-lifting-optimization",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   await writeFile(
-    //     `${outDir}/package.json`,
-    //     JSON.stringify({ type: "module" }),
-    //   );
-    //   const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
-    //   m.testStdio();
-    // });
+    test("Resource transfer valid lifting", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/stdio.composed.wasm`,
+        ...multiMemory,
+        "--valid-lifting-optimization",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      await writeFile(
+        `${outDir}/package.json`,
+        JSON.stringify({ type: "module" }),
+      );
+      const m = await import(`${pathToFileURL(outDir)}/stdio.composed.js`);
+      m.testStdio();
+    });
 
-    // test("Transpile", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--no-wasi-shim",
-    //     "--name",
-    //     name,
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`);
-    //   ok(source.toString().includes("export { test"));
-    // });
+    test("Transpile", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--no-wasi-shim",
+        "--name",
+        name,
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`);
+      ok(source.toString().includes("export { test"));
+    });
 
-    // test("Transpile & Optimize & Minify", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--name",
-    //     name,
-    //     "--valid-lifting-optimization",
-    //     "--tla-compat",
-    //     "--optimize",
-    //     "--minify",
-    //     "--base64-cutoff=0",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`);
-    //   ok(source.toString().includes("as test,"));
-    // });
+    test("Transpile & Optimize & Minify", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--name",
+        name,
+        "--valid-lifting-optimization",
+        "--tla-compat",
+        "--optimize",
+        "--minify",
+        "--base64-cutoff=0",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`);
+      ok(source.toString().includes("as test,"));
+    });
 
-    // test("Transpile with tracing", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--name",
-    //     name,
-    //     "--map",
-    //     "testwasi=./wasi.js",
-    //     "--tracing",
-    //     "--base64-cutoff=0",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`, "utf8");
-    //   ok(source.includes("function toResultString("));
-    //   ok(
-    //     source.includes(
-    //       'console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a',
-    //     ),
-    //   );
-    //   ok(
-    //     source.includes(
-    //       'console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);',
-    //     ),
-    //   );
-    // });
+    test("Transpile with tracing", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--name",
+        name,
+        "--map",
+        "testwasi=./wasi.js",
+        "--tracing",
+        "--base64-cutoff=0",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`, "utf8");
+      ok(source.includes("function toResultString("));
+      ok(
+        source.includes(
+          'console.error(`[module="test:flavorful/test", function="f-list-in-record1"] call a',
+        ),
+      );
+      ok(
+        source.includes(
+          'console.error(`[module="test:flavorful/test", function="list-of-variants"] return result=${toResultString(ret)}`);',
+        ),
+      );
+    });
 
-    // test("Type generation", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "types",
-    //     "test/fixtures/wit",
-    //     "--world-name",
-    //     "test:flavorful/flavorful",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
-    //   ok(source.includes("export const test"));
-    //   const iface = await readFile(
-    //     `${outDir}/interfaces/test-flavorful-test.d.ts`,
-    //     "utf8",
-    //   );
-    //   ok(iface.includes("export namespace TestFlavorfulTest {"));
-    // });
+    test("Type generation", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wit",
+        "--world-name",
+        "test:flavorful/flavorful",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/flavorful.d.ts`, "utf8");
+      ok(source.includes("export const test"));
+      const iface = await readFile(
+        `${outDir}/interfaces/test-flavorful-test.d.ts`,
+        "utf8",
+      );
+      ok(iface.includes("export namespace TestFlavorfulTest {"));
+    });
 
-    // test("Type generation (specific features)", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "types",
-    //     "test/fixtures/wits/feature-gates-unstable.wit",
-    //     "--world-name",
-    //     "test:feature-gates-unstable/gated",
-    //     "--feature",
-    //     "enable-c",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(
-    //     `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-    //     "utf8",
-    //   );
-    //   ok(source.includes("export function a(): void;"));
-    //   ok(!source.includes("export function b(): void;"));
-    //   ok(source.includes("export function c(): void;"));
-    // });
+    test("Type generation (specific features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(
+        `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
+        "utf8",
+      );
+      ok(source.includes("export function a(): void;"));
+      ok(!source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
 
-    // test("Type generation (all features)", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "types",
-    //     "test/fixtures/wits/feature-gates-unstable.wit",
-    //     "--world-name",
-    //     "test:feature-gates-unstable/gated",
-    //     "--all-features",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(
-    //     `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-    //     "utf8",
-    //   );
-    //   ok(source.includes("export function a(): void;"));
-    //   ok(source.includes("export function b(): void;"));
-    //   ok(source.includes("export function c(): void;"));
-    // });
+    test("Type generation (all features)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(
+        `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
+        "utf8",
+      );
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
 
-    // // NOTE: enabling all features and a specific feature means --all-features takes precedence
-    // test("Type generation (all features + feature)", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "types",
-    //     "test/fixtures/wits/feature-gates-unstable.wit",
-    //     "--world-name",
-    //     "test:feature-gates-unstable/gated",
-    //     "--all-features",
-    //     "--feature",
-    //     "enable-c",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(
-    //     `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
-    //     "utf8",
-    //   );
-    //   ok(source.includes("export function a(): void;"));
-    //   ok(source.includes("export function b(): void;"));
-    //   ok(source.includes("export function c(): void;"));
-    // });
+    // NOTE: enabling all features and a specific feature means --all-features takes precedence
+    test("Type generation (all features + feature)", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "types",
+        "test/fixtures/wits/feature-gates-unstable.wit",
+        "--world-name",
+        "test:feature-gates-unstable/gated",
+        "--all-features",
+        "--feature",
+        "enable-c",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(
+        `${outDir}/interfaces/test-feature-gates-unstable-foo.d.ts`,
+        "utf8",
+      );
+      ok(source.includes("export function a(): void;"));
+      ok(source.includes("export function b(): void;"));
+      ok(source.includes("export function c(): void;"));
+    });
 
-    // test("Type generation (declare imports)", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "guest-types",
-    //     "test/fixtures/wit",
-    //     "--world-name",
-    //     "test:flavorful/flavorful",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(
-    //     `${outDir}/interfaces/test-flavorful-test.d.ts`,
-    //     "utf8",
-    //   );
-    //   ok(source.includes("declare module 'test:flavorful/test' {"));
-    // });
+    test("Type generation (declare imports)", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "guest-types",
+        "test/fixtures/wit",
+        "--world-name",
+        "test:flavorful/flavorful",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(
+        `${outDir}/interfaces/test-flavorful-test.d.ts`,
+        "utf8",
+      );
+      ok(source.includes("declare module 'test:flavorful/test' {"));
+    });
 
-    // test("TypeScript naming checks", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/wit/deps/ts-check/ts-check.wit`,
-    //     "--stub",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   {
-    //     const source = await readFile(`${outDir}/ts-check.d.ts`);
-    //     ok(source.toString().includes("declare function _class(): void"));
-    //     ok(source.toString().includes("export { _class as class }"));
-    //   }
-    //   {
-    //     const source = await readFile(
-    //       `${outDir}/interfaces/ts-naming-blah.d.ts`,
-    //     );
-    //     ok(source.toString().includes("declare function _class(): void"));
-    //     ok(source.toString().includes("export { _class as class }"));
-    //   }
-    // });
+    test("TypeScript naming checks", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/wit/deps/ts-check/ts-check.wit`,
+        "--stub",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      {
+        const source = await readFile(`${outDir}/ts-check.d.ts`);
+        ok(source.toString().includes("declare function _class(): void"));
+        ok(source.toString().includes("export { _class as class }"));
+      }
+      {
+        const source = await readFile(
+          `${outDir}/interfaces/ts-naming-blah.d.ts`,
+        );
+        ok(source.toString().includes("declare function _class(): void"));
+        ok(source.toString().includes("export { _class as class }"));
+      }
+    });
 
-    // test("Transpile to JS", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--name",
-    //     name,
-    //     "--map",
-    //     "test:flavorful/test=./flavorful.js",
-    //     "--valid-lifting-optimization",
-    //     "--tla-compat",
-    //     "--js",
-    //     "--base64-cutoff=0",
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`, "utf8");
-    //   ok(source.includes("./flavorful.js"));
-    //   ok(source.includes("FUNCTION_TABLE"));
-    //   ok(source.includes("export {\n  $init"));
-    // });
+    test("Transpile to JS", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--name",
+        name,
+        "--map",
+        "test:flavorful/test=./flavorful.js",
+        "--valid-lifting-optimization",
+        "--tla-compat",
+        "--js",
+        "--base64-cutoff=0",
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`, "utf8");
+      ok(source.includes("./flavorful.js"));
+      ok(source.includes("FUNCTION_TABLE"));
+      ok(source.includes("export {\n  $init"));
+    });
 
-    // test("Transpile without namespaced exports", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--no-namespaced-exports",
-    //     "--no-wasi-shim",
-    //     "--name",
-    //     name,
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`);
-    //   const finalLine = source.toString().split("\n").at(-1);
-    //   //Check final line is the export statement
-    //   ok(finalLine.toString().includes("export {"));
-    //   //Check that it does not contain the namespaced export
-    //   ok(!finalLine.toString().includes("test:flavorful/test"));
-    // });
+    test("Transpile without namespaced exports", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--no-namespaced-exports",
+        "--no-wasi-shim",
+        "--name",
+        name,
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`);
+      const finalLine = source.toString().split("\n").at(-1);
+      //Check final line is the export statement
+      ok(finalLine.toString().includes("export {"));
+      //Check that it does not contain the namespaced export
+      ok(!finalLine.toString().includes("test:flavorful/test"));
+    });
 
-    // test("Transpile with namespaced exports", async () => {
-    //   const name = "flavorful";
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/components/${name}.component.wasm`,
-    //     "--no-wasi-shim",
-    //     "--name",
-    //     name,
-    //     "-o",
-    //     outDir,
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/${name}.js`);
-    //   const finalLine = source.toString().split("\n").at(-1);
-    //   //Check final line is the export statement
-    //   ok(finalLine.toString().includes("export {"));
-    //   //Check that it does contain the namespaced export
-    //   ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
-    // });
+    test("Transpile with namespaced exports", async () => {
+      const name = "flavorful";
+      const { stderr } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/components/${name}.component.wasm`,
+        "--no-wasi-shim",
+        "--name",
+        name,
+        "-o",
+        outDir,
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/${name}.js`);
+      const finalLine = source.toString().split("\n").at(-1);
+      //Check final line is the export statement
+      ok(finalLine.toString().includes("export {"));
+      //Check that it does contain the namespaced export
+      ok(finalLine.toString().includes("test as 'test:flavorful/test'"));
+    });
 
-    // test("Optimize", async () => {
-    //   const component = await readFile(
-    //     `test/fixtures/components/flavorful.component.wasm`,
-    //   );
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "opt",
-    //     `test/fixtures/components/flavorful.component.wasm`,
-    //     "-o",
-    //     outFile,
-    //   );
-    //   strictEqual(stderr, "");
-    //   ok(stdout.includes("Core Module 1:"));
-    //   const optimizedComponent = await readFile(outFile);
-    //   ok(optimizedComponent.byteLength < component.byteLength);
-    // });
+    test("Optimize", async () => {
+      const component = await readFile(
+        `test/fixtures/components/flavorful.component.wasm`,
+      );
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "opt",
+        `test/fixtures/components/flavorful.component.wasm`,
+        "-o",
+        outFile,
+      );
+      strictEqual(stderr, "");
+      ok(stdout.includes("Core Module 1:"));
+      const optimizedComponent = await readFile(outFile);
+      ok(optimizedComponent.byteLength < component.byteLength);
+    });
 
-    // test("Print & Parse", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "print",
-    //     `test/fixtures/components/flavorful.component.wasm`,
-    //   );
-    //   strictEqual(stderr, "");
-    //   strictEqual(stdout.slice(0, 10), "(component");
-    //   {
-    //     const { stderr, stdout } = await exec(
-    //       jcoPath,
-    //       "print",
-    //       `test/fixtures/components/flavorful.component.wasm`,
-    //       "-o",
-    //       outFile,
-    //     );
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout, "");
-    //   }
-    //   {
-    //     const { stderr, stdout } = await exec(
-    //       jcoPath,
-    //       "parse",
-    //       outFile,
-    //       "-o",
-    //       outFile,
-    //     );
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout, "");
-    //     ok(await readFile(outFile));
-    //   }
-    // });
+    test("Print & Parse", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "print",
+        `test/fixtures/components/flavorful.component.wasm`,
+      );
+      strictEqual(stderr, "");
+      strictEqual(stdout.slice(0, 10), "(component");
+      {
+        const { stderr, stdout } = await exec(
+          jcoPath,
+          "print",
+          `test/fixtures/components/flavorful.component.wasm`,
+          "-o",
+          outFile,
+        );
+        strictEqual(stderr, "");
+        strictEqual(stdout, "");
+      }
+      {
+        const { stderr, stdout } = await exec(
+          jcoPath,
+          "parse",
+          outFile,
+          "-o",
+          outFile,
+        );
+        strictEqual(stderr, "");
+        strictEqual(stdout, "");
+        ok(await readFile(outFile));
+      }
+    });
 
-    // test("Wit shadowing stub test", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "transpile",
-    //     `test/fixtures/wit/deps/app/app.wit`,
-    //     "-o",
-    //     outDir,
-    //     "--stub",
-    //   );
-    //   strictEqual(stderr, "");
-    //   const source = await readFile(`${outDir}/app.js`);
-    //   ok(source.includes("class PString$1{"));
-    // });
+    test("Wit shadowing stub test", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "transpile",
+        `test/fixtures/wit/deps/app/app.wit`,
+        "-o",
+        outDir,
+        "--stub",
+      );
+      strictEqual(stderr, "");
+      const source = await readFile(`${outDir}/app.js`);
+      ok(source.includes("class PString$1{"));
+    });
 
-    // test("Wit & New", async () => {
-    //   const { stderr, stdout } = await exec(
-    //     jcoPath,
-    //     "wit",
-    //     `test/fixtures/components/flavorful.component.wasm`,
-    //   );
-    //   strictEqual(stderr, "");
-    //   ok(stdout.includes("world root {"));
+    test("Wit & New", async () => {
+      const { stderr, stdout } = await exec(
+        jcoPath,
+        "wit",
+        `test/fixtures/components/flavorful.component.wasm`,
+      );
+      strictEqual(stderr, "");
+      ok(stdout.includes("world root {"));
 
-    //   {
-    //     const { stderr, stdout } = await exec(
-    //       jcoPath,
-    //       "embed",
-    //       "--dummy",
-    //       "--wit",
-    //       "test/fixtures/wit/deps/flavorful/flavorful.wit",
-    //       "-m",
-    //       "language=javascript",
-    //       "-m",
-    //       "processed-by=dummy-gen@test",
-    //       "-o",
-    //       outFile,
-    //     );
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout, "");
-    //   }
+      {
+        const { stderr, stdout } = await exec(
+          jcoPath,
+          "embed",
+          "--dummy",
+          "--wit",
+          "test/fixtures/wit/deps/flavorful/flavorful.wit",
+          "-m",
+          "language=javascript",
+          "-m",
+          "processed-by=dummy-gen@test",
+          "-o",
+          outFile,
+        );
+        strictEqual(stderr, "");
+        strictEqual(stdout, "");
+      }
 
-    //   {
-    //     const { stderr, stdout } = await exec(jcoPath, "print", outFile);
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout.slice(0, 7), "(module");
-    //   }
-    //   {
-    //     const { stderr, stdout } = await exec(
-    //       jcoPath,
-    //       "new",
-    //       outFile,
-    //       "-o",
-    //       outFile,
-    //     );
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout, "");
-    //   }
-    //   {
-    //     const { stderr, stdout } = await exec(jcoPath, "print", outFile);
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout.slice(0, 10), "(component");
-    //   }
-    //   {
-    //     const { stdout, stderr } = await exec(
-    //       jcoPath,
-    //       "metadata-show",
-    //       outFile,
-    //       "--json",
-    //     );
-    //     strictEqual(stderr, "");
-    //     const meta = JSON.parse(stdout);
-    //     deepStrictEqual(meta[0].metaType, { tag: "component", val: 5 });
-    //     deepStrictEqual(meta[1].producers, [
-    //       [
-    //         "processed-by",
-    //         [
-    //           ["wit-component", "0.220.0"],
-    //           ["dummy-gen", "test"],
-    //         ],
-    //       ],
-    //       ["language", [["javascript", ""]]],
-    //     ]);
-    //   }
-    // });
+      {
+        const { stderr, stdout } = await exec(jcoPath, "print", outFile);
+        strictEqual(stderr, "");
+        strictEqual(stdout.slice(0, 7), "(module");
+      }
+      {
+        const { stderr, stdout } = await exec(
+          jcoPath,
+          "new",
+          outFile,
+          "-o",
+          outFile,
+        );
+        strictEqual(stderr, "");
+        strictEqual(stdout, "");
+      }
+      {
+        const { stderr, stdout } = await exec(jcoPath, "print", outFile);
+        strictEqual(stderr, "");
+        strictEqual(stdout.slice(0, 10), "(component");
+      }
+      {
+        const { stdout, stderr } = await exec(
+          jcoPath,
+          "metadata-show",
+          outFile,
+          "--json",
+        );
+        strictEqual(stderr, "");
+        const meta = JSON.parse(stdout);
+        deepStrictEqual(meta[0].metaType, { tag: "component", val: 5 });
+        deepStrictEqual(meta[1].producers, [
+          [
+            "processed-by",
+            [
+              ["wit-component", "0.220.0"],
+              ["dummy-gen", "test"],
+            ],
+          ],
+          ["language", [["javascript", ""]]],
+        ]);
+      }
+    });
 
-    // test("Component new adapt", async () => {
-    //   const { stderr } = await exec(
-    //     jcoPath,
-    //     "new",
-    //     "test/fixtures/modules/exitcode.wasm",
-    //     "--wasi-reactor",
-    //     "-o",
-    //     outFile,
-    //   );
-    //   strictEqual(stderr, "");
-    //   {
-    //     const { stderr, stdout } = await exec(jcoPath, "print", outFile);
-    //     strictEqual(stderr, "");
-    //     strictEqual(stdout.slice(0, 10), "(component");
-    //   }
-    // });
+    test("Component new adapt", async () => {
+      const { stderr } = await exec(
+        jcoPath,
+        "new",
+        "test/fixtures/modules/exitcode.wasm",
+        "--wasi-reactor",
+        "-o",
+        outFile,
+      );
+      strictEqual(stderr, "");
+      {
+        const { stderr, stdout } = await exec(jcoPath, "print", outFile);
+        strictEqual(stderr, "");
+        strictEqual(stdout.slice(0, 10), "(component");
+      }
+    });
 
-    // test("Extract metadata", async () => {
-    //   const { stdout, stderr } = await exec(
-    //     jcoPath,
-    //     "metadata-show",
-    //     "test/fixtures/modules/exitcode.wasm",
-    //     "--json",
-    //   );
-    //   strictEqual(stderr, "");
-    //   deepStrictEqual(JSON.parse(stdout), [
-    //     {
-    //       metaType: { tag: "module" },
-    //       producers: [],
-    //       range: [0, 262],
-    //     },
-    //   ]);
-    // });
+    test("Extract metadata", async () => {
+      const { stdout, stderr } = await exec(
+        jcoPath,
+        "metadata-show",
+        "test/fixtures/modules/exitcode.wasm",
+        "--json",
+      );
+      strictEqual(stderr, "");
+      deepStrictEqual(JSON.parse(stdout), [
+        {
+          metaType: { tag: "module" },
+          producers: [],
+          range: [0, 262],
+        },
+      ]);
+    });
 
     // test("Componentize", async () => {
     //   const args = [
