@@ -521,52 +521,47 @@ export async function cliTest(_fixtures) {
     //   ]);
     // });
 
-    test("Componentize (weval)", async () => {
-      const args = [
-        jcoPath,
-        "componentize",
-        "test/fixtures/componentize/source.js",
-        "-d",
-        "all",
-        "-w",
-        "test/fixtures/componentize/source.wit",
-        "-o",
-        outFile
-      ];
-      if (env.WEVAL_BIN_PATH) {
-        args.push("--weval-bin", env.WEVAL_BIN_PATH);
-      }
+    // test("Componentize (weval)", async () => {
+    //   const args = [
+    //     jcoPath,
+    //     "componentize",
+    //     "test/fixtures/componentize/source.js",
+    //     "-d",
+    //     "all",
+    //     "-w",
+    //     "test/fixtures/componentize/source.wit",
+    //     "-o",
+    //     outFile
+    //   ];
+    //   if (env.WEVAL_BIN_PATH) {
+    //     args.push("--weval-bin", env.WEVAL_BIN_PATH);
+    //   }
 
-      console.log(`executing: [${[...args]}]`);
-      const { stdout, stderr } = await exec(...args);
-      strictEqual(stderr, "");
-      {
-        console.log("executing transpile...");
-        const { stdout, stderr } = await exec(
-          jcoPath,
-          "transpile",
-          outFile,
-          "--name",
-          "componentize",
-          "--map",
-          "local:test/foo=./foo.js",
-          "-o",
-          outDir
-        );
-        strictEqual(stderr, "");
-      }
-      console.log("writing file...");
-      await writeFile(
-        `${outDir}/package.json`,
-        JSON.stringify({ type: "module" })
-      );
-      console.log("writing file...");
-      await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
-      console.log("performing import...");
-      const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
-      strictEqual(m.hello(), "world");
-      strictEqual(m.consumeBar(m.createBar()), 'bar1');
-    });
+    //   const { stdout, stderr } = await exec(...args);
+    //   strictEqual(stderr, "");
+    //   {
+    //     const { stdout, stderr } = await exec(
+    //       jcoPath,
+    //       "transpile",
+    //       outFile,
+    //       "--name",
+    //       "componentize",
+    //       "--map",
+    //       "local:test/foo=./foo.js",
+    //       "-o",
+    //       outDir
+    //     );
+    //     strictEqual(stderr, "");
+    //   }
+    //   await writeFile(
+    //     `${outDir}/package.json`,
+    //     JSON.stringify({ type: "module" })
+    //   );
+    //   await writeFile(`${outDir}/foo.js`, `export class Bar {}`);
+    //   const m = await import(`${pathToFileURL(outDir)}/componentize.js`);
+    //   strictEqual(m.hello(), "world");
+    //   strictEqual(m.consumeBar(m.createBar()), 'bar1');
+    // });
 
     test("Componentize (weval)", async () => {
       const args = [
