@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { spawn } from "node:child_process";
-import { argv, execArgv } from "node:process";
+import { argv, execArgv, env } from "node:process";
 import { normalize, sep } from "node:path";
 import { mkdtemp } from "node:fs/promises";
 
@@ -14,9 +14,15 @@ export async function exec(cmd, ...args) {
       stdio: "pipe",
     });
     cp.stdout.on("data", (chunk) => {
+      if (env.process.TEST_DEBUG) {
+        console.log(`[exec][stdout] ${chunk}`);
+      }
       stdout += chunk;
     });
     cp.stderr.on("data", (chunk) => {
+      if (env.process.TEST_DEBUG) {
+        console.log(`[exec][stderr] ${chunk}`);
+      }
       stderr += chunk;
     });
     cp.on("error", reject);

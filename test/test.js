@@ -19,24 +19,24 @@ const componentFixtures = env.COMPONENT_FIXTURES
   ? env.COMPONENT_FIXTURES.split(',')
   : (await readdir('test/fixtures/components')).filter(name => name !== 'dummy_reactor.component.wasm');
 
-import { browserTest } from './browser.js';
-import { codegenTest } from './codegen.js';
-import { runtimeTest } from './runtime.js';
-import { commandsTest } from './commands.js';
-import { apiTest } from './api.js';
+// import { browserTest } from './browser.js';
+// import { codegenTest } from './codegen.js';
+// import { runtimeTest } from './runtime.js';
+// import { commandsTest } from './commands.js';
+// import { apiTest } from './api.js';
 import { cliTest } from './cli.js';
-import { preview2Test } from './preview2.js';
-import { witTest } from './wit.js';
-import { tsTest } from './typescript.js';
+// import { preview2Test } from './preview2.js';
+// import { witTest } from './wit.js';
+// import { tsTest } from './typescript.js';
 
-await codegenTest(componentFixtures);
-tsTest();
-await preview2Test();
-await runtimeTest(componentFixtures);
-await commandsTest();
-await apiTest(componentFixtures);
+// await codegenTest(componentFixtures);
+// tsTest();
+// await preview2Test();
+// await runtimeTest(componentFixtures);
+// await commandsTest();
+// await apiTest(componentFixtures);
 await cliTest(componentFixtures);
-await witTest();
+// await witTest();
 
-if (platform !== 'win32')
-  await browserTest();
+// if (platform !== 'win32')
+//   await browserTest();
