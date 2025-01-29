@@ -124,41 +124,41 @@ jobs:
         WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
       run: npm run test
 
-  build-wasi-tests:
-    name: WASI Test Generation
-    runs-on: ubuntu-latest
-    outputs:
-      cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
-    steps:
-    - uses: actions/checkout@v4
-      with:
-        submodules: recursive
-    - name: Cache WASI Tests
-      id: cache-wasi-tests
-      uses: actions/cache@v4
-      with:
-        path: tests/gen
-        key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
-    - name: Install Rust
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup update stable --no-self-update && rustup default stable
-    - name: Install wasm32-unknown-unknown target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-unknown-unknown
-    - name: Install wasm32-wasip1 target
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: rustup target add wasm32-wasip1
-    - name: Install wasm-tools
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo install wasm-tools
-    - name: Generate WASI Tests
-      if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
-      run: cargo xtask generate preview2-tests
-    - name: Upload Generated WASI Tests
-      uses: actions/upload-artifact@v4
-      with:
-        name: wasi-tests
-        path: tests/gen
+  # build-wasi-tests:
+  #   name: WASI Test Generation
+  #   runs-on: ubuntu-latest
+  #   outputs:
+  #     cache-key: ${{ steps.cache-wasi-tests.outputs.cache-primary-key }}
+  #   steps:
+  #   - uses: actions/checkout@v4
+  #     with:
+  #       submodules: recursive
+  #   - name: Cache WASI Tests
+  #     id: cache-wasi-tests
+  #     uses: actions/cache@v4
+  #     with:
+  #       path: tests/gen
+  #       key: wasi-${{ hashFiles('xtask/src/generate/preview2_tests.rs', 'submodules/wasmtime/Cargo.lock') }}
+  #   - name: Install Rust
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup update stable --no-self-update && rustup default stable
+  #   - name: Install wasm32-unknown-unknown target
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup target add wasm32-unknown-unknown
+  #   - name: Install wasm32-wasip1 target
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: rustup target add wasm32-wasip1
+  #   - name: Install wasm-tools
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: cargo install wasm-tools
+  #   - name: Generate WASI Tests
+  #     if: steps.cache-wasi-tests.outputs.cache-hit != 'true'
+  #     run: cargo xtask generate preview2-tests
+  #   - name: Upload Generated WASI Tests
+  #     uses: actions/upload-artifact@v4
+  #     with:
+  #       name: wasi-tests
+  #       path: tests/gen
 
   # test-wasi-deno:
   #   name: Jco Deno WASI Conformance Tests
