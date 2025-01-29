@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { resolve, join } from "node:path";
 import { execArgv, env } from "node:process";
 import { deepStrictEqual, ok, strictEqual } from "node:assert";
 import {

@@ -14,13 +14,13 @@ export async function exec(cmd, ...args) {
       stdio: "pipe",
     });
     cp.stdout.on("data", (chunk) => {
-      if (env.process.TEST_DEBUG) {
+      if (env.TEST_DEBUG) {
         console.log(`[exec][stdout] ${chunk}`);
       }
       stdout += chunk;
     });
     cp.stderr.on("data", (chunk) => {
-      if (env.process.TEST_DEBUG) {
+      if (env.TEST_DEBUG) {
         console.log(`[exec][stderr] ${chunk}`);
       }
       stderr += chunk;
