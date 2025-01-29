@@ -297,9 +297,9 @@ pub fn render_intrinsics(
 
             Intrinsic::ResourceCallBorrows => output.push_str("let resourceCallBorrows = [];"),
 
-            // 
+            //
             // # Resource table slab implementation
-            // 
+            //
             // Resource table slab implementation on top of a fixed "SMI" array in JS engines,
             // a fixed contiguous array of u32s, for performance. We don't use a typed array because
             // we need resizability without reserving a large buffer.
