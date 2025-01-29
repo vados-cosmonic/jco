@@ -400,7 +400,7 @@ pub fn render_intrinsics(
                     const val = table[(handle << 1) + 1];
                     const own = (val & T_FLAG) !== 0;
                     const rep = val & ~T_FLAG;
-                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle');
+                    if (val === 0 || (scope & T_FLAG) !== 0) throw new TypeError('Invalid handle val=' + val + ', scope=' + scope + ', T_FLAG=' + T_FLAG + ', scope & T_FLAG=' + (scope & T_FLAG));
                     table[handle << 1] = table[0] | T_FLAG;
                     table[0] = handle | T_FLAG;
                     return { rep, scope, own };
