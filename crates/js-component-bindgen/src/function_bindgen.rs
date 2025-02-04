@@ -1515,6 +1515,18 @@ impl Bindgen for FunctionBindgen<'_> {
                 results.push(handle);
             }
 
+            // For most non-Promise objects, flushing or evaluating the object is a no-op,
+            // so in general we only evaluate things that are promises, and pass through all other objects
+            // without modification
+            Instruction::Flush { amt } => {
+                for n in 0..*amt {
+                    let operand = &operands[n];
+                    let var = format!("flushedResult{n}");
+                    uwriteln!(self.src, "const {var} = typeof {operand} == 'object' && typeof {operand}.then == 'function' ? {operand}.await : {operand};");
+                    results.push(var);
+                }
+            }
+
             // TODO: implement async
             Instruction::FutureLower { .. }
             | Instruction::FutureLift { .. }
@@ -1524,13 +1536,9 @@ impl Bindgen for FunctionBindgen<'_> {
             | Instruction::AsyncCallWasm { .. }
             | Instruction::AsyncPostCallInterface { .. }
             | Instruction::AsyncCallReturn { .. }
-            | Instruction::Flush { .. }
             | Instruction::ErrorContextLift { .. }
             | Instruction::ErrorContextLower { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('async is not yet implemented');"
-                );
+                uwrite!(self.src, "throw new Error('async is not yet implemented');");
             }
 
             Instruction::GuestDeallocate { .. }
