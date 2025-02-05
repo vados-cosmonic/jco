@@ -37,7 +37,12 @@ tuple<string, u32>
 
 ### Jco Representation
 
-((( TODO )))
+Jco represents tuples as lists (arrays), so some examples:
+
+| Type                 | Representation (TS) | Example                                    |
+|----------------------|---------------------|--------------------------------------------|
+| `tuple<u32, u32>`    | `[number, number]`  | `tuple<u32, u32>` -> `[number, number]`    |
+| `tuple<string, u32>` | `[string, number]`  | `tuple<string, u32>` -> `[string, number]` |
 
 ## Records (`record`)
 
@@ -52,7 +57,22 @@ record person {
 
 ### Jco Representation
 
-((( TODO )))
+Jco represents records as the [Javascript Object basic data type][mdn-js-obj]:
+
+Given the WIT record above, you can expect to deal with an object similar to the following Typescript:
+
+```ts
+interface Person {
+  person: string;
+  age: number;
+}
+```
+
+> [!NOTE]
+> If using `jco guest-types` or `jco types`, you will be able to use Typescript types that
+> properly constrain the Typescript code you write.
+
+[mdn-js-obj]: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Object
 
 ## Variants (`variant`)
 
@@ -162,10 +182,6 @@ that would *not* fit in a `u32` (unsigned 32 bit integer) via WebAssembly.
 > How JS treats large numbers is not in focus here, but it is worth noting that
 > `Number.MAX_VALUE + Number.MAX_VALUE === Infinity`.
 
-What happens when you overflow a `u32` at the WebAssembly level from your component?
-
-((( TODO )))
-
 ### Typescript Schema
 
 ```
@@ -193,9 +209,9 @@ resource blob {
 }
 ```
 
-### Typescript schema
+### Jco representation
 
-the example above could be represented with the following class in Typescript pseudo-code:
+The example above could be represented with the following class in Typescript pseudo-code:
 
 ```ts
 class Blob {
@@ -208,9 +224,3 @@ class Blob {
     static merge(lhs: Uint8Array, rhs: Uint8Array): Blob;
 }
 ```
-
-### Example
-
-```js
-```
-##
