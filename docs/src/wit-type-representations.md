@@ -1,12 +1,36 @@
 # WIT Type Representations
 
-Similar to any other guest langauge, there are multiple type systems in play when dealing with JS WebAssembly components. Types represented in [WebAssembly Interface Types ("WIT")][wit] must be converted down
+Similar to any other guest langauge, there are multiple type systems in play when dealing with JS WebAssembly components.
+
+Types represented in [WebAssembly Interface Types ("WIT")][wit] must be converted down to types that are familiar for Javascript,
+and [Typescript][ts] (if dealing with `jco types` or `jco guest-types` subcommands).
+
+This document details the type representations and usage for types that are defined in WIT and built into components.
+
+[wit]: https://github.com/WebAssembly/component-model/blob/main/design/mvp/WIT.md
+[ts]: https://www.typescriptlang.org/
 
 ## Basic types
 
 Here is a basic table of conversions between WIT types and JS types:
 
 More complicated types that are built into WIT but require more work to translate are explained below.
+
+| WIT type | JS Type   |
+|----------|-----------|
+| `u8`     | `number`  |
+| `u16`    | `number`  |
+| `u32`    | `number`  |
+| `u64`    | `number`  |
+| `s8`     | `number`  |
+| `s16`    | `number`  |
+| `s32`    | `number`  |
+| `s64`    | `number`  |
+| `f32`    | `number`  |
+| `f64`    | `number`  |
+| `bool`   | `boolean` |
+| `char`   | `string`  |
+| `string` | `string`  |
 
 ## List (`list`)
 
