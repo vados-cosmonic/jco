@@ -19,12 +19,12 @@ jobs:
         uses: peaceiris/actions-mdbook@v1
         with:
           mdbook-version: '0.4.43'
-          # mdbook-version: 'latest'
 
       - uses: taiki-e/install-action@510b3ecd7915856b6909305605afa7a8a57c1b04 # v2.48.1
         with:
           tool: >-
-            mdbook-alerts@0.7.0
+            mdbook-alerts@0.7.0,
+            mdbook-linkcheck@0.7.7
 
       - run: mdbook build docs
 
