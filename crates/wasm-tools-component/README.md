@@ -1,4 +1,4 @@
-<h1 align="center">wasm-tools-component</h1>
+<h1 align="center">wasm-tools-js</h1>
 <div align="center">
   <strong>
     Packages <a href="https://github.com/bytecodealliance/wasm-tools"><code>wasm-tools</code></a> as a WebAssembly Component.

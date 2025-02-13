@@ -1,10 +1,13 @@
 [package]
 name = "js-component-bindgen-component"
-authors = ["Alex Crichton <alex@alexcrichton.com>", "Guy Bedford <gbedford@fastly.com>"]
-publish = false
+version = "0.0.0"
+edition = "2021"
+authors = [
+  "Alex Crichton <alex@alexcrichton.com>",
+  "Guy Bedford <gbedford@fastly.com>",
+]
 
-version = { workspace = true }
-edition = { workspace = true }
+publish = false
 
 [lib]
 crate-type = ["cdylib"]
@@ -12,6 +15,6 @@ crate-type = ["cdylib"]
 [dependencies]
 anyhow = { workspace = true }
 js-component-bindgen = { path = "../js-component-bindgen" }
-wasmtime-environ = { workspace = true, features = [ "component-model" ] }
-wit-bindgen = { workspace = true }
-wat = { workspace = true, features = [ "component-model" ]}
+wasmtime-environ = { workspace = true, features = ["component-model"] }
+wit-bindgen = { workspace = true, features = ["macros"] }
+wat = { workspace = true, features = ["component-model"] }

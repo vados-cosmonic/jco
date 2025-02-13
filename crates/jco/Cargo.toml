@@ -1,0 +1,37 @@
+[package]
+name = "jco"
+version = "1.9.1"
+edition = "2021"
+
+publish = false
+
+[[bin]]
+name = "dummy"
+path = "src/bin/dummy.rs"
+
+[dependencies]
+anyhow = { workspace = true, default-features = false }
+base64 = { workspace = true, default-features = false }
+heck = { workspace = true, default-features = false }
+log = { workspace = true, default-features = false }
+semver = { workspace = true, default-features = false }
+structopt = { workspace = true, default-features = false }
+wasm-encoder = { workspace = true, default-features = false }
+wasm-metadata = { workspace = true, default-features = false }
+wasmparser = { workspace = true, default-features = false }
+wasmprinter = { workspace = true, default-features = false }
+wasmtime-environ = { workspace = true, features = [
+  "component-model",
+  "compile",
+] }
+wat = { workspace = true, default-features = false }
+webidl2wit = { workspace = true, default-features = false }
+wit-bindgen = { workspace = true, default-features = false }
+wit-bindgen-core = { workspace = true, default-features = false }
+wit-component = { workspace = true, features = ["dummy-module"] }
+wit-parser = { workspace = true, default-features = false }
+xshell = { workspace = true, default-features = false }
+js-component-bindgen = { workspace = true }
+
+[dev-dependencies]
+anyhow = { workspace = true }

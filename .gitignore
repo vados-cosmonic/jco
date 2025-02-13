@@ -1,15 +1,29 @@
+# Editors
+
 .vscode
 *.swp
 *.swo
-node_modules
-/target
-/obj
-/dist
-/test/output
-/jco.sh
+
+# Documentation
+
 /docs/book
-/src/**/*.d.ts
-/src/**/*.d.ts.map
-/tests/rundir
-/tests/output
-/tests/gen
+
+# Rust crates
+
+/target
+
+/crates/jco/tests/rundir
+/crates/jco/tests/output
+/crates/jco/tests/gen
+
+# NodeJS pckages
+
+node_modules
+
+/jco.sh
+
+/packages/jco/src/**/*.d.ts
+/packages/jco/src/**/*.d.ts.map
+/packages/jco/test/output
+/packages/jco/obj
+/packages/jco/dist
