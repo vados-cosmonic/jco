@@ -808,6 +808,69 @@ impl<'a> Instantiator<'a, '_> {
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
         let i = i.as_u32();
         match trampoline {
+            // Task management
+            Trampoline::TaskBackpressure { instance } => todo!(),
+            Trampoline::TaskReturn { results } => todo!(),
+            Trampoline::TaskWait {
+                instance,
+                async_,
+                memory,
+            } => todo!(),
+            Trampoline::TaskPoll {
+                instance,
+                async_,
+                memory,
+            } => todo!(),
+            Trampoline::TaskYield { async_ } => todo!(),
+            Trampoline::SubtaskDrop { instance } => todo!(),
+
+            // Stream management
+            Trampoline::StreamNew { ty } => todo!(),
+            Trampoline::StreamRead {
+                ty,
+                err_ctx_ty,
+                options,
+            } => todo!(),
+            Trampoline::StreamWrite { ty, options } => todo!(),
+            Trampoline::StreamCancelRead { ty, async_ } => todo!(),
+
+            Trampoline::StreamCancelWrite { ty, async_ } => todo!(),
+
+            Trampoline::StreamCloseReadable { ty } => todo!(),
+            Trampoline::StreamCloseWritable { ty, err_ctx_ty } => todo!(),
+            Trampoline::StreamTransfer => todo!(),
+
+            // Future management
+            Trampoline::FutureNew { ty } => todo!(),
+            Trampoline::FutureRead {
+                ty,
+                err_ctx_ty,
+                options,
+            } => todo!(),
+            Trampoline::FutureWrite { ty, options } => todo!(),
+            Trampoline::FutureCancelRead { ty, async_ } => todo!(),
+            Trampoline::FutureCancelWrite { ty, async_ } => todo!(),
+            Trampoline::FutureCloseReadable { ty } => todo!(),
+            Trampoline::FutureCloseWritable { ty, err_ctx_ty } => todo!(),
+            Trampoline::FutureTransfer => todo!(),
+
+            // Error Context management
+            Trampoline::ErrorContextNew { ty, options } => todo!(),
+            Trampoline::ErrorContextDebugMessage { ty, options } => todo!(),
+            Trampoline::ErrorContextDrop { ty } => todo!(),
+            Trampoline::ErrorContextTransfer => todo!(),
+
+            // Sync (re)entering of a call
+            Trampoline::SyncEnterCall => todo!(),
+            Trampoline::SyncExitCall { callback } => todo!(),
+
+            // Async (re)entering of a call
+            Trampoline::AsyncEnterCall => todo!(),
+            Trampoline::AsyncExitCall {
+                callback,
+                post_return,
+            } => todo!(),
+
             // these are hoisted before initialization
             Trampoline::LowerImport { .. } => {}
 
@@ -1001,6 +1064,12 @@ impl<'a> Instantiator<'a, '_> {
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
         match init {
+            GlobalInitializer::ExtractCallback(v) => {
+                // Same as `ExtractMemory`, except it's extracting a function pointer to be
+                // used as an async `callback` function.
+                todo!()
+            }
+
             GlobalInitializer::InstantiateModule(m) => match m {
                 InstantiateModule::Static(idx, args) => self.instantiate_static_module(*idx, args),
                 // This is only needed when instantiating an imported core wasm
@@ -1622,6 +1691,11 @@ impl<'a> Instantiator<'a, '_> {
                     self.connect_resource_types(*id, iface_ty, resource_map);
                 }
             }
+
+            (TypeDefKind::Future(maybe_ty), _) => todo!(),
+
+            (TypeDefKind::Stream(maybe_ty), _) => todo!(),
+
             (_, _) => unreachable!(),
         }
     }
@@ -1639,6 +1713,8 @@ impl<'a> Instantiator<'a, '_> {
         abi: AbiVariant,
         is_async: bool,
     ) {
+        eprintln!("performing bindgen for [{}] (async? {is_async})", func.name);
+
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
         let post_return = opts
@@ -2202,10 +2278,7 @@ fn map_import(map: &Option<HashMap<String, String>>, impt: &str) -> (String, Opt
 }
 
 pub fn parse_world_key(name: &str) -> Option<(&str, &str, &str)> {
-    let registry_idx = match name.find(':') {
-        Some(idx) => idx,
-        None => return None,
-    };
+    let registry_idx = name.find(':')?;
     let ns = &name[0..registry_idx];
     match name.rfind('/') {
         Some(sep_idx) => {
