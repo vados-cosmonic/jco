@@ -5,7 +5,9 @@ use std::mem;
 
 use base64::{engine::general_purpose, Engine as _};
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component::{ExportIndex, NameMap, NameMapNoIntern, Transcode};
+use wasmtime_environ::component::{
+    ExportIndex, ExtractCallback, NameMap, NameMapNoIntern, Transcode,
+};
 use wasmtime_environ::{
     component,
     component::{
@@ -1064,10 +1066,17 @@ impl<'a> Instantiator<'a, '_> {
 
     fn instantiation_global_initializer(&mut self, init: &GlobalInitializer) {
         match init {
-            GlobalInitializer::ExtractCallback(v) => {
-                // Same as `ExtractMemory`, except it's extracting a function pointer to be
-                // used as an async `callback` function.
-                todo!()
+            // Extracting callbacks is a part of the async support for hosts -- it ensures that
+            // a given core export can be turned into a callback function that will be used
+            // later.
+            //
+            // Generally what we have to do here is to create a callback that can be called upon re-entrance
+            // into the component after a related suspension.
+            GlobalInitializer::ExtractCallback(ExtractCallback { index, def }) => {
+                let callback_idx = index.as_u32();
+                let core_def = self.core_def(def);
+                uwriteln!(self.src.js, "let callback_{callback_idx};",);
+                uwriteln!(self.src.js_init, "callback_{callback_idx} = {core_def}",);
             }
 
             GlobalInitializer::InstantiateModule(m) => match m {
@@ -1783,9 +1792,9 @@ impl<'a> Instantiator<'a, '_> {
                 match abi {
                     AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
                     AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
-                    AbiVariant::GuestImportAsync => todo!("async not yet implemented"),
-                    AbiVariant::GuestExportAsync => todo!("async not yet implemented"),
-                    AbiVariant::GuestExportAsyncStackful => todo!("async not yet implemented"),
+                    AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (ERR) not yet implemented"),
+                    AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (ERR) not yet implemented"),
+                    AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (ERR) not yet implemented"),
                 }
             } else {
                 ErrHandling::None
@@ -1819,9 +1828,9 @@ impl<'a> Instantiator<'a, '_> {
             match abi {
                 AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
                 AbiVariant::GuestExport => LiftLower::LowerArgsLiftResults,
-                AbiVariant::GuestImportAsync => todo!("async not yet implemented"),
-                AbiVariant::GuestExportAsync => todo!("async not yet implemented"),
-                AbiVariant::GuestExportAsyncStackful => todo!("async not yet implemented"),
+                AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
+                AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
+                AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
             },
             func,
             &mut f,
