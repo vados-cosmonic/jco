@@ -13,13 +13,19 @@ use crate::intrinsics::Intrinsic;
 use crate::source;
 use crate::{uwrite, uwriteln};
 
+/// Method of error handling
 #[derive(PartialEq)]
 pub enum ErrHandling {
+    /// Do no special handling of errors, requiring users to return objects that represent
+    /// errors as represented in WIT
     None,
+    /// Require throwing of result error objects
     ThrowResultErr,
+    /// Catch thrown errors and convert them into result<t,e> error variants
     ResultCatchHandler,
 }
 
+/// Data related to a given resource
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceData {
     Host {
@@ -34,7 +40,6 @@ pub enum ResourceData {
     },
 }
 
-///
 /// Map used for resource function bindgen within a given component
 ///
 /// Mapping from the instance + resource index in that component (internal or external)
@@ -60,12 +65,18 @@ pub enum ResourceData {
 /// In the case of an imported resource tables, in place of "rep" we just store
 /// the direct JS object being referenced, since in JS the object is its own handle.
 ///
-///
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResourceTable {
+    /// Whether a resource was imported
+    ///
+    /// This should be tracked because imported types cannot be re-exported uniquely (?)
     pub imported: bool,
+
+    /// Data related to the actual resource
     pub data: ResourceData,
 }
+
+/// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
 pub struct FunctionBindgen<'a> {

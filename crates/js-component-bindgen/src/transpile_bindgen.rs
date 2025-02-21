@@ -728,8 +728,11 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    // instead of always outputting resource tables for all resources, only
-    // define resource tables that are explicitly used
+    /// Ensure that all resources that are used are initialized,
+    /// by generating the initialization blocks for a given resource type
+    /// exactly once.
+    ///
+    /// This is not done for *all* resources, but instead for those that are explicitly used.
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
         if self.resource_tables_initialized[id] {
             return;
@@ -1474,6 +1477,16 @@ impl<'a> Instantiator<'a, '_> {
         );
     }
 
+    /// Process an import if it has not already been processed
+    ///
+    /// # Arguments
+    ///
+    /// * `import_specifier` - The specifier of the import as used in JS (ex. `"@bytecodealliance/preview2-shim/random"`)
+    /// * `iface_name` - The name of the WIT interface related to this binding, if present (ex. `"random"`)
+    /// * `iface_member` - The name of the interface member, if present (ex. `"random"`)
+    /// * `import_binding` - The name of binding, if present (ex. `"getRandomBytes"`)
+    /// * `local_name` - Local name of the import (ex. `"getRandomBytes"`)
+    ///
     fn ensure_import(
         &mut self,
         import_specifier: String,
@@ -1485,40 +1498,57 @@ impl<'a> Instantiator<'a, '_> {
         if import_specifier.starts_with("webidl:") {
             self.gen.intrinsic(Intrinsic::GlobalThisIdlProxy);
         }
-        // add the function import to the ESM bindgen
+
+        // Build the import path depending on the kind of interface
+        let mut import_path = Vec::with_capacity(2);
+        import_path.push(import_specifier.into());
         if let Some(_iface_name) = iface_name {
-            // mapping can be used to construct virtual nested namespaces
+            // Mapping can be used to construct virtual nested namespaces
             // which is used eg to support WASI interface groupings
             if let Some(iface_member) = iface_member {
-                self.gen.esm_bindgen.add_import_binding(
-                    &[
-                        import_specifier,
-                        iface_member.to_lower_camel_case(),
-                        import_binding.unwrap().to_string(),
-                    ],
-                    local_name,
-                );
-            } else {
-                self.gen.esm_bindgen.add_import_binding(
-                    &[import_specifier, import_binding.unwrap().to_string()],
-                    local_name,
-                );
+                import_path.push(iface_member.to_lower_camel_case());
             }
+            import_path.push(import_binding.clone().unwrap());
         } else if let Some(iface_member) = iface_member {
-            self.gen
-                .esm_bindgen
-                .add_import_binding(&[import_specifier, iface_member.into()], local_name);
-        } else if let Some(import_binding) = import_binding {
-            self.gen
-                .esm_bindgen
-                .add_import_binding(&[import_specifier, import_binding], local_name);
-        } else {
-            self.gen
-                .esm_bindgen
-                .add_import_binding(&[import_specifier], local_name);
+            import_path.push(iface_member.into());
+        } else if let Some(import_binding) = &import_binding {
+            import_path.push(import_binding.into());
+        }
+
+        // Add the import binding that represents this import
+        self.gen
+            .esm_bindgen
+            .add_import_binding(&import_path, local_name);
+    }
+
+    /// Connect resources that have no types
+    ///
+    /// Commonly this is used for resources that have a type on on the import side
+    /// but no relevant type on the receiving side, for which local types must be generated locally:
+    /// - `error-context`
+    /// - `future<_>`
+    /// - `stream<_>`
+    ///
+    fn connect_no_type_resources(
+        &mut self,
+        iface_ty: &InterfaceType,
+        _resource_map: &mut ResourceMap,
+    ) {
+        match iface_type {
+            InterfaceType::Future(type_future_table_index) => {
+                todo!("implement connecting no_type resources for futures")
+            }
+            InterfaceType::Stream(type_stream_table_index) => {
+                todo!("implement connecting no_type resources for streams")
+            }
+            InterfaceType::ErrorContext(type_component_local_error_context_table_index) => {
+                todo!("implement connecting no_type resources for error contexts")
+            }
+            _ => unreachable!("unexpected interface type [{iface_ty:?}] with no type"),
         }
     }
 
+    /// Connect two individual resources
     fn connect_resources(
         &mut self,
         t: TypeId,
@@ -1528,15 +1558,21 @@ impl<'a> Instantiator<'a, '_> {
         self.ensure_resource_table(tid);
         let mut dtor_str = None;
 
+        // Figure out whether the type is imported
         let imported = self
             .component
             .defined_resource_index(self.types[tid].ty)
             .is_none();
 
+        // Retrieve the resource id for the type definition
         let resource_id = crate::dealias(self.resolve, t);
         let resource = self.types[tid].ty;
+        let ty = &self.resolve.types[resource_id];
 
+        // If the resource is defined by this component (i.e. exported/used internally, *not* imported),
+        // then determine the destructor that should be run based on the relevant resource
         if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+            assert!(!imported);
             let resource_def = self
                 .component
                 .initializers
@@ -1552,9 +1588,8 @@ impl<'a> Instantiator<'a, '_> {
             }
         }
 
-        let ty = &self.resolve.types[resource_id];
+        // Look up the local import name
         let resource_name = ty.name.as_ref().unwrap().to_upper_camel_case();
-
         let local_name = if imported {
             let (world_key, iface_name) = match ty.owner {
                 wit_parser::TypeOwner::World(world) => (
@@ -1598,24 +1633,22 @@ impl<'a> Instantiator<'a, '_> {
 
             let local_name_str = local_name.to_string();
 
-            // nested interfaces only currently possible through mapping
+            // Nested interfaces only currently possible through mapping
             let (import_specifier, maybe_iface_member) =
                 map_import(&self.gen.opts.map, &import_name);
 
+            // Ensure that the import exists
             self.ensure_import(
                 import_specifier,
                 iface_name,
                 maybe_iface_member.as_deref(),
-                if iface_name.is_some() {
-                    Some(resource_name)
-                } else {
-                    None
-                },
+                iface_name.map(|_| resource_name),
                 local_name_str.to_string(),
             );
 
             local_name_str
         } else {
+            // If the name was *not* imported, we can retrieve the name (or create it) locally
             let (local_name, _) = self.gen.local_names.get_or_create(resource, &resource_name);
             local_name.to_string()
         };
@@ -1635,6 +1668,18 @@ impl<'a> Instantiator<'a, '_> {
         resource_map.insert(resource_id, entry);
     }
 
+    /// Connect resources that are defined at the type levels in `wit-parser`
+    /// to their types as defined in `wamstime-environ`
+    ///
+    /// The types that are connected here are stored in the `resource_map` for
+    /// use later.
+    ///
+    /// # Arguments
+    ///
+    /// * `id` - The ID of the type if present (can be missing when dealing with `error-context`s, `future<_>`, etc)
+    /// * `iface_ty` - The relevant interface type
+    /// * `resource_map` - Resource map that we will update with pairings
+    ///
     fn connect_resource_types(
         &mut self,
         id: TypeId,
@@ -1642,8 +1687,11 @@ impl<'a> Instantiator<'a, '_> {
         resource_map: &mut ResourceMap,
     ) {
         match (&self.resolve.types[id].kind, iface_ty) {
+            // For flags and enums we can do nothing -- they're global (?)
             (TypeDefKind::Flags(_), InterfaceType::Flags(_))
             | (TypeDefKind::Enum(_), InterfaceType::Enum(_)) => {}
+
+            // Connect records to records
             (TypeDefKind::Record(t1), InterfaceType::Record(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
@@ -1652,12 +1700,16 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
             }
+
+            // Handle connecting owned/borrowed handles to owned/borrowed handles
             (
                 TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
                 InterfaceType::Own(t2) | InterfaceType::Borrow(t2),
             ) => {
                 self.connect_resources(*t1, *t2, resource_map);
             }
+
+            // Connect tuples to interface tuples
             (TypeDefKind::Tuple(t1), InterfaceType::Tuple(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
@@ -1666,6 +1718,8 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
             }
+
+            // Connect inner types of variants to their interface types
             (TypeDefKind::Variant(t1), InterfaceType::Variant(t2)) => {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
@@ -1674,12 +1728,16 @@ impl<'a> Instantiator<'a, '_> {
                     }
                 }
             }
+
+            // Connect result<t> to result<t>
             (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
                     self.connect_resource_types(*id, &t2.ty, resource_map);
                 }
             }
+
+            // Connect result<t> to result<t>
             (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Some(Type::Id(id)) = &t1.ok {
@@ -1689,22 +1747,49 @@ impl<'a> Instantiator<'a, '_> {
                     self.connect_resource_types(*id, &t2.err.unwrap(), resource_map);
                 }
             }
+
+            // Connect list types to list types
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
                     self.connect_resource_types(*id, &t2.element, resource_map);
                 }
             }
+
+            // Connect named types
             (TypeDefKind::Type(ty), _) => {
                 if let Type::Id(id) = ty {
                     self.connect_resource_types(*id, iface_ty, resource_map);
                 }
             }
 
-            (TypeDefKind::Future(maybe_ty), _) => todo!(),
+            // Connect futures & stream types
+            (TypeDefKind::Future(maybe_ty), InterfaceType::Future(_))
+            | (TypeDefKind::Stream(maybe_ty), InterfaceType::Stream(_)) => {
+                match maybe_ty {
+                    // The case of an empty future is the propagation of a `null`-like value, usually a simple signal
+                    // which we'll connect with the *normally invalid* type value 0 as an indicator
+                    None => {
+                        self.connect_no_type_resources(iface_ty, resource_map);
+                    }
+                    // For
+                    Some(Type::Id(t)) => self.connect_resource_types(*t, iface_ty, resource_map),
+                    Some(_) => {
+                        unreachable!("unexpected interface type [{iface_ty:?}]")
+                    }
+                }
+            }
 
-            (TypeDefKind::Stream(maybe_ty), _) => todo!(),
+            // For error contexts we can do nothing, as they're simply representations of the underlying type idx (?)
+            (TypeDefKind::ErrorContext, _) => {
+                self.connect_no_type_resources(iface_ty, resource_map);
+            }
 
+            // These types should never need to be connected
+            (TypeDefKind::Resource, _) => {
+                unreachable!("resource types do not need to be connected")
+            }
+            (TypeDefKind::Unknown, _) => unreachable!("unknown types cannot be connected"),
             (_, _) => unreachable!(),
         }
     }
@@ -1722,7 +1807,10 @@ impl<'a> Instantiator<'a, '_> {
         abi: AbiVariant,
         is_async: bool,
     ) {
-        eprintln!("performing bindgen for [{}] (async? {is_async})", func.name);
+        eprintln!(
+            "\n\nperforming bindgen for [{}] (async? {is_async})",
+            func.name
+        );
 
         let memory = opts.memory.map(|idx| format!("memory{}", idx.as_u32()));
         let realloc = opts.realloc.map(|idx| format!("realloc{}", idx.as_u32()));
