@@ -1534,14 +1534,14 @@ impl<'a> Instantiator<'a, '_> {
         iface_ty: &InterfaceType,
         _resource_map: &mut ResourceMap,
     ) {
-        match iface_type {
-            InterfaceType::Future(type_future_table_index) => {
+        match iface_ty {
+            InterfaceType::Future(_idx) => {
                 todo!("implement connecting no_type resources for futures")
             }
-            InterfaceType::Stream(type_stream_table_index) => {
+            InterfaceType::Stream(_idx) => {
                 todo!("implement connecting no_type resources for streams")
             }
-            InterfaceType::ErrorContext(type_component_local_error_context_table_index) => {
+            InterfaceType::ErrorContext(_idx) => {
                 todo!("implement connecting no_type resources for error contexts")
             }
             _ => unreachable!("unexpected interface type [{iface_ty:?}] with no type"),
