@@ -1583,6 +1583,60 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
+            // Lift a component-local stream into a component-global stream that can be
+            // referenced at by other components
+            //
+            // TODO: IMPLEMENT
+            Instruction::StreamLift { payload, ty } => {
+                // Lifting for lists
+                // -----------------
+                //
+                // let (body, body_results) = self.blocks.pop().unwrap();
+                // let tmp = self.tmp();
+                // let size = self.sizes.size(element).size_wasm32();
+                // let len = format!("len{tmp}");
+                // uwriteln!(self.src, "var {len} = {};", operands[1]);
+                // let base = format!("base{tmp}");
+                // uwriteln!(self.src, "var {base} = {};", operands[0]);
+                // let result = format!("result{tmp}");
+                // uwriteln!(self.src, "var {result} = [];");
+                // results.push(result.clone());
+
+                // uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
+                // uwriteln!(self.src, "const base = {base} + i * {size};");
+                // self.src.push_str(&body);
+                // assert_eq!(body_results.len(), 1);
+                // uwriteln!(self.src, "{result}.push({});", body_results[0]);
+                // uwrite!(self.src, "}}\n");
+
+                // Lifting for strings
+                // -------------------
+                //
+                // // Only Utf8 and Utf16 supported for now
+                // assert!(matches!(
+                //     self.encoding,
+                //     StringEncoding::UTF8 | StringEncoding::UTF16
+                // ));
+                // let intrinsic = if self.encoding == StringEncoding::UTF16 {
+                //     Intrinsic::Utf16Decoder
+                // } else {
+                //     Intrinsic::Utf8Decoder
+                // };
+                // let decoder = self.intrinsic(intrinsic);
+                // let tmp = self.tmp();
+                // let memory = self.memory.as_ref().unwrap();
+                // uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
+                // uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
+                // uwriteln!(
+                //     self.src,
+                //     "var result{tmp} = {decoder}.decode(new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp}));",
+                //     if self.encoding == StringEncoding::UTF16 { "16" } else { "8" }
+                // );
+                // results.push(format!("result{tmp}"));
+
+                uwrite!(self.src, "throw new Error('async is not yet implemented');");
+            }
+
             // TODO: implement async
             Instruction::FutureLower { .. }
             | Instruction::FutureLift { .. }
