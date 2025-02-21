@@ -31,7 +31,7 @@ use crate::core;
 use crate::esm_bindgen::EsmBindgen;
 use crate::files::Files;
 use crate::function_bindgen::{
-    ErrHandling, FunctionBindgen, ResourceData, ResourceMap, ResourceTable,
+    ErrHandling, FunctionBindgen, RemoteResourceMap, ResourceData, ResourceMap, ResourceTable,
 };
 use crate::intrinsics::{render_intrinsics, Intrinsic};
 use crate::names::{is_js_reserved_word, maybe_quote_id, maybe_quote_member, LocalNames};
@@ -1169,22 +1169,32 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
+    /// Map all types in parameters and results to local resource types
+    ///
+    /// # Arguments
+    ///
+    /// * `func` - The function in question
+    /// * `ty_func_idx` - Type index of the function
+    /// * `resource_map` - resource map of locally resolved types
+    /// * `remote_resource_map` - resource map of types only known to the remote (ex. an `error-context` for which we only hold the relevant rep)
+    ///
     fn create_resource_fn_map(
         &mut self,
         func: &Function,
         ty_func_idx: TypeFuncIndex,
         resource_map: &mut ResourceMap,
+        remote_resource_map: &mut RemoteResourceMap,
     ) {
         let params_ty = &self.types[self.types[ty_func_idx].params];
         for ((_, ty), iface_ty) in func.params.iter().zip(params_ty.types.iter()) {
             if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, resource_map);
+                self.connect_resource_types(*id, iface_ty, resource_map, remote_resource_map);
             }
         }
         let results_ty = &self.types[self.types[ty_func_idx].results];
         for (ty, iface_ty) in func.results.iter_types().zip(results_ty.types.iter()) {
             if let Type::Id(id) = ty {
-                self.connect_resource_types(*id, iface_ty, resource_map);
+                self.connect_resource_types(*id, iface_ty, resource_map, remote_resource_map);
             }
         }
     }
@@ -1269,7 +1279,8 @@ impl<'a> Instantiator<'a, '_> {
         );
 
         let mut resource_map = ResourceMap::new();
-        self.create_resource_fn_map(func, func_ty, &mut resource_map);
+        let mut remote_resource_map = RemoteResourceMap::new();
+        self.create_resource_fn_map(func, func_ty, &mut resource_map, &mut remote_resource_map);
 
         let (callee_name, call_type) = match func.kind {
             FunctionKind::Freestanding => (
@@ -1529,49 +1540,83 @@ impl<'a> Instantiator<'a, '_> {
     /// - `future<_>`
     /// - `stream<_>`
     ///
-    fn connect_no_type_resources(
+    fn connect_remote_resources(
         &mut self,
         iface_ty: &InterfaceType,
-        _resource_map: &mut ResourceMap,
+        remote_resource_map: &mut RemoteResourceMap,
     ) {
-        match iface_ty {
-            InterfaceType::Future(_idx) => {
-                todo!("implement connecting no_type resources for futures")
+        // TODO: we must *create* the types and resources here?
+        let (idx, entry) = match iface_ty {
+            InterfaceType::Future(idx) => {
+                // // Create an entry to represent this future
+                (
+                    idx.as_u32(),
+                    ResourceTable {
+                        imported: true,
+                        data: ResourceData::Guest {
+                            resource_name: "Future".into(),
+                            prefix: Some(format!("${}", idx.as_u32())),
+                        },
+                    },
+                )
             }
-            InterfaceType::Stream(_idx) => {
-                todo!("implement connecting no_type resources for streams")
-            }
-            InterfaceType::ErrorContext(_idx) => {
-                todo!("implement connecting no_type resources for error contexts")
-            }
+            InterfaceType::Stream(idx) => (
+                idx.as_u32(),
+                ResourceTable {
+                    imported: true,
+                    data: ResourceData::Guest {
+                        resource_name: "Stream".into(),
+                        prefix: Some(format!("${}", idx.as_u32())),
+                    },
+                },
+            ),
+            InterfaceType::ErrorContext(idx) => (
+                idx.as_u32(),
+                ResourceTable {
+                    imported: true,
+                    data: ResourceData::Guest {
+                        resource_name: "ErrorContext".into(),
+                        prefix: Some(format!("${}", idx.as_u32())),
+                    },
+                },
+            ),
             _ => unreachable!("unexpected interface type [{iface_ty:?}] with no type"),
-        }
+        };
+
+        remote_resource_map.insert(idx, entry);
     }
 
-    /// Connect two individual resources
-    fn connect_resources(
+    /// Connect two types as host resources
+    ///
+    /// # Arguments
+    ///
+    /// * `t` - the TypeId
+    /// * `tid` - Index into the type resource table of the interface (foreign side)
+    /// * `resource_map` - Resource map that holds resource pairings
+    ///
+    fn connect_host_resource(
         &mut self,
         t: TypeId,
         tid: TypeResourceTableIndex,
         resource_map: &mut ResourceMap,
     ) {
         self.ensure_resource_table(tid);
-        let mut dtor_str = None;
 
-        // Figure out whether the type is imported
+        // Figure out whether the resource index we're dealing with is for an imported type
+        let resource_idx = self.types[tid].ty;
         let imported = self
             .component
-            .defined_resource_index(self.types[tid].ty)
+            .defined_resource_index(resource_idx)
             .is_none();
 
         // Retrieve the resource id for the type definition
         let resource_id = crate::dealias(self.resolve, t);
-        let resource = self.types[tid].ty;
         let ty = &self.resolve.types[resource_id];
 
         // If the resource is defined by this component (i.e. exported/used internally, *not* imported),
         // then determine the destructor that should be run based on the relevant resource
-        if let Some(resource_idx) = self.component.defined_resource_index(resource) {
+        let mut dtor_str = None;
+        if let Some(resource_idx) = self.component.defined_resource_index(resource_idx) {
             assert!(!imported);
             let resource_def = self
                 .component
@@ -1629,7 +1674,10 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let import_name = self.resolve.name_world_key(&world_key);
-            let (local_name, _) = self.gen.local_names.get_or_create(resource, &resource_name);
+            let (local_name, _) = self
+                .gen
+                .local_names
+                .get_or_create(resource_id, &resource_name);
 
             let local_name_str = local_name.to_string();
 
@@ -1646,13 +1694,19 @@ impl<'a> Instantiator<'a, '_> {
                 local_name_str.to_string(),
             );
 
+            eprintln!("EXAMPLE LOCAL NAME [{local_name_str}]");
+
             local_name_str
         } else {
             // If the name was *not* imported, we can retrieve the name (or create it) locally
-            let (local_name, _) = self.gen.local_names.get_or_create(resource, &resource_name);
+            let (local_name, _) = self
+                .gen
+                .local_names
+                .get_or_create(resource_id, &resource_name);
             local_name.to_string()
         };
 
+        // Add a resource table to track the host resource
         let entry = ResourceTable {
             imported,
             data: ResourceData::Host {
@@ -1662,9 +1716,15 @@ impl<'a> Instantiator<'a, '_> {
                 dtor_name: dtor_str,
             },
         };
+
+        // If the the resource already exists, then  ensure that it is exactly the same as the
+        // value we're attempting to insert
         if let Some(existing) = resource_map.get(&resource_id) {
             assert_eq!(*existing, entry);
+            return;
         }
+
+        // Insert the resource into the map,
         resource_map.insert(resource_id, entry);
     }
 
@@ -1685,6 +1745,7 @@ impl<'a> Instantiator<'a, '_> {
         id: TypeId,
         iface_ty: &InterfaceType,
         resource_map: &mut ResourceMap,
+        remote_resource_map: &mut RemoteResourceMap,
     ) {
         match (&self.resolve.types[id].kind, iface_ty) {
             // For flags and enums we can do nothing -- they're global (?)
@@ -1696,7 +1757,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.fields.iter().zip(t2.fields.iter()) {
                     if let Type::Id(id) = f1.ty {
-                        self.connect_resource_types(id, &f2.ty, resource_map);
+                        self.connect_resource_types(id, &f2.ty, resource_map, remote_resource_map);
                     }
                 }
             }
@@ -1706,7 +1767,7 @@ impl<'a> Instantiator<'a, '_> {
                 TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
                 InterfaceType::Own(t2) | InterfaceType::Borrow(t2),
             ) => {
-                self.connect_resources(*t1, *t2, resource_map);
+                self.connect_host_resource(*t1, *t2, resource_map);
             }
 
             // Connect tuples to interface tuples
@@ -1714,7 +1775,7 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.types.iter().zip(t2.types.iter()) {
                     if let Type::Id(id) = f1 {
-                        self.connect_resource_types(*id, f2, resource_map);
+                        self.connect_resource_types(*id, f2, resource_map, remote_resource_map);
                     }
                 }
             }
@@ -1724,7 +1785,12 @@ impl<'a> Instantiator<'a, '_> {
                 let t2 = &self.types[*t2];
                 for (f1, f2) in t1.cases.iter().zip(t2.cases.iter()) {
                     if let Some(Type::Id(id)) = &f1.ty {
-                        self.connect_resource_types(*id, f2.1.as_ref().unwrap(), resource_map);
+                        self.connect_resource_types(
+                            *id,
+                            f2.1.as_ref().unwrap(),
+                            resource_map,
+                            remote_resource_map,
+                        );
                     }
                 }
             }
@@ -1733,7 +1799,7 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(*id, &t2.ty, resource_map);
+                    self.connect_resource_types(*id, &t2.ty, resource_map, remote_resource_map);
                 }
             }
 
@@ -1741,10 +1807,20 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::Result(t1), InterfaceType::Result(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Some(Type::Id(id)) = &t1.ok {
-                    self.connect_resource_types(*id, &t2.ok.unwrap(), resource_map);
+                    self.connect_resource_types(
+                        *id,
+                        &t2.ok.unwrap(),
+                        resource_map,
+                        remote_resource_map,
+                    );
                 }
                 if let Some(Type::Id(id)) = &t1.err {
-                    self.connect_resource_types(*id, &t2.err.unwrap(), resource_map);
+                    self.connect_resource_types(
+                        *id,
+                        &t2.err.unwrap(),
+                        resource_map,
+                        remote_resource_map,
+                    );
                 }
             }
 
@@ -1752,14 +1828,19 @@ impl<'a> Instantiator<'a, '_> {
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
-                    self.connect_resource_types(*id, &t2.element, resource_map);
+                    self.connect_resource_types(
+                        *id,
+                        &t2.element,
+                        resource_map,
+                        remote_resource_map,
+                    );
                 }
             }
 
             // Connect named types
             (TypeDefKind::Type(ty), _) => {
                 if let Type::Id(id) = ty {
-                    self.connect_resource_types(*id, iface_ty, resource_map);
+                    self.connect_resource_types(*id, iface_ty, resource_map, remote_resource_map);
                 }
             }
 
@@ -1770,10 +1851,12 @@ impl<'a> Instantiator<'a, '_> {
                     // The case of an empty future is the propagation of a `null`-like value, usually a simple signal
                     // which we'll connect with the *normally invalid* type value 0 as an indicator
                     None => {
-                        self.connect_no_type_resources(iface_ty, resource_map);
+                        self.connect_remote_resources(iface_ty, remote_resource_map);
                     }
                     // For
-                    Some(Type::Id(t)) => self.connect_resource_types(*t, iface_ty, resource_map),
+                    Some(Type::Id(t)) => {
+                        self.connect_resource_types(*t, iface_ty, resource_map, remote_resource_map)
+                    }
                     Some(_) => {
                         unreachable!("unexpected interface type [{iface_ty:?}]")
                     }
@@ -1782,7 +1865,7 @@ impl<'a> Instantiator<'a, '_> {
 
             // For error contexts we can do nothing, as they're simply representations of the underlying type idx (?)
             (TypeDefKind::ErrorContext, _) => {
-                self.connect_no_type_resources(iface_ty, resource_map);
+                self.connect_remote_resources(iface_ty, remote_resource_map);
             }
 
             // These types should never need to be connected
@@ -1804,6 +1887,7 @@ impl<'a> Instantiator<'a, '_> {
         opts: &CanonicalOptions,
         func: &Function,
         resource_map: &ResourceMap,
+        remote_resource_map: &RemoteResourceMap,
         abi: AbiVariant,
         is_async: bool,
     ) {
@@ -1871,8 +1955,9 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
+            remote_resource_map,
             resource_map,
-            cur_resource_borrows: false,
+            clear_resource_borrows: false,
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
             sizes: &self.sizes,
@@ -2061,6 +2146,7 @@ impl<'a> Instantiator<'a, '_> {
             let world_key = &self.exports[export_name];
             let item = &self.resolve.worlds[self.world].exports[world_key];
             let mut resource_map = ResourceMap::new();
+            let mut remote_resource_map = RemoteResourceMap::new();
             match export {
                 Export::LiftedFunction {
                     func: def,
@@ -2071,7 +2157,12 @@ impl<'a> Instantiator<'a, '_> {
                         WorldItem::Function(f) => f,
                         WorldItem::Interface { .. } | WorldItem::Type(_) => unreachable!(),
                     };
-                    self.create_resource_fn_map(func, *func_ty, &mut resource_map);
+                    self.create_resource_fn_map(
+                        func,
+                        *func_ty,
+                        &mut resource_map,
+                        &mut remote_resource_map,
+                    );
 
                     let local_name = if let FunctionKind::Constructor(resource_id)
                     | FunctionKind::Method(resource_id)
@@ -2094,6 +2185,7 @@ impl<'a> Instantiator<'a, '_> {
                         func,
                         export_name,
                         &resource_map,
+                        &remote_resource_map,
                     );
                     if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
@@ -2128,7 +2220,12 @@ impl<'a> Instantiator<'a, '_> {
 
                         let func = &self.resolve.interfaces[id].functions[func_name];
 
-                        self.create_resource_fn_map(func, *func_ty, &mut resource_map);
+                        self.create_resource_fn_map(
+                            func,
+                            *func_ty,
+                            &mut resource_map,
+                            &mut remote_resource_map,
+                        );
 
                         let local_name = if let FunctionKind::Constructor(resource_id)
                         | FunctionKind::Method(resource_id)
@@ -2152,6 +2249,7 @@ impl<'a> Instantiator<'a, '_> {
                             func,
                             export_name,
                             &resource_map,
+                            &remote_resource_map,
                         );
 
                         if let FunctionKind::Constructor(ty)
@@ -2193,6 +2291,7 @@ impl<'a> Instantiator<'a, '_> {
         func: &Function,
         export_name: &String,
         resource_map: &ResourceMap,
+        remote_resource_map: &RemoteResourceMap,
     ) {
         let is_async = self.async_exports.contains(&func.name)
             || self
@@ -2286,6 +2385,7 @@ impl<'a> Instantiator<'a, '_> {
             options,
             func,
             resource_map,
+            remote_resource_map,
             AbiVariant::GuestExport,
             is_async,
         );

@@ -79,26 +79,72 @@ pub struct ResourceTable {
 /// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
+/// A mapping of remote reps that represent imported resources
+pub type RemoteResourceMap = BTreeMap<u32, ResourceTable>;
+
 pub struct FunctionBindgen<'a> {
+    /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
-    pub cur_resource_borrows: bool,
+
+    /// Mapping of resources for types that are defined only in the remote component
+    /// and must be auto-vivicated locally.
+    pub remote_resource_map: &'a ResourceMap,
+
+    /// Whether current resource borrows need to be deactivated
+    pub clear_resource_borrows: bool,
+
+    /// Set of intrinsics
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
+
+    /// Whether to perform valid lifting optimization
     pub valid_lifting_optimization: bool,
+
+    /// Sizes and alignments for sub elements
     pub sizes: &'a SizeAlign,
+
+    /// Method of error handling
     pub err: ErrHandling,
+
+    /// Temporary values
     pub tmp: usize,
+
+    /// Source code of the function
     pub src: source::Source,
+
+    /// Block storage
     pub block_storage: Vec<source::Source>,
+
+    /// Blocks of the fucntion
     pub blocks: Vec<(String, Vec<String>)>,
+
+    /// Parameters of the function
     pub params: Vec<String>,
+
+    /// Memory variable
     pub memory: Option<&'a String>,
+
+    /// Realloc function name
     pub realloc: Option<&'a String>,
+
+    /// Post return function name
     pub post_return: Option<&'a String>,
+
+    /// Prefix to use when printing tracing information
     pub tracing_prefix: Option<&'a String>,
+
+    /// Method if string encoding
     pub encoding: StringEncoding,
+
+    /// Callee of the function
     pub callee: &'a str,
+
+    /// Whether the callee is dynamic (i.e. has multiple operands)
     pub callee_resource_dynamic: bool,
+
+    /// The [`wit_bindgen::Resolve`] containing extracted WIT information
     pub resolve: &'a Resolve,
+
+    /// Whether the function is async
     pub is_async: bool,
 }
 
@@ -1145,7 +1191,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
 
                 // After a high level call, we need to deactivate the component resource borrows.
-                if self.cur_resource_borrows {
+                if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
                     let cur_resource_borrows = self.intrinsic(Intrinsic::CurResourceBorrows);
                     let host = matches!(
@@ -1172,7 +1218,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             {cur_resource_borrows} = [];"
                         );
                     }
-                    self.cur_resource_borrows = false;
+                    self.clear_resource_borrows = false;
                 }
             }
 
