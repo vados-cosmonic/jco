@@ -88,7 +88,7 @@ pub struct FunctionBindgen<'a> {
 
     /// Mapping of resources for types that are defined only in the remote component
     /// and must be auto-vivicated locally.
-    pub remote_resource_map: &'a ResourceMap,
+    pub remote_resource_map: &'a RemoteResourceMap,
 
     /// Whether current resource borrows need to be deactivated
     pub clear_resource_borrows: bool,
@@ -1382,7 +1382,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             let cur_resource_borrows =
                                 self.intrinsic(Intrinsic::CurResourceBorrows);
                             uwriteln!(self.src, "{cur_resource_borrows}.push({rsc});");
-                            self.cur_resource_borrows = true;
+                            self.clear_resource_borrows = true;
                         }
                     }
 
@@ -1427,7 +1427,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let cur_resource_borrows =
                                     self.intrinsic(Intrinsic::CurResourceBorrows);
                                 uwriteln!(self.src, "{cur_resource_borrows}.push({{ rsc: {rsc}, drop: $resource_import${prefix}drop${lower_camel} }});");
-                                self.cur_resource_borrows = true;
+                                self.clear_resource_borrows = true;
                             }
                         }
                     }

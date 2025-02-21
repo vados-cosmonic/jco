@@ -1358,6 +1358,7 @@ impl<'a> Instantiator<'a, '_> {
                     options,
                     func,
                     &resource_map,
+                    &remote_resource_map,
                     AbiVariant::GuestImport,
                     is_async,
                 );
@@ -1955,8 +1956,8 @@ impl<'a> Instantiator<'a, '_> {
         }
 
         let mut f = FunctionBindgen {
-            remote_resource_map,
             resource_map,
+            remote_resource_map,
             clear_resource_borrows: false,
             intrinsics: &mut self.gen.all_intrinsics,
             valid_lifting_optimization: self.gen.opts.valid_lifting_optimization,
