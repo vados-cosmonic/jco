@@ -50,6 +50,7 @@ export function createSyncFn(workerPath, debug, callbackHandler) {
   if (!path.isAbsolute(workerPath)) {
     throw new Error("`workerPath` must be absolute");
   }
+  console.log("WORKER PATH:", workerPath);
   const { port1: mainPort, port2: workerPort } = new MessageChannel();
   const worker = new Worker(workerPath, {
     workerData: { workerPort, debug },
@@ -78,6 +79,11 @@ export function createSyncFn(workerPath, debug, callbackHandler) {
       error,
       properties,
     } = receiveMessageOnPort(mainPort).message;
+
+    // TODO: if we did a write to STDIN/STDOUT then we 
+    // must do extra work out here to actually react to the possibility of error! the queued write that 
+    // will get unqueued and happen when the thing exits
+
     if (cid !== cid2) {
       throw new Error(`Internal error: Expected id ${cid} but got id ${cid2}`);
     }
@@ -101,11 +107,13 @@ export function runAsWorker(fn) {
       (async () => {
         const sharedBufferView = new Int32Array(sharedBuffer);
         let msg;
+        if (debug) { process._rawDebug("INSIDE WORKER, BEFORE CALL"); }
         try {
           msg = { cid, result: await fn(...args) };
         } catch (error) {
           msg = { cid, error, properties: extractProperties(error) };
         }
+        if (debug) { process._rawDebug("INSIDE WORKER, AFTER CALL"); }
         workerPort.postMessage(msg);
         Atomics.add(sharedBufferView, 0, 1);
         Atomics.notify(sharedBufferView, 0);

@@ -1,6 +1,6 @@
 import { createReadStream, createWriteStream } from "node:fs";
 import { hrtime, stderr, stdout } from "node:process";
-import { PassThrough } from "node:stream";
+import { Stream, PassThrough } from "node:stream";
 import { format } from "node:util";
 import { runAsWorker } from "../synckit/index.js";
 import {
@@ -235,6 +235,7 @@ export function createWritableStream(nodeStream) {
     flushPromise: null,
     pollState,
   };
+
   streams.set(++streamCnt, stream);
   function pollReady() {
     pollStateReady(pollState);
@@ -293,6 +294,7 @@ export function getStreamOrThrow(streamId) {
  */
 function handle(call, id, payload) {
   if (uncaughtException) throw uncaughtException;
+
   switch (call) {
     // Http
     case HTTP_CREATE_REQUEST: {
@@ -395,7 +397,7 @@ function handle(call, id, payload) {
     case HTTP_OUTGOING_BODY_DISPOSE:
       if (debug && !streams.has(id))
         console.warn(`wasi-io: stream ${id} not found to dispose`);
-      streams.delete(id);  
+      streams.delete(id);
       return;
     case HTTP_SERVER_START:
       return startHttpServer(id, payload);
@@ -656,16 +658,156 @@ function handle(call, id, payload) {
     }
     case OUTPUT_STREAM_FLUSH: {
       const stream = getStreamOrThrow(id);
-      if (stream.flushPromise) return;
+      if (stream.flushPromise) {
+        log("stream.flushPromise was set");
+        return;
+      }
+      log(`stream.flushPromise was NOT set, got stream [${id}]`);
+      log(
+        `chunk is array buffer view Buffer? ${Stream._isArrayBufferView(
+          new Uint8Array([])
+        )}`
+      );
+      log(
+        `convert to buffer?? [${Stream._uint8ArrayToBuffer(
+          new Uint8Array([])
+        )}]`
+      );
+
       stream.pollState.ready = false;
-      return (stream.flushPromise = new Promise((resolve, reject) => {
-        stream.stream.write(new Uint8Array([]), (err) => {
+      stream.flushPromise = new Promise((resolve, reject) => {
+        //nextTick(() => stream.stream.write(new Uint8Array([]), 'utf8',() => log("\n\nAFTER CALLBACK WRITE7!")));
+        // NOTE: the likely problem here is that node will delay non-no-op callbacks to *next tick*
+        //                   nextTick(() => void this._read(n));
+        // We probably need to *force* a nextTick here for NodeJS
+
+        // stream.stream.write(new Uint8Array([]), (err) => {
+        //   log(`err? ${err}`);
+        //   stream.flushPromise = null;
+        //   pollStateReady(stream.pollState);
+        //   if (err) return void reject(streamError(err));
+        //   resolve();
+        // });
+
+        let cb = (err) => {
+          log(`[INSIDE CALLBACK] err? ${err}`);
+          log(`[INSIDE CALLBACK] stream? ${err}`);
           stream.flushPromise = null;
           pollStateReady(stream.pollState);
           if (err) return void reject(streamError(err));
-          resolve();
-        });
-      }));
+          return void resolve();
+        };
+
+        log(
+          `[BEFORE WRITE] stream information??\n${JSON.stringify(
+            {
+              writable: stream.stream.writable,
+              closed: stream.stream.closed,
+              errored: stream.stream.errored,
+              state: stream.stream._writableState,
+              writing: stream.stream._writableState.writing,
+              needDrain: stream.stream._writableState.needDrain,
+              constructed: stream.stream._writableState.constructed,
+              objectMode: stream.stream._writableState.objectMode,
+              stateErrored: stream.stream._writableState.errored,
+              destroyed: stream.stream._writableState.destroyed,
+              corked: stream.stream._writableState.corked,
+              buffered: stream.stream._writableState.buffered,
+              bufferedValue: stream.stream._writableState.bufferedValue,
+              writecb: stream.stream._writableState.writecb,
+              sync: stream.stream._writableState.sync,
+              onwrite: stream.stream._writableState.onwrite,
+              expectWriteCb: stream.stream._writableState.expectWriteCb,
+              writableCorked: stream.stream.writableCorked,
+              writableFinished: stream.stream.writableFinished,
+              writableHighWaterMark: stream.stream.writableHighWaterMark,
+              writableLength: stream.stream.writableLength,
+              writableNeedDrain: stream.stream.writableNeedDrain,
+            },
+            null,
+            2
+          )}\n`
+        );
+
+        const ret = stream.stream.write(new Uint8Array([]), cb);
+        log(
+          `[POST WRITE] stream information??\n${JSON.stringify(
+            {
+              writable: stream.stream.writable,
+              closed: stream.stream.closed,
+              errored: stream.stream.errored,
+              state: stream.stream._writableState,
+              writing: stream.stream._writableState.writing,
+              needDrain: stream.stream._writableState.needDrain,
+              constructed: stream.stream._writableState.constructed,
+              objectMode: stream.stream._writableState.objectMode,
+              stateErrored: stream.stream._writableState.errored,
+              destroyed: stream.stream._writableState.destroyed,
+              corked: stream.stream._writableState.corked,
+              buffered: stream.stream._writableState.buffered,
+              bufferedValue: stream.stream._writableState.bufferedValue,
+              writecb: stream.stream._writableState.writecb,
+              sync: stream.stream._writableState.sync,
+              onwrite: stream.stream._writableState.onwrite,
+              expectWriteCb: stream.stream._writableState.expectWriteCb,
+              writableCorked: stream.stream.writableCorked,
+              writableFinished: stream.stream.writableFinished,
+              writableHighWaterMark: stream.stream.writableHighWaterMark,
+              writableLength: stream.stream.writableLength,
+              writableNeedDrain: stream.stream.writableNeedDrain,
+            },
+            null,
+            2
+          )}\n`
+        );
+
+        log(`RETURN: [${ret}]`);
+
+        // TODO: the problem is that worker nodes actually DO NOT DRAIN PROPERLY?
+        // 
+        // writev implementation:
+        // -----
+        //        process.stdout._writev: _writev(chunks, cb) {
+        //    this[kPort].postMessage({
+        //      type: messageTypes.STDIO_PAYLOAD,
+        //      stream: this[kName],
+        //      chunks: ArrayPrototypeMap(chunks,
+        //                                ({ chunk, encoding }) => ({ chunk, encoding })),
+        //    });
+        //    ArrayPrototypePush(this[kWritableCallbacks], cb);
+        //    if (this[kPort][kWaitingStreams]++ === 0)
+        //      this[kPort].ref();
+        //  }
+        // -----
+        //
+        // this[kPort] is only drained on CLOSE of the worker
+        //
+        // SEE: https://github.com/nodejs/node/issues/24636
+        // SEE: https://github.com/nodejs/node/commit/c61327d37673ab2ea454d14c36329b113aaca32a
+        //
+        // We can confirm this in the NodeJS code:
+        // SEE: https://github.com/nodejs/node/blob/v22.12.0/lib/internal/worker.js
+        //
+        // *and* drainMessagePort is an internal binding:
+        // SEE: https://github.com/nodejs/node/blob/90ab559f4df36dbb0b2be0f55b18ad192289645e/typings/internalBinding/messaging.d.ts#L27
+        //
+        // We can't even get to it from node code outside of here. So to perform our own write, we need to actually
+        // move our *own* payloads...
+
+        log(`[INSIDE WORKER] process.stdout._writev: ${process.stdout._writev.toString()}`);
+        log(`[INSIDE WORKER] process.stderr._writev: ${process.stderr._writev.toString()}`);
+        
+        // Since inside workers, writes to stdout are actually written as messages back to the 
+        // main thread, we should *not* wait for this promise, and instead return a promise that executes immediately and does the callback
+
+        stream.flushPromise = null;
+        pollStateReady(stream.pollState);
+        // if (err) return void reject(streamError(err));
+        // We actualy have no idea if there is an error on the write, because we can't check
+        // from in here, and the stdio is actualy only flushed on exit of the worker.
+        return void resolve();
+      });
+      return stream.flushPromise;
     }
     case OUTPUT_STREAM_BLOCKING_FLUSH: {
       const stream = getStreamOrThrow(id);

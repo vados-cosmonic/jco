@@ -1,4 +1,5 @@
 import { fileURLToPath } from "node:url";
+import process from "node:process";
 import { createSyncFn } from "../synckit/index.js";
 import {
   CALL_MASK,
@@ -294,6 +295,8 @@ class OutputStream {
     );
   }
   flush() {
+    console.log(`[OUTSIDE WORKER] process.stdout._writev: ${process.stdout._writev.toString()}`);
+    console.log("ABOUT TO RUN IO", { orig: OUTPUT_STREAM_FLUSH, type: OUTPUT_STREAM_FLUSH | this.#streamType, id: this.#id, withMask: (OUTPUT_STREAM_FLUSH | this.#streamType) & CALL_MASK  } );
     return streamIoErrorCall(OUTPUT_STREAM_FLUSH | this.#streamType, this.#id);
   }
   blockingFlush() {

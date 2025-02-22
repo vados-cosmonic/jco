@@ -35,5 +35,14 @@
   "bugs": {
     "url": "https://github.com/bytecodealliance/jco/issues"
   },
-  "homepage": "https://github.com/bytecodealliance/jco#readme"
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "pnpm": {
+    "overrides": {
+      "@bytecodealliance/preview2-shim": "link:"
+    }
+  },
+  "dependencies": {
+    "@bytecodealliance/preview2-shim": "link:",
+    "unlink": "link:../../../../../../../.local/share/pnpm/global/5/node_modules/unlink"
+  }
 }
