@@ -907,10 +907,8 @@ impl<'a> Instantiator<'a, '_> {
     fn trampoline(&mut self, i: TrampolineIndex, trampoline: &'a Trampoline) {
         let i = i.as_u32();
         match trampoline {
-            Trampoline::LowerImport { .. } => {}
-
             // Task management
-            Trampoline::TaskReturn { results } => {
+            Trampoline::TaskReturn { results, .. } => {
                 let result_types = &self.types[*results].types;
                 assert!(
                     result_types.is_empty(),
@@ -979,29 +977,71 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::TaskBackpressure { instance } => {
+            // Trampoline::TaskBackpressureSet { instance } => {
+            //     let _ = (instance, err_ctx_ty);
+            //     todo!("Trampoline::TaskBackpressure");
+            // }
+            // Trampoline::TaskWait {
+            //     instance,
+            //     async_,
+            //     memory,
+            // } => {
+            //     let _ = (instance, async_, memory);
+            //     todo!("Trampoline::TaskWait");
+            // }
+            // Trampoline::TaskPoll {
+            //     instance,
+            //     async_,
+            //     memory,
+            // } => {
+            //     let _ = (instance, async_, memory);
+            //     todo!("Trampoline::TaskPoll");
+            // }
+            // Trampoline::TaskYield { async_ } => {
+            //     let _ = async_;
+            //     todo!("Trampoline::TaskYield");
+            // }
+            Trampoline::BackpressureSet { instance } => {
                 let _ = instance;
-                todo!("Trampoline::TaskBackpressure");
+                todo!("Trampoline::BackpressureSet");
             }
-            Trampoline::TaskWait {
+
+            Trampoline::WaitableSetNew { instance } => {
+                let _ = instance;
+                todo!("Trampoline::WaitableSetNew");
+            }
+
+            Trampoline::WaitableSetWait {
                 instance,
                 async_,
                 memory,
             } => {
                 let _ = (instance, async_, memory);
-                todo!("Trampoline::TaskWait");
+                todo!("Trampoline::WaitableSetWait");
             }
-            Trampoline::TaskPoll {
+
+            Trampoline::WaitableSetPoll {
                 instance,
                 async_,
                 memory,
             } => {
                 let _ = (instance, async_, memory);
-                todo!("Trampoline::TaskPoll");
+                todo!("Trampoline::WaitableSetPoll");
             }
-            Trampoline::TaskYield { async_ } => {
+
+            Trampoline::WaitableSetDrop { instance } => {
+                let _ = instance;
+                todo!("Trampoline::WaitableSetDrop");
+            }
+
+            Trampoline::WaitableJoin { instance } => {
+                let _ = instance;
+                todo!("Trampoline::WaitableJoin");
+            }
+
+            Trampoline::Yield { async_ } => {
                 let _ = async_;
-                todo!("Trampoline::TaskYield");
+                todo!("Trampoline::Yield");
             }
 
             // Stream management
@@ -1017,8 +1057,12 @@ impl<'a> Instantiator<'a, '_> {
                 let _ = (ty, err_ctx_ty, options);
                 todo!("Trampoline::StreamRead");
             }
-            Trampoline::StreamWrite { ty, options } => {
-                let _ = (ty, options);
+            Trampoline::StreamWrite {
+                ty,
+                options,
+                err_ctx_ty,
+            } => {
+                let _ = (ty, options, err_ctx_ty);
                 todo!("Trampoline::StreamWrite");
             }
             Trampoline::StreamCancelRead { ty, async_ } => {
@@ -1031,8 +1075,8 @@ impl<'a> Instantiator<'a, '_> {
                 todo!("Trampoline::StreamCancelWrite");
             }
 
-            Trampoline::StreamCloseReadable { ty } => {
-                let _ = ty;
+            Trampoline::StreamCloseReadable { ty, err_ctx_ty } => {
+                let _ = (ty, err_ctx_ty);
                 todo!("Trampoline::StreamCloseReadable");
             }
             Trampoline::StreamCloseWritable { ty, err_ctx_ty } => {
@@ -1054,8 +1098,12 @@ impl<'a> Instantiator<'a, '_> {
                 let _ = (ty, err_ctx_ty, options);
                 todo!("Trampoline::FutureRead");
             }
-            Trampoline::FutureWrite { ty, options } => {
-                let _ = (ty, options);
+            Trampoline::FutureWrite {
+                ty,
+                options,
+                err_ctx_ty,
+            } => {
+                let _ = (ty, options, err_ctx_ty);
                 todo!("Trampoline::FutureWrite");
             }
             Trampoline::FutureCancelRead { ty, async_ } => {
@@ -1066,8 +1114,8 @@ impl<'a> Instantiator<'a, '_> {
                 let _ = (ty, async_);
                 todo!("Trampoline::FutureCancelWrite");
             }
-            Trampoline::FutureCloseReadable { ty } => {
-                let _ = ty;
+            Trampoline::FutureCloseReadable { ty, err_ctx_ty } => {
+                let _ = (ty, err_ctx_ty);
                 todo!("Trampoline::FutureCloseReadable");
             }
             Trampoline::FutureCloseWritable { ty, err_ctx_ty } => {
@@ -1501,7 +1549,6 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js_init, "postReturn{idx} = {def};");
             }
             GlobalInitializer::Resource(_) => {}
-            GlobalInitializer::ExtractCallback(_) => todo!(),
         }
     }
 
