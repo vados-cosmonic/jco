@@ -623,8 +623,6 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!(),
             }
         }
-
-        // TODO?: Populate reverse map from Trampoline to component for which the trampoline was exported/imported
     }
 
     fn instantiate(&mut self) {
@@ -766,8 +764,7 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    /// Ensure that the table of component-local `error-context` table has been created corresponding
-    /// to a similarly provided component-local table index.
+    /// Ensure a component-local `error-context` table has been created
     ///
     /// # Arguments
     ///
@@ -802,9 +799,10 @@ impl<'a> Instantiator<'a, '_> {
         }
     }
 
-    /// Ensure that all resources that are used are initialized,
-    /// by generating the initialization blocks for a given resource type
-    /// exactly once.
+    /// Ensure that a resource table has been initialized
+    ///
+    /// For the relevant resource table, this function will generate initialization
+    /// blocks, exactly once.
     ///
     /// This is not done for *all* resources, but instead for those that are explicitly used.
     fn ensure_resource_table(&mut self, id: TypeResourceTableIndex) {
@@ -2232,7 +2230,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
-            // Connect result<t> to result<t>
+            // Connect option<t> to option<t>
             (TypeDefKind::Option(t1), InterfaceType::Option(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
@@ -2261,7 +2259,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
-            // Connect list types to list types
+            // Connect list<t> to list types
             (TypeDefKind::List(t1), InterfaceType::List(t2)) => {
                 let t2 = &self.types[*t2];
                 if let Type::Id(id) = t1 {
@@ -2300,7 +2298,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
-            // For error contexts we can do nothing, as they're simply representations of the underlying type idx (?)
+            // Connect error-contexts (mostly function as ref-counted pointers)
             (TypeDefKind::ErrorContext, _) => {
                 self.connect_remote_resources(iface_ty, remote_resource_map);
             }

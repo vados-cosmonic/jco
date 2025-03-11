@@ -1033,9 +1033,8 @@ pub fn render_intrinsics(
             }
 
             Intrinsic::TaskReturn => {
-                // TODO: save results for taskId
-                // TODO: return results to caller/calling task (and possibly switch execution)
-                // TODO: check/prevent lift fn overflows (storagePtr should progress)
+                // TODO: write results into provided memory, perform checks for task & result types
+                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-taskreturn
                 let task_return_fn = Intrinsic::TaskReturn.name();
                 output.push_str(&format!("
                     function {task_return_fn}(taskId, liftFns, storagePtr, storageLen) {{
@@ -1052,10 +1051,8 @@ pub fn render_intrinsics(
             }
 
             Intrinsic::SubtaskDrop => {
-                // TODO: ensure task is marked "may_leave"
-                // TODO: Get tasks for given component
-                // TODO: Ensure task was running/in-process (?)
-                // TODO: Remove task
+                // TODO: ensure task is marked "may_leave", drop task for relevant component
+                // see: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-subtaskdrop
                 let subtask_drop_fn = Intrinsic::SubtaskDrop.name();
                 output.push_str(&format!("
                     function {subtask_drop_fn}(componentId, taskId) {{
