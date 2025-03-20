@@ -18,6 +18,7 @@ incoming HTTP requests (`wasi:http/incoming-handler`).
 > or keep following along and experiment!
 
 [mdn-svcworker-fetch]: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorkerGlobalScope/fetch_event
+[mdn-svcworker]: https://developer.mozilla.org/en-US/docs/Web/API/ServiceWorker
 [sm]: https://github.com/bytecodealliance/StarlingMonkey
 [wasi]: https://github.com/WebAssembly/WASI/tree/main
 [mdn-fetch]: https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API
@@ -31,59 +32,19 @@ To build this example into a demo page that you can visit, run:
 
 ```console
 npm install
+npm run all
 npm run demo
 ```
 > [!NOTE]
 > Feel free to replace `npm` with whatever npm-compatible tooling you prefer.
 
-You should see output like the following:
+The targets above (all, demo) will build the component, transpile it, then start a webserver that serves [`demo.html`](./demo.html) in this folder:
 
 <details>
 <summary><h4>Expected output</h4></summary>
 
 ```
-npm run demo
-
-> demo
-> npm run build:component && npm run transpile && npm run demo
-
-
-> build:component
-> jco componentize -w component.wit component.js -o component.wasm
-
-OK Successfully written component.wasm.
-
-> transpile
-> jco transpile -o dist/transpiled component.wasm
-
-
-  Transpiled JS Component Files:
-
- - dist/transpiled/component.core.wasm                          10.1 MiB
- - dist/transpiled/component.core2.wasm                         13.9 KiB
- - dist/transpiled/component.d.ts                               1.34 KiB
- - dist/transpiled/component.js                                  181 KiB
- - dist/transpiled/interfaces/wasi-cli-stderr.d.ts              0.16 KiB
- - dist/transpiled/interfaces/wasi-cli-stdin.d.ts               0.15 KiB
- - dist/transpiled/interfaces/wasi-cli-stdout.d.ts              0.16 KiB
- - dist/transpiled/interfaces/wasi-cli-terminal-input.d.ts       0.1 KiB
- - dist/transpiled/interfaces/wasi-cli-terminal-output.d.ts      0.1 KiB
- - dist/transpiled/interfaces/wasi-cli-terminal-stderr.d.ts      0.2 KiB
- - dist/transpiled/interfaces/wasi-cli-terminal-stdin.d.ts       0.2 KiB
- - dist/transpiled/interfaces/wasi-cli-terminal-stdout.d.ts      0.2 KiB
- - dist/transpiled/interfaces/wasi-clocks-monotonic-clock.d.ts  0.31 KiB
- - dist/transpiled/interfaces/wasi-clocks-wall-clock.d.ts       0.19 KiB
- - dist/transpiled/interfaces/wasi-filesystem-preopens.d.ts     0.19 KiB
- - dist/transpiled/interfaces/wasi-filesystem-types.d.ts        2.89 KiB
- - dist/transpiled/interfaces/wasi-http-outgoing-handler.d.ts    0.5 KiB
- - dist/transpiled/interfaces/wasi-http-types.d.ts              8.73 KiB
- - dist/transpiled/interfaces/wasi-io-error.d.ts                0.08 KiB
- - dist/transpiled/interfaces/wasi-io-poll.d.ts                 0.14 KiB
- - dist/transpiled/interfaces/wasi-io-streams.d.ts              0.72 KiB
- - dist/transpiled/interfaces/wasi-random-random.d.ts           0.14 KiB
-
-
-> node demo.js
+(( TODO ))
 ```
 
 </details>
@@ -157,7 +118,7 @@ world root {
   import wasi:http/types@0.2.2;
   import wasi:http/outgoing-handler@0.2.2; // <---- This import is used by `fetch()`!
 
-  export http-get: func(url: string) -> string; // <---- This export is implemented in `component.js`!
+  export wasi:http/incoming-handler@0.2.2; // <---- This export enables responding to HTTP requests
 }
 ```
 
@@ -214,6 +175,7 @@ You should see output like the following:
  - dist/transpiled/interfaces/wasi-filesystem-preopens.d.ts     0.19 KiB
  - dist/transpiled/interfaces/wasi-filesystem-types.d.ts        2.89 KiB
  - dist/transpiled/interfaces/wasi-http-outgoing-handler.d.ts    0.5 KiB
+ - dist/transpiled/interfaces/wasi-http-incoming-handler.d.ts    0.5 KiB
  - dist/transpiled/interfaces/wasi-http-types.d.ts              8.73 KiB
  - dist/transpiled/interfaces/wasi-io-error.d.ts                0.08 KiB
  - dist/transpiled/interfaces/wasi-io-poll.d.ts                 0.14 KiB
@@ -230,7 +192,7 @@ the entrypoint for a (NodeJS, browser)script that wants to use the component we'
 
 ## Run the Demo
 
-To be able to use our transpiled component, we'll need to write [a litte `demo.js` script](./demo.js) that NodeJS can execute.
+To be able to use our transpiled component, we'll need to write [a litte `demo.html` web page](./demo.html) which uses a [Service Worker][mdn-svcworker] to intercept requests.
 
 To run the demo:
 
@@ -244,10 +206,9 @@ npm run demo
 You should see output like the following:
 
 ```
-> demo
+> npm run demo
+
+(( TODO ))
 ```
 
 </details>
-
-The demo script executes the WebAssembly module which performs a HTTP GET request to a 
-provided URL (or `https://example.com` by default).
