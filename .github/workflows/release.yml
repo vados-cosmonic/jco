@@ -47,6 +47,7 @@ jobs:
       project-dir: ${{ steps.project-meta.outputs.project-dir }}
       is-js-project: ${{ steps.project-meta.outputs.is-js-project }}
       is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
+      artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
     steps:
       - name: Collect metadata
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
