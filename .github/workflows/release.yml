@@ -52,6 +52,7 @@ jobs:
       is-rust-project: ${{ steps.project-meta.outputs.is-rust-project }}
       artifacts-glob: ${{ steps.project-meta.outputs.artifacts-glob }}
       artifact-name: ${{ steps.project-meta.outputs.artifact-name }}
+      release-ref: ${{ steps.project-meta.outputs.release-ref }}
     steps:
       - name: Collect metadata
         uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
@@ -120,6 +121,7 @@ jobs:
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
           echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
           echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
+          echo -e "refname=${PROJECT}-${NEXT_VERSION}" >> $GITHUB_OUTPUT
 
   pack-crate-release:
     if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
@@ -134,6 +136,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
 
       - name: Release crate (dry run)
         working-directory: ${{ needs.meta.outputs.project-dir }}
@@ -168,6 +171,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
 
       - name: Create release package
         working-directory: ${{ needs.meta.outputs.project-dir }}
@@ -195,6 +199,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          ref: ${{ needs.meta.outputs.release-ref }}
 
       - uses: taiki-e/install-action@d125c0a83576d3c0c86ac610c708b38d3565af4e # v2.47.15
         with:
