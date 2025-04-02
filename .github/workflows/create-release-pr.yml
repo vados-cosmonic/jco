@@ -73,12 +73,12 @@ jobs:
               export IS_JS_PROJECT=true;
               ;;
             preview2-shim)
-              export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/packages/$PROJECT";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               ;;
             js-component-bindgen)
-              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/crates/$PROJECT";
               export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
               export IS_RUST_PROJECT=true;
               ;;
