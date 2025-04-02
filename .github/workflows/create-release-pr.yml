@@ -134,5 +134,4 @@ jobs:
 
             After merging this PR, please do the following:
               - [ ] Run the `tag-release` CI workflow (specifying the commit hash of this PR once fast-forwarded onto `main`)
-              - [ ] Run the `release` CI workflow, which will use the release tag to make a proper release to GitHub and Crates.io
-              - [ ] Make releases to downstream repositories (ex. NPM  in the release artifact as necessary
+              - [ ] Make releases to downstream repositories (e.g. NPM) for the released artifacts as necessary
