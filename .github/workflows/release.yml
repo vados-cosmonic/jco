@@ -95,21 +95,21 @@ jobs:
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
-              export ARTIFACT_NAME="bytecodealliance-jco-${NEXT_VERISON}.tgz";
+              export ARTIFACT_NAME="bytecodealliance-jco-v$NEXT_VERISON.tgz";
               ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
-              export ARTIFACT_NAME="bytecodealliance-preview2-shim-${NEXT_VERISON}.tgz";
+              export ARTIFACT_NAME="bytecodealliance-preview2-shim-$NEXT_VERISON.tgz";
               ;;
             js-component-bindgen)
               export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
               export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
               export IS_RUST_PROJECT=true;
               export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
-              export ARTIFACT_NAME="js-component-bindgen-${NEXT_VERISON}.crate";
+              export ARTIFACT_NAME="js-component-bindgen-$NEXT_VERISON.crate";
               ;;
             *)
               echo "unexpected project type (neither Rust nor JS)";
