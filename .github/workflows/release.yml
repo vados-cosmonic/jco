@@ -88,16 +88,19 @@ jobs:
               export PROJECT_DIR=$PWD;
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="bytecodealliance-jco-*.tgz";
               ;;
             preview2-shim)
               export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
+              export ARTIFACTS_GLOB="packages/preview2-shim/bytecodealliance-preview2-shim-*.tgz";
               ;;
             js-component-bindgen)
               export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
               export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
               export IS_RUST_PROJECT=true;
+              export ARTIFACTS_GLOB="target/package/js-component-bindgen-*.crate";
               ;;
             *)
               echo "unexpected project type (neither Rust nor JS)";
@@ -107,6 +110,7 @@ jobs:
           echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
           echo -e "is-rust-project=$IS_RUST_PROJECT" >> $GITHUB_OUTPUT
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
+          echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
 
   pack-crate-release:
     if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
@@ -133,11 +137,10 @@ jobs:
           cargo package
 
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
-        working-directory: ${{ needs.meta.outputs.project-dir }}
         with:
           if-no-files-found: error
           path: |
-            target/package/${{ needs.meta.outputs.project }}-${{ needs.meta.outputs.version }}.crate
+            ${{ needs.meta.outputs.artifacts-glob }}
 
   pack-npm-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
@@ -162,7 +165,7 @@ jobs:
         with:
           if-no-files-found: error
           path: |
-            *.tgz
+            ${{ needs.meta.outputs.artifacts-glob }}
 
   gh-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
