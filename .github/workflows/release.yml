@@ -121,7 +121,7 @@ jobs:
           echo -e "is-js-project=$IS_JS_PROJECT" >> $GITHUB_OUTPUT
           echo -e "artifacts-glob=$ARTIFACTS_GLOB" >> $GITHUB_OUTPUT
           echo -e "artifact-name=$ARTIFACT_NAME" >> $GITHUB_OUTPUT
-          echo -e "refname=${PROJECT}-${NEXT_VERSION}" >> $GITHUB_OUTPUT
+          echo -e "release-ref=${PROJECT}-v${NEXT_VERSION}" >> $GITHUB_OUTPUT
 
   pack-crate-release:
     if: ${{ needs.meta.outputs.is-rust-project == 'true' }}
@@ -214,8 +214,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPO: ${{ github.repository }}
         run: |
-          export TAG=${{ needs.meta.outputs.project }}-${{ needs.meta.outputs.version }}
-          git cliff --repository=../../ --tag=$TAG > CHANGELOG.current
+          git cliff --repository=${{ github.workspace }}/.git --tag=${{ needs.meta.outputs.release-ref }} > CHANGELOG.current
 
       # Download all the artifacts generated during this run
       - uses: actions/download-artifact@fa0a91b85d4f404e444e00e005971372dc801d16 # v4.1.8
@@ -227,7 +226,7 @@ jobs:
         with:
           prerelease: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
           draft: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
-          tag_name: ${{ needs.meta.outputs.project }}-v${{ needs.meta.outputs.version }}
+          tag_name: ${{ needs.meta.outputs.release-ref }}
           generate_release_notes: false
           body_path: ${{ needs.meta.outputs.project-dir }}/CHANGELOG.current
           files: |
