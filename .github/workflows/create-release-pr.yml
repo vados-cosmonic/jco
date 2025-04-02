@@ -54,9 +54,8 @@ jobs:
         with:
           tool: cargo-edit
 
-      # Gather metadata
-      - name: Gather metadata
-        id: meta
+      - name: Gather project metadata
+        id: project-meta
         env:
           NEXT_VERSION: ${{ inputs.version }}
           PROJECT: ${{ inputs.project }}
@@ -74,12 +73,12 @@ jobs:
               export IS_JS_PROJECT=true;
               ;;
             preview2-shim)
-              export PROJECT_DIR="$PWD/packages/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/packages/${{ steps.project-meta.outputs.project }}";
               export CURRENT_VERSION=$(node -e "process.stdout.write(require(process.env.PROJECT_DIR + '/package.json').version)");
               export IS_JS_PROJECT=true;
               ;;
             js-component-bindgen)
-              export PROJECT_DIR="$PWD/crates/${{ steps.meta.outputs.project }}";
+              export PROJECT_DIR="$PWD/crates/${{ steps.project-meta.outputs.project }}";
               export CURRENT_VERSION=$(cargo get  package.version --terminator Nul --entry=crates/js-component-bindgen);
               export IS_RUST_PROJECT=true;
               ;;
@@ -97,45 +96,48 @@ jobs:
 
       # Set project version
       - name: Set project version
-        working-directory: ${{ steps.meta.outputs.project-dir }}
+        working-directory: ${{ steps.project-meta.outputs.project-dir }}
         shell: bash
         run: |
-          if [ "true" == "${{ steps.meta.outputs.is-rust-project }}" ]; then
-            cargo set-version ${{ steps.meta.outputs.next-version }};
-          elif [ "true" == "${{ steps.meta.outputs.is-js-project }}" ]; then
-            npm pkg set version=${{ steps.meta.outputs.next-version }};
+          if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
+            cargo set-version ${{ steps.project-meta.outputs.next-version }};
+          elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
+            npm pkg set version=${{ steps.project-meta.outputs.next-version }};
           fi
 
       # Generate changelog
       - name: Generate changelog
-        working-directory: ${{ steps.meta.outputs.project-dir }}
+        working-directory: ${{ steps.project-meta.outputs.project-dir }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --unreleased \
-            --tag=${{ steps.meta.outputs.project }}-${{ steps.meta.outputs.next-version }} \
+            --tag=${{ steps.project-meta.outputs.project }}-${{ steps.project-meta.outputs.next-version }} \
             --prepend=CHANGELOG.md
 
       # Create release PR
       - name: Create release prep PR
         uses: peter-evans/create-pull-request@67ccf781d68cd99b580ae25a5c18a1cc84ffff1f # v7.0.6
         with:
-          branch: prep-release-${{ steps.meta.outputs.project}}-v${{ steps.meta.outputs.next-version }}
+          branch: prep-release-${{ steps.project-meta.outputs.project}}-v${{ steps.project-meta.outputs.next-version }}
           commit-message: |
-            release: ${{ steps.meta.outputs.project }} v${{ steps.meta.outputs.next-version }}
+            release: ${{ steps.project-meta.outputs.project }} v${{ steps.project-meta.outputs.next-version }}
           title: |
-            release: ${{ steps.meta.outputs.project }} v${{ steps.meta.outputs.next-version }}
+            release: ${{ steps.project-meta.outputs.project }} v${{ steps.project-meta.outputs.next-version }}
           labels: |
             release-pr
           assignees: |
             vados-cosmonic
           signoff: true
           body: |
-            This is a release prep branch for `${{ steps.meta.outputs.project }}` release `v${{ steps.meta.outputs.next-version }}`.
+            This is a release prep branch for `${{ steps.project-meta.outputs.project }}` release `v${{ steps.project-meta.outputs.next-version }}`.
 
             To ensure this release is ready to be merged:
               - [ ] Review updated CHANGELOG(s)
 
             After merging this PR, please do the following:
               - [ ] Run the `tag-release` CI workflow (specifying the commit hash of this PR once fast-forwarded onto `main`)
+              - [ ] Run the `release` CI workflow (specifying the released tag)
               - [ ] Make releases to downstream repositories (e.g. NPM) for the released artifacts as necessary
