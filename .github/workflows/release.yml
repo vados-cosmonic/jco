@@ -186,7 +186,6 @@ jobs:
             ${{ needs.meta.outputs.artifacts-glob }}
 
   gh-release:
-    if: ${{ needs.meta.outputs.is-js-project == 'true' }}
     runs-on: ubuntu-24.04
     needs:
       - meta
