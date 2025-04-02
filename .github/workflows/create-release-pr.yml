@@ -107,7 +107,7 @@ jobs:
         shell: bash
         run: |
           if [ "true" == "${{ steps.project-meta.outputs.is-rust-project }}" ]; then
-            cargo set-version ${{ steps.project-meta.outputs.next-version }};
+            cargo set-version -p ${{ steps.project-meta.outputs.project }} ${{ steps.project-meta.outputs.next-version }};
           elif [ "true" == "${{ steps.project-meta.outputs.is-js-project }}" ]; then
             npm pkg set version=${{ steps.project-meta.outputs.next-version }};
           fi
