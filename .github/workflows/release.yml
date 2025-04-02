@@ -191,6 +191,7 @@ jobs:
 
   gh-release:
     runs-on: ubuntu-24.04
+    if: always()
     needs:
       - meta
       - pack-crate-release
