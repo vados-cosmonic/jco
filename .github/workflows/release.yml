@@ -38,6 +38,9 @@ on:
         description: |
           Versoin tag to release (e.x. `0.1.0`, `0.2.0`)
 
+permissions:
+  contents: none
+
 jobs:
   meta:
     runs-on: ubuntu-24.04
@@ -119,7 +122,9 @@ jobs:
     needs:
       - meta
     permissions:
-      contents: write
+      actions: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -153,7 +158,8 @@ jobs:
     needs:
       - meta
     permissions:
-      contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
