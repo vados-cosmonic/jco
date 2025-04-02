@@ -406,14 +406,14 @@ checksum = "d75a2a4b1b190afb6f5425f10f6a8f959d2ea0b9c2b1d79553551850539e4674"
 
 [[package]]
 name = "jco"
-version = "1.10.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
 ]
 
 [[package]]
 name = "js-component-bindgen"
-version = "1.10.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
  "base64",
@@ -430,7 +430,7 @@ dependencies = [
 
 [[package]]
 name = "js-component-bindgen-component"
-version = "1.10.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
@@ -860,7 +860,7 @@ dependencies = [
 
 [[package]]
 name = "wasm-tools-js"
-version = "0.1.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
  "wasm-encoder 0.227.1",
@@ -1242,7 +1242,7 @@ checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
 
 [[package]]
 name = "xtask"
-version = "0.0.0"
+version = "1.10.3"
 dependencies = [
  "anyhow",
  "js-component-bindgen",
