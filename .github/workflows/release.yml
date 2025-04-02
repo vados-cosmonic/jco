@@ -131,13 +131,11 @@ jobs:
           fetch-depth: 0
 
       - name: Release crate (dry run)
-        if: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           cargo publish --locked --dry-run
 
-      - name: Release crate (dry run)
-        if: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
+      - name: Create release package
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           cargo package
@@ -165,8 +163,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Release crate (dry run)
-        if: ${{ startsWith(github.ref, 'refs/heads/prep-release') }}
+      - name: Create release package
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           npm pack
