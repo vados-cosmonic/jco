@@ -146,7 +146,7 @@ jobs:
           if-no-files-found: error
           path: |
             ${{ needs.meta.outputs.artifacts-glob }}
-n
+
   pack-npm-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
     runs-on: ubuntu-24.04
