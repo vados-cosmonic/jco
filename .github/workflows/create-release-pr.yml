@@ -87,6 +87,13 @@ jobs:
               exit 1;
           esac
 
+          echo -e "project=$PROJECT"
+          echo -e "project-dir=$PROJECT_DIR"
+          echo -e "current-version=$CURRENT_VERSION"
+          echo -e "next-version=$NEXT_VERSION"
+          echo -e "is-rust-project=$IS_RUST_PROJECT"
+          echo -e "is-js-project=$IS_JS_PROJECT"
+
           echo -e "project=$PROJECT" >> $GITHUB_OUTPUT
           echo -e "project-dir=$PROJECT_DIR" >> $GITHUB_OUTPUT
           echo -e "current-version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
@@ -113,6 +120,7 @@ jobs:
         run: |
           git cliff \
             --repository=${{ github.workspace }}/.git \
+            --config=./cliff.toml \
             --unreleased \
             --tag=${{ steps.project-meta.outputs.project }}-${{ steps.project-meta.outputs.next-version }} \
             --prepend=CHANGELOG.md
