@@ -137,12 +137,16 @@ jobs:
         run: |
           cargo package
 
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
+
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
           if-no-files-found: error
           path: |
             ${{ needs.meta.outputs.artifacts-glob }}
-
+n
   pack-npm-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
     runs-on: ubuntu-24.04
@@ -160,6 +164,10 @@ jobs:
         working-directory: ${{ needs.meta.outputs.project-dir }}
         run: |
           npm pack
+
+      - uses: actions/attest-build-provenance@v1
+        with:
+          subject-path: ${{ needs.meta.outputs.artifacts-glob }}
 
       - uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08 # v4.6.0
         with:
