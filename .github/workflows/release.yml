@@ -138,7 +138,8 @@ jobs:
         working-directory: ${{ needs.meta.outputs.project-dir }}
         with:
           if-no-files-found: error
-          path: target/package/${{ needs.meta.outputs.project }}-${{ needs.meta.outputs.version }}.crate
+          path: |
+            target/package/${{ needs.meta.outputs.project }}-${{ needs.meta.outputs.version }}.crate
 
   pack-npm-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
@@ -162,7 +163,8 @@ jobs:
         working-directory: ${{ needs.meta.outputs.project-dir }}
         with:
           if-no-files-found: error
-          path: *.tgz
+          path: |
+            *.tgz
 
   gh-release:
     if: ${{ needs.meta.outputs.is-js-project == 'true' }}
