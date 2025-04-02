@@ -73,11 +73,9 @@ jobs:
 
       - name: Gather project metadata
         id: project-meta
-        needs:
-          - meta
         env:
-          NEXT_VERSION: ${{ needs.meta.outputs.version }}
-          PROJECT: ${{ needs.meta.outputs.project }}
+          NEXT_VERSION: ${{ steps.meta.outputs.version }}
+          PROJECT: ${{ steps.meta.outputs.project }}
         shell: bash
         run: |
           if [[ $NEXT_VERSION == v* ]]; then
