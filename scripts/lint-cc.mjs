@@ -25,19 +25,18 @@ async function main() {
   const commits = await read({ to: end, from: start });
 
   // Lint commit messages
-  let hasError = false;
   let invalidCommits = [];
   for (const msg of commits) {
-    console.error(`checking commit msg\n---${msg}\n---\n`);
+    console.error(`checking commit msg\n---\n${msg}\n---\n`);
+    const title = msg.split("\n")[0];
     const { valid, errors, warnings } = await lint(
-      msg,
+      title,
       opts.rules,
       opts.parserPreset ? { parserOpts: opts.parserPreset.parserOpts } : {},
     );
     if (!valid) {
-      hasError = true;
       invalidCommits.push({
-        msg,
+        title,
         errors,
         warnings,
       });
@@ -45,7 +44,6 @@ async function main() {
   }
 
   await logJobOutput({
-    hasError,
     invalidCommits,
   });
 }
@@ -63,41 +61,43 @@ async function logJobOutput(output) {
     }
 
     // Print all errors, if present
-    if (output.invalidCommits.length > 0) {
+    const failed = output.invalidCommits.length > 0;
+    if (failed) {
       output.invalidCommits.forEach((c) => {
         c.errors.forEach((e) => {
-          console.log(
-            `::error::misformatted commit => [${e.name}]: ${e.message}`,
-          );
+          console.log(`::error::[${e.name}]: ${e.message}`);
         });
       });
     }
 
     await appendFile(env.GITHUB_STEP_SUMMARY, genCIStepSummary(output));
-    await appendFile(env.GITHUB_OUTPUT, `success=${!output.hasErrors}`);
-    await appendFile(env.GITHUB_OUTPUT, `fail=${output.hasErrors}`);
+    await appendFile(env.GITHUB_OUTPUT, `success=${!failed}\n`);
+    await appendFile(env.GITHUB_OUTPUT, `fail=${failed}\n`);
     await appendFile(
       env.GITHUB_OUTPUT,
-      `invalid-commit-count=${output.invalidCommits.length}`,
+      `invalid-commit-count=${output.invalidCommits.length}\n`,
     );
 
     const errorRowsMd = [];
     output.invalidCommits.forEach((c) => {
       c.errors.forEach((e) => {
-        errorRowsMd.push("|" + [e.name, e.message, c.msg].join("|") + "|");
-      });
-    });
-    await appendFile(env.GITHUB_OUTPUT, `error-rows-md-table=${errorRowsMd}`);
-
-    const warningRowsMd = [];
-    output.invalidCommits.forEach((c) => {
-      c.warnings.forEach((w) => {
-        warningRowsMd.push("|" + [w.name, w.message, c.msg].join("|") + "|");
+        errorRowsMd.push("|" + [e.name, e.message, c.title].join("|") + "|");
       });
     });
     await appendFile(
       env.GITHUB_OUTPUT,
-      `warning-rows-md-table=${warningRowsMd}`,
+      `error-rows-md-table<<EOF\n${errorRowsMd.join("\n")}\nEOF\n`,
+    );
+
+    const warningRowsMd = [];
+    output.invalidCommits.forEach((c) => {
+      c.warnings.forEach((w) => {
+        warningRowsMd.push("|" + [w.name, w.message, c.title].join("|") + "|");
+      });
+    });
+    await appendFile(
+      env.GITHUB_OUTPUT,
+      `warning-rows-md-table<<EOF\n${warningRowsMd.join("\n")}\nEOF\n`,
     );
 
     return;
