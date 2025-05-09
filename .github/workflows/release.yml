@@ -71,10 +71,10 @@ jobs:
               return;
             }
 
-            if (context.ref.startsWith('refs/tags')) {
-              match = /^(.*)-v(\d+\.\d+\.\d+)$/.exec(context.ref.replace('refs/tags', ''));
-            } else if (context.ref.startsWith('refs/heads')) {
-              match = /^prep-release-(.+)-v(\d+\.\d+\.\d+)$/.exec(context.ref.replace('refs/heads', ''));
+            if (context.ref.startsWith('refs/tags/')) {
+              match = /^(.*)-v(\d+\.\d+\.\d+)$/.exec(context.ref.replace('refs/tags/', ''));
+            } else if (context.ref.startsWith('refs/heads/')) {
+              match = /^prep-release-(.+)-v(\d+\.\d+\.\d+)$/.exec(context.ref.replace('refs/heads/', ''));
              } else {
                throw new Error(`Unexpected context ref [${context.ref}]`);
              }
