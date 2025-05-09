@@ -66,23 +66,8 @@ jobs:
         id: meta
         with:
           script: |
-            if (context.payload.inputs?.project && context.payload.inputs?.version) {
-              core.setOutput('project', context.payload.inputs.project);
-              core.setOutput('version', context.payload.inputs.version);
-              return;
-            }
-
-            if (context.ref.startsWith('refs/tags/')) {
-              match = context.ref.replace('refs/tags/', '').match(/^(.*)-v([^\s]+)$/);
-            } else if (context.ref.startsWith('refs/heads/')) {
-              match = context.ref.replace('refs/heads/', '').match(/^prep-release-(.+)-v([^\s]+)$/);
-             } else {
-               throw new Error(`Unexpected context ref [${context.ref}]`);
-             }
-             if (!match) { throw new Error(`Failed to parse tag/branch: [${context.ref}]`); }
-             const [_, project, version] = match;
-             core.setOutput('project', project);
-             core.setOutput('version', version);
+             core.setOutput('project', 'jco');
+             core.setOutput('version', '1.11.2-rc.0');
 
       - name: Gather project metadata
         id: project-meta
