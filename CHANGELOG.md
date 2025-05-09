@@ -2,7 +2,18 @@
 
 All notable changes to this project will be documented in this file.
 
-## [jco-v1.11.0] - 2025-04-28
+## [jco-v0.11.1-rc.0] - 2025-05-09
+
+### 🐛 Bug Fixes
+
+* *(jco)* missing stat dependency (#650) by @vados-cosmonic
+
+* *(jco)* appending to const value raises error (#648) by @thomas9911
+
+
+
+## New Contributors
+* @thomas9911 made their first contribution## [jco-v1.11.0] - 2025-04-28
 
 ### 🚀 Features
 
