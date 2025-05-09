@@ -72,9 +72,9 @@ jobs:
             }
 
             if (context.ref.startsWith('refs/tags')) {
-              match = context.ref.replace(/^refs\/tags\//, '').match(/^(.*)-v(\d+\.\d+\.\d+)$/);
+              match = context.ref.replace(/^refs\/tags\//, '').exec(/^(.*)-v(\d+\.\d+\.\d+)$/);
             } else if (context.ref.startsWith('refs/heads')) {
-              match = context.ref.replace(/^refs\/heads\//, '').match(/^prep-release-(.+)-v(\d+\.\d+\.\d+)$/);
+              match = context.ref.replace(/^refs\/heads\//, '').exec(/^prep-release-(.+)-v(\d+\.\d+\.\d+)$/);
              } else {
                throw new Error(`Unexpected context ref [${context.ref}]`);
              }
