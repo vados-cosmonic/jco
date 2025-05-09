@@ -68,6 +68,7 @@ jobs:
                   console.log(`invalid ref [${headRef}]: does not include 'prep-release'`);
                   return;
                 }
+                console.log("PAYLOAD", context.payload.pull_request);
                 if (!headRef || !headMerged) {
                   console.log("invalid/unexpected pull request event type (must be merged, must have ref)");
                   return;
