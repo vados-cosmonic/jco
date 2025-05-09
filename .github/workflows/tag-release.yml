@@ -48,6 +48,7 @@ jobs:
         with:
           fetch-depth: 0
           ref: ${{ github.event.inputs.ref || 'main' }}
+          token: ${{ secrets.RELEASE_PAT || github.token }}
 
       # Pull project and version
       # (automatically triggered run)
