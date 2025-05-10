@@ -219,7 +219,7 @@ jobs:
           mkdir -p /tmp/crate
           cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
           cd /tmp/crate
-          tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
+          tar --strip-components=1 -xvf ${{needs.meta.outputs.artifact-name }}
           mv Cargo.toml.orig Cargo.toml
           cargo publish --dry-run
 
@@ -241,8 +241,7 @@ jobs:
           mkdir -p /tmp/npm
           cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
           cd /tmp/npm
-          ls *
-          tar -xvf --strip-components=1 ${{ needs.meta.outputs.artifact-name }}
+          tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           cd ${{ github.workspace }}/examples/http-hello-world
           npm install --save /tmp/npm
           npm run all
