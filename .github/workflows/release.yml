@@ -241,7 +241,8 @@ jobs:
           mkdir -p /tmp/npm
           cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
           cd /tmp/npm
-          tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
+          ls *
+          tar -xvf --strip-components=1 ${{ needs.meta.outputs.artifact-name }}
           cd ${{ github.workspace }}/examples/http-hello-world
           npm install --save /tmp/npm
           npm run all
