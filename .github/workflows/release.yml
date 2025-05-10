@@ -239,8 +239,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/npm
-          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
-          cd /tmp/npm
+          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/
+          cd /tmp/${{ needs.meta.outputs.artifact-name }}
+          ls *
           tar --strip-components=1 -xvf ${{ needs.meta.outputs.artifact-name }}
           cd ${{ github.workspace }}/examples/http-hello-world
           npm install --save /tmp/npm
