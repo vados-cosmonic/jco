@@ -217,7 +217,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/crate
-          cp artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
+          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/crate/
           cd /tmp/crate
           tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
           mv Cargo.toml.orig Cargo.toml
@@ -239,7 +239,7 @@ jobs:
         shell: bash
         run: |
           mkdir -p /tmp/npm
-          cp artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
+          cp -r artifacts/${{ needs.meta.outputs.artifact-name }} /tmp/npm/
           cd /tmp/npm
           tar -xvf --strip-components=1 ${{needs.meta.outputs.artifact-name }}
           cd ${{ github.workspace }}/examples/http-hello-world
