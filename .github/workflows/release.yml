@@ -66,8 +66,8 @@ jobs:
         id: meta
         with:
           script: |
-             core.setOutput('project', 'jco');
-             core.setOutput('version', '1.11.2-rc.0');
+            core.setOutput('project', 'jco');
+            core.setOutput('version', '1.11.2-rc.0');
 
       - name: Gather project metadata
         id: project-meta
@@ -170,6 +170,11 @@ jobs:
       - uses: Swatinem/rust-cache@9d47c6ad4b02e050fd481d890b2ea34778fd09d6 # v2.7.8
         with:
           shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      # NOTE: we must use a node version new-enough to have --experimental-wasm-jspi
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: ">=22"
 
       - name: Cache npm install
         id: cache-node-modules
