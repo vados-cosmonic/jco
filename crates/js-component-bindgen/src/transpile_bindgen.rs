@@ -944,15 +944,18 @@ impl<'a> Instantiator<'a, '_> {
                 let backpressure_set_fn = self.gen.intrinsic(Intrinsic::BackpressureSet);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {{ {backpressure_set_fn}({}, ...args); }} \n",
+                    "const trampoline{i} = (...args) => {{ {backpressure_set_fn}({}, ...args); }};\n",
                     instance.as_u32(),
                 );
             }
 
             Trampoline::WaitableSetNew { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-set-new not implemented') }};");
+                let waitable_set_new_fn = self.gen.intrinsic(Intrinsic::WaitableSetNew);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {waitable_set_new_fn}({}, ...args); }};\n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetWait {
@@ -960,8 +963,13 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let _ = (instance, async_, memory);
-                todo!("Trampoline::WaitableSetWait");
+                let waitable_set_wait_fn = self.gen.intrinsic(Intrinsic::WaitableSetWait);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {waitable_set_wait_fn}({}, memory{}, {async_}, ...args); }};\n",
+                    instance.as_u32(),
+                    memory.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetPoll {
@@ -969,20 +977,31 @@ impl<'a> Instantiator<'a, '_> {
                 async_,
                 memory,
             } => {
-                let _ = (instance, async_, memory);
-                todo!("Trampoline::WaitableSetPoll");
+                let waitable_set_poll_fn = self.gen.intrinsic(Intrinsic::WaitableSetPoll);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {waitable_set_poll_fn}({}, memory{}, {async_}, ...args); }};\n",
+                    instance.as_u32(),
+                    memory.as_u32(),
+                );
             }
 
             Trampoline::WaitableSetDrop { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-set-drop not implemented') }};");
+                let waitable_set_drop_fn = self.gen.intrinsic(Intrinsic::WaitableSetDrop);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {waitable_set_drop_fn}({}, ...args); }};\n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::WaitableJoin { instance } => {
-                let _ = instance;
-                // TODO: impl (won't compile without)
-                uwriteln!(self.src.js, "const trampoline{i} = () => {{ throw new Error('waitable-join not implemented') }};");
+                let waitable_join_fn = self.gen.intrinsic(Intrinsic::WaitableJoin);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = (...args) => {{ {waitable_join_fn}({}, ...args); }};\n",
+                    instance.as_u32(),
+                );
             }
 
             Trampoline::Yield { async_ } => {
