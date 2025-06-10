@@ -919,12 +919,11 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::SubtaskCancel { instance, async_ } => {
-                let task_cancel_fn = self.gen.intrinsic(Intrinsic::TaskCancel);
+                let task_cancel_fn = self.gen.intrinsic(Intrinsic::SubtaskCancel);
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = (...args) => {{ {task_cancel_fn}({}, {}, ...args); }};\n",
+                    "const trampoline{i} = (...args) => {{ {task_cancel_fn}({}, {async_}, ...args); }};\n",
                     instance.as_u32(),
-                    async_.then(|| "true").unwrap_or("false")
                 );
             }
 

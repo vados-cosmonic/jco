@@ -469,16 +469,16 @@ pub enum Intrinsic {
     /// ```
     Yield,
 
-    /// Cancel the current async task for a given component instance
+    /// Cancel the current async subtask for a given component instance
     ///
     /// # Intrinsic implementation function
     ///
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// function taskCancel(componentIdx: number, isAsync: boolean);
+    /// function subtaskCancel(componentIdx: number, isAsync: boolean);
     /// ```
-    TaskCancel,
+    SubtaskCancel,
 
     /// Create a new waitable set
     ///
@@ -1966,7 +1966,7 @@ pub fn render_intrinsics(
                 "));
             }
 
-            Intrinsic::TaskCancel => {
+            Intrinsic::SubtaskCancel => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let task_cancel_fn = Intrinsic::BackpressureSet.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
@@ -2550,7 +2550,7 @@ impl Intrinsic {
             Intrinsic::GlobalBackpressureMap => "BACKPRESSURE",
 
             // Tasks
-            Intrinsic::TaskCancel => "taskCancel",
+            Intrinsic::TaskCancel => "subtaskCancel",
 
             // WaitableSets
             Intrinsic::WaitableSetNew => "waitableSetNew",
