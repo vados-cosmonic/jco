@@ -896,7 +896,6 @@ pub enum Intrinsic {
     ///////////////
     // Utilities //
     ///////////////
-
     /// Lift a boolean into provided storage, given a core type
     ///
     /// This function is of the form:
@@ -2896,8 +2895,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_read_fn = Intrinsic::StreamRead.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_read_fn}(
@@ -2954,8 +2951,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamWrite => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_write_fn = Intrinsic::StreamWrite.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_write_fn}(
@@ -3012,8 +3007,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamCancelRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_cancel_read_fn = Intrinsic::StreamCancelRead.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_cancel_read_fn}(
@@ -3052,8 +3045,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamCancelWrite => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_cancel_write_fn = Intrinsic::StreamCancelWrite.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_cancel_write_fn}(
@@ -3092,8 +3083,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamCloseWritable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_close_writable_fn = Intrinsic::StreamCloseWritable.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_close_writable_fn}(
@@ -3132,8 +3121,6 @@ pub fn render_intrinsics(
             Intrinsic::StreamCloseReadable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_close_readable_fn = Intrinsic::StreamCloseReadable.name();
-                let stream_class = Intrinsic::StreamClass.name();
-                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_close_readable_fn}(
@@ -3228,8 +3215,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_read_fn = Intrinsic::FutureRead.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_read_fn}(
@@ -3286,8 +3271,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureWrite => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_write_fn = Intrinsic::FutureWrite.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_write_fn}(
@@ -3344,8 +3327,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureCancelRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_cancel_read_fn = Intrinsic::FutureCancelRead.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_cancel_read_fn}(
@@ -3384,8 +3365,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureCancelWrite => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_cancel_write_fn = Intrinsic::FutureCancelWrite.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_cancel_write_fn}(
@@ -3424,8 +3403,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureCloseWritable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_close_writable_fn = Intrinsic::FutureCloseWritable.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_close_writable_fn}(
@@ -3464,8 +3441,6 @@ pub fn render_intrinsics(
             Intrinsic::FutureCloseReadable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_close_readable_fn = Intrinsic::FutureCloseReadable.name();
-                let future_class = Intrinsic::FutureClass.name();
-                let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_close_readable_fn}(
