@@ -149,6 +149,12 @@ pub enum Intrinsic {
     /// The definition of the `Waitable` JS class
     WaitableClass,
 
+    /// The definition of the `Stream` JS class
+    StreamClass,
+
+    /// The definition of the `Future` JS class
+    FutureClass,
+
     /// Global that stores the current task for a given invocation.
     ///
     /// This global variable is populated *only* when we are performing a call
@@ -200,6 +206,24 @@ pub enum Intrinsic {
     /// type GlobalAsyncStateMap = Map<number, ComponentAsyncState>;
     /// ```
     GlobalAsyncStateMap,
+
+    /// Global that stores streams
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type Stream = object; // see StreamClass
+    /// type GlobalStreamMap = Map<i32, Stream>;
+    /// ```
+    GlobalStreamMap,
+
+    /// Global that stores futures by component instance
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type Future = object; // see FutureClass
+    /// type GlobalFutureMap = Map<i32, Future>;
+    /// ```
+    GlobalFutureMap,
 
     /// Function that retrieves or creates async state for a given component instance
     GetOrCreateAsyncState,
@@ -602,6 +626,276 @@ pub enum Intrinsic {
     /// If the waitable set index is zero (an otherwise invalid table index), join should *remove* the given waitable from any sets
     /// that it may be a part of (of which there should only be one).
     WaitableJoin,
+
+    /// Create a new stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type i64 = bigint;
+    /// function streamNew(typeRep: i32): i64;
+    /// ```
+    StreamNew,
+
+    /// Read from a stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u32 = number; // >=0
+    /// type i64 = bigint;
+    /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
+    ///
+    /// function streamRead(
+    ///     componentInstanceID: i32,
+    ///     memory: i32,
+    ///     realloc: i32,
+    ///     encoding: StringEncoding,
+    ///     isAsync: bool,
+    ///     typeRep: u32,
+    ///     streamRep: u32,
+    ///     ptr: u32,
+    ///     count:u322
+    /// ): i64;
+    /// ```
+    StreamRead,
+
+    /// Write to a stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u32 = number; // >=0
+    /// type i64 = bigint;
+    /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
+    ///
+    /// function streamWrite(
+    ///     componentInstanceID: i32,
+    ///     memory: i32,
+    ///     realloc: i32,
+    ///     encoding: StringEncoding,
+    ///     isAsync: bool,
+    ///     typeRep: u32,
+    ///     streamRep: u32,
+    ///     ptr: u32,
+    ///     count:u322
+    /// ): i64;
+    /// ```
+    StreamWrite,
+
+    /// Cancel a read to a stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-readread
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    /// type u64 = bigint; // >= 0
+    ///
+    /// function streamCancelRead(streamRep: u32, isAsync: boolean, readerRep: u32): u64;
+    /// ```
+    StreamCancelRead,
+
+    /// Cancel a write to a stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-writewrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    /// type u64 = bigint; // >= 0
+    ///
+    /// function streamCancelWrite(streamRep: u32, isAsync: boolean, writerRep: u32): u64;
+    /// ```
+    StreamCancelWrite,
+
+    /// Close a the readable end of a Stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfutureclose-readablewritable
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    ///
+    /// function streamCloseReadable(streamRep: u32, readerRep: u32): bool;
+    /// ```
+    StreamCloseReadable,
+
+    /// Close a the writable end of a Stream
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfutureclose-readablewritable
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    ///
+    /// function streamCloseWritable(streamRep: u32, writerRep: u32): bool;
+    /// ```
+    StreamCloseWritable,
+
+    /// Create a new future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type i65 = number;
+    /// function futureNew(typeRep: i32): i64;
+    /// ```
+    FutureNew,
+
+    /// Read from a future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-futurefuturereadwrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u32 = number; // >=0
+    /// type i64 = bigint;
+    /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
+    ///
+    /// function futureRead(
+    ///     componentInstanceID: i32,
+    ///     memory: i32,
+    ///     realloc: i32,
+    ///     encoding: StringEncoding,
+    ///     isAsync: bool,
+    ///     typeRep: u32,
+    ///     futureRep: u32,
+    ///     ptr: u32,
+    ///     count:u322
+    /// ): i64;
+    /// ```
+    FutureRead,
+
+    /// Write to a future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type i32 = number;
+    /// type u32 = number; // >=0
+    /// type i64 = bigint;
+    /// type StringEncoding = 'utf8' | 'utf16' | 'compact-utf16'; // see wasmtime_environ::StringEncoding
+    ///
+    /// function futureWrite(
+    ///     componentInstanceID: i32,
+    ///     memory: i32,
+    ///     realloc: i32,
+    ///     encoding: StringEncoding,
+    ///     isAsync: bool,
+    ///     typeRep: u32,
+    ///     futureRep: u32,
+    ///     ptr: u32,
+    ///     count:u322
+    /// ): i64;
+    /// ```
+    FutureWrite,
+
+    /// Cancel a read to a future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-readread
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    /// type u64 = bigint; // >=0
+    ///
+    /// function futureCancelRead(futureRep: u32, isAsync: boolean, readerRep: u32): u64;
+    /// ```
+    FutureCancelRead,
+
+    /// Cancel a write to a future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturecancel-writewrite
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    /// type u64 = bigint; // >= 0
+    ///
+    /// function futureCancelWrite(futureRep: u32, isAsync: boolean, writerRep: u32): u64;
+    /// ```
+    FutureCancelWrite,
+
+    /// Close a the readable end of a Future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfutureclose-readablewritable
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    ///
+    /// function futureCloseReadable(futureRep: u32, readerRep: u32): bool;
+    /// ```
+    FutureCloseReadable,
+
+    /// Close a the writable end of a Future
+    ///
+    /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfutureclose-readablewritable
+    ///
+    /// # Intrinsic implementation function
+    ///
+    /// The function that implements this intrinsic has the following definition:
+    ///
+    /// ```ts
+    /// type u32 = number; // >=0
+    ///
+    /// function futureCloseWritable(futureRep: u32, writerRep: u32): bool;
+    /// ```
+    FutureCloseWritable,
+
+    ///////////////
+    // Utilities //
+    ///////////////
 
     /// Lift a boolean into provided storage, given a core type
     ///
@@ -1564,7 +1858,7 @@ pub fn render_intrinsics(
                     function {subtask_drop_fn}(componentInstanceID, subtaskID) {{
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentInstanceID, taskId }});
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
                         const subtask =  state.subtasks.remove(subtaskID);
                         if (!subtask) {{ throw new Error('missing/invalid subtask specified for drop in component instance'); }}
@@ -1650,6 +1944,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::I32ToCharUtf16 => {
                 output.push_str("
                     function _i32ToCharUTF16 = (n) => {
@@ -1661,6 +1956,7 @@ pub fn render_intrinsics(
                     }
                 ");
             }
+
             Intrinsic::I32ToCharUtf8 => {
                 output.push_str("
                     function _i32ToCharUTF8 = (n) => {
@@ -1672,6 +1968,7 @@ pub fn render_intrinsics(
                     }
                 ");
             }
+
             Intrinsic::LiftFlatBoolFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1684,6 +1981,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatS8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1696,6 +1994,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatU8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1708,6 +2007,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatS16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1720,6 +2020,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatU16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1732,6 +2033,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatS32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1744,6 +2046,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatU32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1756,6 +2059,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatS64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1768,6 +2072,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatU64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1780,6 +2085,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatFloat32FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1791,6 +2097,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatFloat64FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1802,6 +2109,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatCharUtf16FromStorage => {
                 let i32_to_char_fn = Intrinsic::I32ToCharUtf16.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -1814,6 +2122,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatCharUtf8FromStorage => {
                 let i32_to_char_fn = Intrinsic::I32ToCharUtf8.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -1826,6 +2135,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatStringUtf16FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1845,6 +2155,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatStringUtf8FromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1864,6 +2175,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatRecordFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1879,6 +2191,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatVariantFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1894,6 +2207,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatListFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1910,6 +2224,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatTupleFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1925,6 +2240,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatFlagsFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1936,6 +2252,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatEnumFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1951,6 +2268,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatOptionFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1966,6 +2284,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatResultFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1981,6 +2300,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatOwnFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1990,6 +2310,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatBorrowFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -1999,6 +2320,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatFutureFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -2008,6 +2330,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatStreamFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -2017,6 +2340,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::LiftFlatErrorContextFromStorage => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 output.push_str(&format!("
@@ -2026,6 +2350,7 @@ pub fn render_intrinsics(
                     }}
                 "));
             }
+
             Intrinsic::BackpressureSet => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let backpressure_set_fn = Intrinsic::BackpressureSet.name();
@@ -2049,7 +2374,7 @@ pub fn render_intrinsics(
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
                         const task = {current_task_get_fn}(componentInstanceID);
                         if (task.sync && !task.alwaysTaskReturn) {{
@@ -2075,7 +2400,7 @@ pub fn render_intrinsics(
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentInstanceID, isAsync }});
 
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
                         const task = {current_task_get_fn}(componentInstanceID);
                         if (task.sync && !task.alwaysTaskReturn) {{
@@ -2468,7 +2793,7 @@ pub fn render_intrinsics(
                             throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
                         }}
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('task is not marked as may leave, cannot be cancelled'); }}
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
                         {remove_waitable_set_fn}({{ state, waitableSetRep, task }});
                     }}
                 "));
@@ -2511,6 +2836,670 @@ pub fn render_intrinsics(
                     }}
                 "));
             },
+
+            Intrinsic::StreamClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                output.push_str(&format!("
+                    class {stream_class} {{
+                        #lenders = null;
+                        #waitable = null;
+
+                        resolveDelivered() {{
+                            {debug_log_fn}('[{stream_class}#resolveDelivered()] args', {{ }});
+                            if (this.#lenders || self.resolved) {{
+                                throw new Error('stream has no lendors or has already been resolved');
+                            }}
+                           return this.#lenders !== null;
+                        }}
+
+                        drop() {{
+                            {debug_log_fn}('[{stream_class}#drop()] args', {{ }});
+                            this.resolveDelivered();
+                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::GlobalStreamMap => {
+                let global_stream_map = Intrinsic::GlobalStreamMap.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!("
+                    const {global_stream_map} = {{
+                        send: new {rep_table_class}(),
+                        recv: new {rep_table_class}(),
+                        streams: new {rep_table_class}(),
+                    }}
+                "));
+            },
+
+            Intrinsic::StreamNew => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_new_fn = Intrinsic::StreamNew.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {stream_new_fn}(componentInstanceID, typeRep) {{
+                        {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, typeRep }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        let streamIdx = {global_stream_map}.streams.insert(new {stream_class}());
+                        let sendIdx = {global_stream_map}.send.insert(streamIdx);
+                        let recvIdx = {global_stream_map}.recv.insert(streamIdx);
+                        return BigInt(sendIdx) << 32n | BigInt(recvIdx);
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamRead => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_read_fn = Intrinsic::StreamRead.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_read_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_read_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        // TODO: ensure that the other end is the right type (should be stream read end)
+                        // TODO: ensure the type being sent matches
+                        // TODO: ensure no copy in progress
+
+                        // TODO: create writable buffer for guest (check alignment and bounds!)
+                        // TODO: ensure the type is NOT a borrowed type
+
+                        // TODO: set copying to true on the readable/writable end before calling copy
+                        // TODO: call copy of the readable/writable end
+                        // TODO:   - pass on_copy callback
+                        // TODO:   - pass on_copy_done callback
+
+                        // TODO: if sync, wait forever but allow task to do other things
+
+                        // TODO: if there was *already* a pending event in the readable/writable end, eagerly return
+                        // TODO: if NO pending task exists, return BLOCKED -- caller must async wait using waitable-set.wait/poll
+                        // TODO: or by returning to the event loop
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamWrite => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_write_fn = Intrinsic::StreamWrite.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_write_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_write_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        // TODO: ensure that the other end is the right type (should be stream read end)
+                        // TODO: ensure the type being sent matches
+                        // TODO: ensure no copy in progress
+
+                        // TODO: create writable buffer for guest (check alignment and bounds!)
+                        // TODO: ensure the type is NOT a borrowed type
+
+                        // TODO: set copying to true on the readable/writable end before calling copy
+                        // TODO: call copy of the readable/writable end
+                        // TODO:   - pass on_copy callback
+                        // TODO:   - pass on_copy_done callback
+
+                        // TODO: if sync, wait forever but allow task to do other things
+
+                        // TODO: if there was *already* a pending event in the readable/writable end, eagerly return
+                        // TODO: if NO pending task exists, return BLOCKED -- caller must async wait using waitable-set.wait/poll
+                        // TODO: or by returning to the event loop
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamCancelRead => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_cancel_read_fn = Intrinsic::StreamCancelRead.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_cancel_read_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_cancel_read_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamCancelWrite => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_cancel_write_fn = Intrinsic::StreamCancelWrite.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_cancel_write_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_cancel_write_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamCloseWritable => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_close_writable_fn = Intrinsic::StreamCloseWritable.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_close_writable_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_close_writable_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamCloseReadable => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_close_readable_fn = Intrinsic::StreamCloseReadable.name();
+                let stream_class = Intrinsic::StreamClass.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {stream_close_readable_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        streamIdx,
+                        typeIdx,
+                        streamIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{stream_close_readable_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamIdx,
+                            typeIdx,
+                            streamIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::GlobalFutureMap => {
+                let global_future_map = Intrinsic::GlobalFutureMap.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                output.push_str(&format!("
+                    const {global_future_map} = {{
+                        send: new {rep_table_class}(),
+                        recv: new {rep_table_class}(),
+                        futures: new {rep_table_class}(),
+                    }}
+                "));
+            },
+
+            Intrinsic::FutureClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_class = Intrinsic::FutureClass.name();
+                output.push_str(&format!("
+                    class {future_class} {{
+                        #lenders = null;
+                        #waitable = null;
+
+                        resolveDelivered() {{
+                            {debug_log_fn}('[{future_class}#resolveDelivered()] args', {{ }});
+                            if (this.#lenders || self.resolved) {{
+                                throw new Error('future has no lendors or has already been resolved');
+                            }}
+                           return this.#lenders !== null;
+                        }}
+
+                        drop() {{
+                            {debug_log_fn}('[{future_class}#drop()] args', {{ }});
+                            this.resolveDelivered();
+                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureNew => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_new_fn = Intrinsic::FutureNew.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                output.push_str(&format!("
+                    function {future_new_fn}(componentInstanceID, typeRep) {{
+                        {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, typeRep }});
+                        const task = {current_task_get_fn}();
+                        if (!task) {{ throw new Error('invalid/missing async task'); }}
+                        let futureIdx = {global_future_map}.futures.insert(new {future_class}());
+                        let sendIdx = {global_future_map}.send.insert(futureIdx);
+                        let recvIdx = {global_future_map}.recv.insert(futureIdx);
+                        return BigInt(sendIdx) << 32n | BigInt(recvIdx);
+                    }}
+                "))
+            }
+
+            Intrinsic::FutureRead => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_read_fn = Intrinsic::FutureRead.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_read_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_read_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        // TODO: ensure that the other end is the right type (should be future read end)
+                        // TODO: ensure the type being sent matches
+                        // TODO: ensure no copy in progress
+
+                        // TODO: create writable buffer for guest (check alignment and bounds!)
+                        // TODO: ensure the type is NOT a borrowed type
+
+                        // TODO: set copying to true on the readable/writable end before calling copy
+                        // TODO: call copy of the readable/writable end
+                        // TODO:   - pass on_copy callback
+                        // TODO:   - pass on_copy_done callback
+
+                        // TODO: if sync, wait forever but allow task to do other things
+
+                        // TODO: if there was *already* a pending event in the readable/writable end, eagerly return
+                        // TODO: if NO pending task exists, return BLOCKED -- caller must async wait using waitable-set.wait/poll
+                        // TODO: or by returning to the event loop
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureWrite => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_write_fn = Intrinsic::FutureWrite.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_write_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_write_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        // TODO: ensure that the other end is the right type (should be future read end)
+                        // TODO: ensure the type being sent matches
+                        // TODO: ensure no copy in progress
+
+                        // TODO: create writable buffer for guest (check alignment and bounds!)
+                        // TODO: ensure the type is NOT a borrowed type
+
+                        // TODO: set copying to true on the readable/writable end before calling copy
+                        // TODO: call copy of the readable/writable end
+                        // TODO:   - pass on_copy callback
+                        // TODO:   - pass on_copy_done callback
+
+                        // TODO: if sync, wait forever but allow task to do other things
+
+                        // TODO: if there was *already* a pending event in the readable/writable end, eagerly return
+                        // TODO: if NO pending task exists, return BLOCKED -- caller must async wait using waitable-set.wait/poll
+                        // TODO: or by returning to the event loop
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureCancelRead => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_cancel_read_fn = Intrinsic::FutureCancelRead.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_cancel_read_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_cancel_read_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureCancelWrite => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_cancel_write_fn = Intrinsic::FutureCancelWrite.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_cancel_write_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_cancel_write_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureCloseWritable => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_close_writable_fn = Intrinsic::FutureCloseWritable.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_close_writable_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_close_writable_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureCloseReadable => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_close_readable_fn = Intrinsic::FutureCloseReadable.name();
+                let future_class = Intrinsic::FutureClass.name();
+                let global_future_map  = Intrinsic::GlobalFutureMap.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                output.push_str(&format!("
+                    function {future_close_readable_fn}(
+                        componentInstanceID,
+                        memoryIdx,
+                        reallocIdx,
+                        stringEncoding,
+                        isAsync,
+                        futureIdx,
+                        typeIdx,
+                        futureIdx,
+                        ptr,
+                        count,
+                    ) {{
+                        {debug_log_fn}('[{future_close_readable_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            futureIdx,
+                            typeIdx,
+                            futureIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
+                        throw new Error('not implemented');
+                    }}
+                "));
+            }
 
             Intrinsic::WriteAsyncEventToMemory => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -2789,6 +3778,28 @@ impl Intrinsic {
             Intrinsic::WaitableJoin => "waitableJoin",
             Intrinsic::WaitableSetClass => "WaitableSet",
             Intrinsic::WaitableClass => "Waitable",
+
+            // Streams
+            Intrinsic::GlobalStreamMap => "STREAMS",
+            Intrinsic::StreamClass => "Stream",
+            Intrinsic::StreamNew => "streamNew",
+            Intrinsic::StreamRead => "streamRead",
+            Intrinsic::StreamWrite => "streamWrite",
+            Intrinsic::StreamCloseReadable => "streamCloseReadable",
+            Intrinsic::StreamCloseWritable => "streamCloseWritable",
+            Intrinsic::StreamCancelRead => "streamCancelRead",
+            Intrinsic::StreamCancelWrite => "streamCancelWrite",
+
+            // Futures
+            Intrinsic::GlobalFutureMap => "FUTURES",
+            Intrinsic::FutureClass => "Future",
+            Intrinsic::FutureNew => "futureNew",
+            Intrinsic::FutureRead => "futureRead",
+            Intrinsic::FutureWrite => "futureWrite",
+            Intrinsic::FutureCloseReadable => "futureCloseReadable",
+            Intrinsic::FutureCloseWritable => "futureCloseWritable",
+            Intrinsic::FutureCancelRead => "futureCancelRead",
+            Intrinsic::FutureCancelWrite => "futureCancelWrite",
 
             // Helpers for working with async state
             Intrinsic::GetCurrentTask => "getCurrentTask",

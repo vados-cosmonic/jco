@@ -899,6 +899,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::ResourceTransferBorrow
                 | Trampoline::ResourceTransferOwn
                 | Trampoline::SubtaskDrop { .. }
+                | Trampoline::StreamNew { .. }
                 | Trampoline::TaskCancel { .. }
                 | Trampoline::TaskReturn { .. }
                 | Trampoline::WaitableSetDrop { .. }
@@ -1013,13 +1014,55 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamNew { ty } => {
-                let _ = ty;
-                todo!("Trampoline::StreamNew");
+                let stream_new_fn = self.gen.intrinsic(Intrinsic::StreamNew);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {stream_new_fn}.bind(null, {});\n",
+                    ty.as_u32(),
+                );
             }
 
             Trampoline::StreamRead { ty, options } => {
-                let _ = (ty, options);
-                todo!("Trampoline::StreamRead");
+                let stream_idx = ty.as_u32();
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    memory,
+                    realloc,
+                    callback,
+                    post_return,
+                    async_,
+                } = options;
+                let component_instance_id = instance.as_u32();
+                let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
+                let realloc_idx = realloc
+                    .expect("missing realloc idx for stream.read")
+                    .as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+
+                assert!(
+                    callback.is_none(),
+                    "callback should not be present for stream read"
+                );
+                assert!(
+                    post_return.is_none(),
+                    "post_return should not be present for stream read"
+                );
+
+                let stream_read_fn = self.gen.intrinsic(Intrinsic::StreamRead);
+                uwriteln!(
+                    self.src.js,
+                    r#"const trampoline{i} = {stream_read_fn}.bind(
+                         null,
+                         {component_instance_id},
+                         {memory_idx},
+                         {realloc_idx},
+                         {string_encoding},
+                         {async_},
+                         {stream_idx},
+                     );
+                    "#,
+                );
             }
 
             Trampoline::StreamWrite { ty, options } => {
@@ -1050,13 +1093,55 @@ impl<'a> Instantiator<'a, '_> {
             Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
 
             Trampoline::FutureNew { ty } => {
-                let _ = ty;
-                todo!("Trampoline::FutureNew");
+                let future_new_fn = self.gen.intrinsic(Intrinsic::FutureNew);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {future_new_fn}.bind(null, {});\n",
+                    ty.as_u32(),
+                );
             }
 
             Trampoline::FutureRead { ty, options } => {
-                let _ = (ty, options);
-                todo!("Trampoline::FutureRead");
+                let future_idx = ty.as_u32();
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    memory,
+                    realloc,
+                    callback,
+                    post_return,
+                    async_,
+                } = options;
+                let component_instance_id = instance.as_u32();
+                let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
+                let realloc_idx = realloc
+                    .expect("missing realloc idx for future.read")
+                    .as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+
+                assert!(
+                    callback.is_none(),
+                    "callback should not be present for future read"
+                );
+                assert!(
+                    post_return.is_none(),
+                    "post_return should not be present for future read"
+                );
+
+                let future_read_fn = self.gen.intrinsic(Intrinsic::FutureRead);
+                uwriteln!(
+                    self.src.js,
+                    r#"const trampoline{i} = {future_read_fn}.bind(
+                         null,
+                         {component_instance_id},
+                         {memory_idx},
+                         {realloc_idx},
+                         {string_encoding},
+                         {async_},
+                         {future_idx},
+                     );
+                    "#,
+                );
             }
 
             Trampoline::FutureWrite { ty, options } => {
@@ -3255,4 +3340,13 @@ fn core_file_name(name: &str, idx: u32) -> String {
         (idx + 1).to_string()
     };
     format!("{}.core{i_str}.wasm", name)
+}
+
+/// Encode a [`StringEncoding`] as a string that can be used in Javascript
+fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding) -> &'static str {
+    match val {
+        wasmtime_environ::component::StringEncoding::Utf8 => "'utf8'",
+        wasmtime_environ::component::StringEncoding::Utf16 => "'utf16'",
+        wasmtime_environ::component::StringEncoding::CompactUtf16 => "'compact-utf16'",
+    }
 }
