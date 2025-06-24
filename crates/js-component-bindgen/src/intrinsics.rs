@@ -636,9 +636,9 @@ pub enum Intrinsic {
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// type i32 = number;
-    /// type i64 = bigint;
-    /// function streamNew(typeRep: i32): i64;
+    /// type u32 = number; // >= 0
+    /// type u64 = bigint; // >= 0
+    /// function streamNew(typeRep: u32): u64;
     /// ```
     StreamNew,
 
@@ -769,9 +769,9 @@ pub enum Intrinsic {
     /// The function that implements this intrinsic has the following definition:
     ///
     /// ```ts
-    /// type i32 = number;
-    /// type i65 = number;
-    /// function futureNew(typeRep: i32): i64;
+    /// type u32 = number; // >= 0
+    /// type u64 = bigint; // >= 0
+    /// function futureNew(typeRep: u32): u64;
     /// ```
     FutureNew,
 
