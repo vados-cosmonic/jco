@@ -3,6 +3,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 
+use anyhow::{bail, Result};
 use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};
@@ -1023,15 +1024,16 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamRead { ty, options } => {
+                is_valid_canonopt(options).expect("invalid canonopts");
+
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
                     memory,
                     realloc,
-                    callback,
-                    post_return,
                     async_,
+                    ..
                 } = options;
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
@@ -1039,15 +1041,6 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing realloc idx for stream.read")
                     .as_u32();
                 let string_encoding = string_encoding_js_literal(string_encoding);
-
-                assert!(
-                    callback.is_none(),
-                    "callback should not be present for stream read"
-                );
-                assert!(
-                    post_return.is_none(),
-                    "post_return should not be present for stream read"
-                );
 
                 let stream_read_fn = self.gen.intrinsic(Intrinsic::StreamRead);
                 uwriteln!(
@@ -1066,28 +1059,76 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::StreamWrite { ty, options } => {
-                let _ = (ty, options);
-                todo!("Trampoline::StreamWrite");
+                is_valid_canonopt(options).expect("invalid canonopts");
+
+                let stream_idx = ty.as_u32();
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    memory,
+                    realloc,
+                    async_,
+                    ..
+                } = options;
+                let component_instance_id = instance.as_u32();
+                let memory_idx = memory
+                    .expect("missing memory idx for stream.write")
+                    .as_u32();
+                let realloc_idx = realloc
+                    .expect("missing realloc idx for stream.write")
+                    .as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+
+                let stream_write_fn = self.gen.intrinsic(Intrinsic::StreamWrite);
+                uwriteln!(
+                    self.src.js,
+                    r#"const trampoline{i} = {stream_write_fn}.bind(
+                         null,
+                         {component_instance_id},
+                         {memory_idx},
+                         {realloc_idx},
+                         {string_encoding},
+                         {async_},
+                         {stream_idx},
+                     );
+                    "#,
+                );
             }
 
             Trampoline::StreamCancelRead { ty, async_ } => {
-                let _ = (ty, async_);
-                todo!("Trampoline::StreamCancelRead");
+                let stream_cancel_read_fn = self.gen.intrinsic(Intrinsic::StreamCancelRead);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {stream_cancel_read_fn}.bind(null, {stream_idx}, {async_});\n",
+                    stream_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::StreamCancelWrite { ty, async_ } => {
-                let _ = (ty, async_);
-                todo!("Trampoline::StreamCancelWrite");
+                let stream_cancel_write_fn = self.gen.intrinsic(Intrinsic::StreamCancelWrite);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {stream_cancel_write_fn}.bind(null, {stream_idx}, {async_});\n",
+                    stream_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::StreamCloseReadable { ty } => {
-                let _ = ty;
-                todo!("Trampoline::StreamCloseReadable");
+                let stream_close_readable_fn = self.gen.intrinsic(Intrinsic::StreamCloseReadable);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {stream_close_readable_fn}.bind(null, {stream_idx});\n",
+                    stream_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::StreamCloseWritable { ty } => {
-                let _ = ty;
-                todo!("Trampoline::StreamCloseWritable");
+                let stream_close_writable_fn = self.gen.intrinsic(Intrinsic::StreamCloseWritable);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {stream_close_writable_fn}.bind(null, {stream_idx});\n",
+                    stream_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
@@ -1145,28 +1186,76 @@ impl<'a> Instantiator<'a, '_> {
             }
 
             Trampoline::FutureWrite { ty, options } => {
-                let _ = (ty, options);
-                todo!("Trampoline::FutureWrite");
+                is_valid_canonopt(options).expect("invalid canonopts");
+
+                let future_idx = ty.as_u32();
+                let CanonicalOptions {
+                    instance,
+                    string_encoding,
+                    memory,
+                    realloc,
+                    async_,
+                    ..
+                } = options;
+                let component_instance_id = instance.as_u32();
+                let memory_idx = memory
+                    .expect("missing memory idx for future.write")
+                    .as_u32();
+                let realloc_idx = realloc
+                    .expect("missing realloc idx for future.write")
+                    .as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+
+                let future_write_fn = self.gen.intrinsic(Intrinsic::FutureWrite);
+                uwriteln!(
+                    self.src.js,
+                    r#"const trampoline{i} = {future_write_fn}.bind(
+                         null,
+                         {component_instance_id},
+                         {memory_idx},
+                         {realloc_idx},
+                         {string_encoding},
+                         {async_},
+                         {future_idx},
+                     );
+                    "#,
+                );
             }
 
             Trampoline::FutureCancelRead { ty, async_ } => {
-                let _ = (ty, async_);
-                todo!("Trampoline::FutureCancelRead");
+                let future_cancel_read_fn = self.gen.intrinsic(Intrinsic::FutureCancelRead);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {future_cancel_read_fn}.bind(null, {future_idx}, {async_});\n",
+                    future_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::FutureCancelWrite { ty, async_ } => {
-                let _ = (ty, async_);
-                todo!("Trampoline::FutureCancelWrite");
+                let future_cancel_write_fn = self.gen.intrinsic(Intrinsic::FutureCancelWrite);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {future_cancel_write_fn}.bind(null, {future_idx}, {async_});\n",
+                    future_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::FutureCloseReadable { ty } => {
-                let _ = ty;
-                todo!("Trampoline::FutureCloseReadable");
+                let future_close_readable_fn = self.gen.intrinsic(Intrinsic::FutureCloseReadable);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {future_close_readable_fn}.bind(null, {future_idx});\n",
+                    future_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::FutureCloseWritable { ty } => {
-                let _ = ty;
-                todo!("Trampoline::FutureCloseWritable");
+                let future_close_writable_fn = self.gen.intrinsic(Intrinsic::FutureCloseWritable);
+                uwriteln!(
+                    self.src.js,
+                    "const trampoline{i} = {future_close_writable_fn}.bind(null, {future_idx});\n",
+                    future_idx = ty.as_u32(),
+                );
             }
 
             Trampoline::FutureTransfer => todo!("Trampoline::FutureTransfer"),
@@ -3349,4 +3438,27 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
         wasmtime_environ::component::StringEncoding::Utf16 => "'utf16'",
         wasmtime_environ::component::StringEncoding::CompactUtf16 => "'compact-utf16'",
     }
+}
+
+/// Perform basic canonical option validation
+fn is_valid_canonopt(
+    CanonicalOptions {
+        memory,
+        realloc,
+        callback,
+        post_return,
+        async_,
+        ..
+    }: &CanonicalOptions,
+) -> Result<()> {
+    if realloc.is_some() && memory.is_none() {
+        bail!("memory must be present if realloc is");
+    }
+    if *async_ && post_return.is_some() {
+        bail!("async and post return must not be specified together");
+    }
+    if *async_ && callback.is_none() {
+        bail!("callback must be specified for async");
+    }
+    Ok(())
 }
