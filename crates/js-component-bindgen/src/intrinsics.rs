@@ -2879,15 +2879,22 @@ pub fn render_intrinsics(
                 let stream_class = Intrinsic::StreamClass.name();
                 let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_new_fn}(componentInstanceID, typeRep) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, typeRep }});
+
                         const task = {current_task_get_fn}();
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
                         let streamIdx = {global_stream_map}.streams.insert(new {stream_class}());
-                        let sendIdx = {global_stream_map}.send.insert(streamIdx);
-                        let recvIdx = {global_stream_map}.recv.insert(streamIdx);
-                        return BigInt(sendIdx) << 32n | BigInt(recvIdx);
+                        let writableIdx = {global_stream_map}.send.insert(streamIdx);
+                        let readableIdx = {global_stream_map}.recv.insert(streamIdx);
+
+                        return BigInt(writableIdx) << 32n | BigInt(readableIdx);
                     }}
                 "));
             }
@@ -3199,14 +3206,21 @@ pub fn render_intrinsics(
                 let future_class = Intrinsic::FutureClass.name();
                 let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {future_new_fn}(componentInstanceID, typeRep) {{
                         {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, typeRep }});
+
                         const task = {current_task_get_fn}();
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
+
+                        const state = {get_or_create_async_state_fn}(componentInstanceID);
+                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+
                         let futureIdx = {global_future_map}.futures.insert(new {future_class}());
                         let sendIdx = {global_future_map}.send.insert(futureIdx);
                         let recvIdx = {global_future_map}.recv.insert(futureIdx);
+
                         return BigInt(sendIdx) << 32n | BigInt(recvIdx);
                     }}
                 "))
