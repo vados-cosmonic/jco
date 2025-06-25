@@ -149,8 +149,16 @@ pub enum Intrinsic {
     /// The definition of the `Waitable` JS class
     WaitableClass,
 
-    /// The definition of the `Stream` JS class
-    StreamClass,
+    /// The definition of the `StreamWritableEnd` JS class
+    ///
+    /// This class serves as a shared implementation used by writable and readable ends
+    StreamEndClass,
+
+    /// The definition of the `StreamWritableEnd` JS class
+    StreamWritableEndClass,
+
+    /// The definition of the `StreamReadableEnd` JS class
+    StreamReadableEndClass,
 
     /// The definition of the `Future` JS class
     FutureClass,
@@ -2836,27 +2844,61 @@ pub fn render_intrinsics(
                 "));
             },
 
-            Intrinsic::StreamClass => {
+            Intrinsic::StreamEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_class = Intrinsic::StreamClass.name();
+                let stream_end_class = Intrinsic::StreamEndClass.name();
                 output.push_str(&format!("
-                    class {stream_class} {{
-                        #lenders = null;
-                        #waitable = null;
+                    class {stream_end_class} {{
+                        #elementTypeRep = null;
 
-                        resolveDelivered() {{
-                            {debug_log_fn}('[{stream_class}#resolveDelivered()] args', {{ }});
-                            if (this.#lenders || self.resolved) {{
-                                throw new Error('stream has no lendors or has already been resolved');
+                        constructor(args) {{
+                            {debug_log_fn}('[{stream_end_class}#constructor()] args', args);
+                            if (!args?.elementTypeRep || typeof args.elementTypeRep !== 'number') {{
+                                throw new TypeError('missing elementTypeRep [' + args.elementTypeRep + ']');
                             }}
-                           return this.#lenders !== null;
+                            if (args.elementTypeRep <= 0 || args.elementTypeRep > 2_147_483_647 ))  {{
+                                throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
+                            }}
+                            this.#elementTypeRep = args.elementTypeRep;
                         }}
 
-                        drop() {{
-                            {debug_log_fn}('[{stream_class}#drop()] args', {{ }});
-                            this.resolveDelivered();
-                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                        elementTypeRep() {{ return this.#elementTypeRep; }}
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamReadableEndClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
+                let stream_end_class = Intrinsic::StreamEndClass.name();
+                output.push_str(&format!("
+                    class {stream_readable_end_class} extends {stream_end_class} {{
+                        #copying = false;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{stream_readable_end_class}#constructor()] args', args);
+                            super(args);
                         }}
+
+                        isCopying() {{ return this.#copying; }}
+                    }}
+                "));
+            }
+
+            Intrinsic::StreamWritableEndClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_writable_end_class = Intrinsic::StreamWritableEndClass.name();
+                let stream_end_class = Intrinsic::StreamEndClass.name();
+                output.push_str(&format!("
+                    class {stream_writable_end_class} extends {stream_end_class} {{
+                        #copying = false;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{stream_writable_end_class}#constructor()] args', args);
+                            super(args);
+                        }}
+
+                        isCopying() {{ return this.#copying; }}
                     }}
                 "));
             }
@@ -2865,24 +2907,21 @@ pub fn render_intrinsics(
                 let global_stream_map = Intrinsic::GlobalStreamMap.name();
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 output.push_str(&format!("
-                    const {global_stream_map} = {{
-                        send: new {rep_table_class}(),
-                        recv: new {rep_table_class}(),
-                        streams: new {rep_table_class}(),
-                    }}
+                    const {global_stream_map} = new {rep_table_class}();
                 "));
             },
 
             Intrinsic::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_new_fn = Intrinsic::StreamNew.name();
-                let stream_class = Intrinsic::StreamClass.name();
+                let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
+                let stream_writable_end_class = Intrinsic::StreamWritableEndClass.name();
                 let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
-                    function {stream_new_fn}(componentInstanceID, typeRep) {{
-                        {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, typeRep }});
+                    function {stream_new_fn}(componentInstanceID, elementTypeRep) {{
+                        {debug_log_fn}('[{stream_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
                         const task = {current_task_get_fn}();
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
@@ -2890,9 +2929,12 @@ pub fn render_intrinsics(
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        let streamIdx = {global_stream_map}.streams.insert(new {stream_class}());
-                        let writableIdx = {global_stream_map}.send.insert(streamIdx);
-                        let readableIdx = {global_stream_map}.recv.insert(streamIdx);
+                        let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
+                            elementTypeRep,
+                        }}));
+                        let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
+                            elementTypeRep,
+                        }}));
 
                         return BigInt(writableIdx) << 32n | BigInt(readableIdx);
                     }}
@@ -2902,6 +2944,8 @@ pub fn render_intrinsics(
             Intrinsic::StreamRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_read_fn = Intrinsic::StreamRead.name();
+                let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
                     function {stream_read_fn}(
@@ -2912,7 +2956,6 @@ pub fn render_intrinsics(
                         isAsync,
                         streamIdx,
                         typeIdx,
-                        streamIdx,
                         ptr,
                         count,
                     ) {{
@@ -2924,7 +2967,6 @@ pub fn render_intrinsics(
                             isAsync,
                             streamIdx,
                             typeIdx,
-                            streamIdx,
                             ptr,
                             count,
                         }});
@@ -2932,9 +2974,16 @@ pub fn render_intrinsics(
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        // TODO: ensure that the other end is the right type (should be stream read end)
-                        // TODO: ensure the type being sent matches
-                        // TODO: ensure no copy in progress
+                        const stream = {global_stream_map}.get(streamIdx);
+                        if (!stream) {{ throw new Error('missing stream with idx [' + streamIdx + ']'); }}
+
+                        if (!(stream instanceof {stream_readable_end_class})) {{
+                            throw new Error('invalid stream type, expected readable stream');
+                        }}
+                        if (stream.elementTypeRep !== typeIdx) {{
+                            throw new Error('invalid element type rep, expected [' + typeIdx + '], found [' + stream.elementTypeRep + ']');
+                        }}
+                        if (stream.isCopying()) {{ throw new Error('stream is currently undergoing a separate copy'); }}
 
                         // TODO: create writable buffer for guest (check alignment and bounds!)
                         // TODO: ensure the type is NOT a borrowed type
@@ -3770,7 +3819,9 @@ impl Intrinsic {
 
             // Streams
             Intrinsic::GlobalStreamMap => "STREAMS",
-            Intrinsic::StreamClass => "Stream",
+            Intrinsic::StreamEndClass => "StreamEnd",
+            Intrinsic::StreamWritableEndClass => "StreamWritableEnd",
+            Intrinsic::StreamReadableEndClass => "StreamReadableEnd",
             Intrinsic::StreamNew => "streamNew",
             Intrinsic::StreamRead => "streamRead",
             Intrinsic::StreamWrite => "streamWrite",
