@@ -1014,6 +1014,9 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
+            // TODO: build a lookup of types that could be used in streams for a given component?
+            // Need to have a way to look up/serialize the type indices per component into
+            // a lookup of lifting functions? Or just use the cabiLower?
             Trampoline::StreamNew { ty } => {
                 let stream_new_fn = self.gen.intrinsic(Intrinsic::StreamNew);
                 uwriteln!(

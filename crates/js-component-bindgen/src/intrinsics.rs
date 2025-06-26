@@ -2877,6 +2877,12 @@ pub fn render_intrinsics(
                         #componentInstanceID = null;
                         #dropped = false;
 
+                        const CopyResult = {{
+                            COMPLETED: 0,
+                            DROPPED: 1,
+                            CANCELLED: 1,
+                        }}
+
                         constructor(args) {{
                             {debug_log_fn}('[{stream_end_class}#constructor()] args', args);
                             if (!args?.elementTypeRep || typeof args.elementTypeRep !== 'number') {{
@@ -2892,6 +2898,11 @@ pub fn render_intrinsics(
                         elementTypeRep() {{ return this.#elementTypeRep; }}
 
                         isHostOwned() {{ return this.#componentInstanceID === null; }}
+
+                        setWaitableEvent(fn) {{
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            this.#waitable.setEvent(fn);
+                        }}
 
                         drop() {{
                             if (this.#dropped) {{ throw new Error('already dropped'); }}
@@ -2918,12 +2929,15 @@ pub fn render_intrinsics(
                 let copy_impl = match current_intrinsic {
                     Intrinsic::StreamWritableEndClass => format!("
                          copy() {{
-                             if (!this.writable) {{ throw new Error('missing/invalid writable'); }}
+                             if (this.#done) {{ throw new Error('stream has completed'); }}
+                             if (!this.#writable) {{ throw new Error('missing/invalid writable'); }}
                              throw new Error('not implemented');
                          }}
                     "),
                     Intrinsic::StreamReadableEndClass => format!("
                          copy() {{
+                             if (this.#done) {{ throw new Error('stream has completed'); }}
+                             if (!this.#readable) {{ throw new Error('missing/invalid readable'); }}
                              throw new Error('not implemented');
                          }}
                     "),
@@ -2935,6 +2949,7 @@ pub fn render_intrinsics(
                         #copying = false;
                         #{stream_var_name} = null;
                         #dropped = false;
+                        #done = false;
 
                         constructor(args) {{
                             {debug_log_fn}('[{class_name}#constructor()] args', args);
@@ -2946,6 +2961,15 @@ pub fn render_intrinsics(
                         }}
 
                         isCopying() {{ return this.#copying; }}
+                        clearCopying() {{
+                            if (!this.#copying) {{ throw new Error('attempt to clear while copying not in progress'); }}
+                            this.#copying = false;
+                        }}
+
+                        isDone() {{ return this.#done; }}
+                        markDone() {{
+                            this.#done = true;
+                        }}
 
                         {copy_impl}
 
@@ -3095,10 +3119,12 @@ pub fn render_intrinsics(
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_read_fn = Intrinsic::StreamRead.name();
                 let global_stream_map  = Intrinsic::GlobalStreamMap.name();
+                let stream_end_class = Intrinsic::StreamEndClass.name();
                 let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 let is_borrowed_type = Intrinsic::IsBorrowedType.name();
                 let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
+                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
                 output.push_str(&format!("
                     function {stream_read_fn}(
                         componentInstanceID,
@@ -3106,7 +3132,7 @@ pub fn render_intrinsics(
                         reallocIdx,
                         stringEncoding,
                         isAsync,
-                        streamIdx,
+                        streamEndIdx,
                         typeIdx,
                         ptr,
                         count,
@@ -3117,7 +3143,7 @@ pub fn render_intrinsics(
                             reallocIdx,
                             stringEncoding,
                             isAsync,
-                            streamIdx,
+                            streamEndIdx,
                             typeIdx,
                             ptr,
                             count,
@@ -3126,16 +3152,16 @@ pub fn render_intrinsics(
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const stream = {global_stream_map}.get(streamIdx);
-                        if (!stream) {{ throw new Error('missing stream with idx [' + streamIdx + ']'); }}
+                        const streamEnd = {global_stream_map}.get(streamEndIdx);
+                        if (!streamEnd) {{ throw new Error('missing stream with idx [' + streamEndIdx + ']'); }}
 
-                        if (!(stream instanceof {stream_readable_end_class})) {{
+                        if (!(streamEnd instanceof {stream_readable_end_class})) {{
                             throw new Error('invalid stream type, expected readable stream');
                         }}
-                        if (stream.elementTypeRep !== typeIdx) {{
-                            throw new Error('invalid element type rep, expected [' + typeIdx + '], found [' + stream.elementTypeRep + ']');
+                        if (streamEnd.elementTypeRep() !== typeIdx) {{
+                            throw new Error('invalid element type rep, expected [' + typeIdx + '], found [' + streamEnd.elementTypeRep() + ']');
                         }}
-                        if (stream.isCopying()) {{ throw new Error('stream is currently undergoing a separate copy'); }}
+                        if (streamEnd.isCopying()) {{ throw new Error('stream is currently undergoing a separate copy'); }}
 
                         if (isBorrowedType(componentInstanceID, typeIdx)) {{
                             throw new Error('borrowed types cannot be used as elements in a stream');
@@ -3143,16 +3169,28 @@ pub fn render_intrinsics(
 
                         let bufID = {global_buffer_manager}.createBuffer({{ componentInstanceID, start, len, typeIdx }});
 
-                        stream.copy({{
+                        const processFn = (result, reclaimBufferFn) => {{
+                            if (reclaimBufferFn) {{ reclaimBufferFn(); }}
+                            streamEnd.clearCopying();
+
+                            if (result === {stream_end_class}.CopyResult.DROPPED) {{
+                                streamEnd.markDone();
+                            }}
+
+                            if (result <= 0 || result >= 16) {{ throw new Error('unsupported stream copy result [' + result + ']'); }}
+                            if (buf.length >= {managed_buffer_class}.MAX_LENGTH) {{
+                                 throw new Error('buffer size [' + buf.length + '] greater than max length [' + {managed_buffer_class}.MAX_LENGTH + ']');
+                            }}
+                            if (buf.length > 2**28) {{ throw new Error('buffer uses reserved space'); }}
+
+                            let packedResult = result | (buffer.progress << 4);
+                            return [event_code, i, packedResult); // TODO: event code??
+                        }}
+
+                        streamEnd.copy({{
                             bufID,
-                            onCopy: () => {{
-                                let e = {global_buffer_manager}.copy({{ status, buffer }});
-                                stream.setEvent(e);
-                            }},
-                            onDone: (status) => {{
-                                let e = {global_buffer_manager}.copy({{ status }});
-                                stream.setEvent(e);
-                            }},
+                            onCopy: (reclaimBufferFn) => {{ processFn({stream_end_class}.CopyResult.COMPLETED, reclaimBufferFn); }}
+                            onCopyDone: (result) => {{ processFn(result); }}
                         }});
 
                         // TODO: if sync, wait forever but allow task to do other things
