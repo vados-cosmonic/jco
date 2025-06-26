@@ -165,7 +165,7 @@ pub enum Intrinsic {
     /// The definition of the `StreamReadableEnd` JS class
     StreamReadableEndClass,
 
-    /// The definition of the `FutrueWritableEnd` JS class
+    /// The definition of the `FutureWritableEnd` JS class
     ///
     /// This class serves as a shared implementation used by writable and readable ends
     FutureEndClass,
@@ -343,7 +343,7 @@ pub enum Intrinsic {
     /// move an error context with a handle from one component that owns it to another.
     ///
     /// This intrinsic is normally invoked when an error-context is passed across a component
-    /// boundary (ex. function output, closing a stream/futrue with an error, etc.)
+    /// boundary (ex. function output, closing a stream/future with an error, etc.)
     ///
     /// NOTE that error contexts unlike streams/futures/resources are reference counted --
     /// transferring one does not not drop an error context.
@@ -2913,8 +2913,23 @@ pub fn render_intrinsics(
                     Intrinsic::StreamWritableEndClass => (current_intrinsic.name(), "writable", "WritableStream"),
                     _ => unreachable!(),
                 };
-
                 let stream_end_class = Intrinsic::StreamEndClass.name();
+
+                let copy_impl = match current_intrinsic {
+                    Intrinsic::StreamWritableEndClass => format!("
+                         copy() {{
+                             if (!this.writable) {{ throw new Error('missing/invalid writable'); }}
+                             throw new Error('not implemented');
+                         }}
+                    "),
+                    Intrinsic::StreamReadableEndClass => format!("
+                         copy() {{
+                             throw new Error('not implemented');
+                         }}
+                    "),
+                    _ => unreachable!(),
+                };
+
                 output.push_str(&format!("
                     class {class_name} extends {stream_end_class} {{
                         #copying = false;
@@ -2924,13 +2939,15 @@ pub fn render_intrinsics(
                         constructor(args) {{
                             {debug_log_fn}('[{class_name}#constructor()] args', args);
                             super(args);
-                            if (!args.stream || !(args.stream instanceof {js_stream_class_name})) {{
+                            if (!args.{stream_var_name} || !(args.{stream_var_name} instanceof {js_stream_class_name})) {{
                                 throw new TypeError('missing/invalid stream, expected {js_stream_class_name}');
                             }}
-                            this.#{stream_var_name} = args.stream;
+                            this.#{stream_var_name} = args.{stream_var_name};
                         }}
 
                         isCopying() {{ return this.#copying; }}
+
+                        {copy_impl}
 
                         drop() {{
                             if (self.#dropped) {{ throw new Error('already dropped'); }}
