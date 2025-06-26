@@ -234,8 +234,8 @@ pub enum Intrinsic {
     ///
     /// ```ts
     /// type i32 = number;
-    /// type Stream = object; // see StreamClass
-    /// type GlobalStreamMap = Map<i32, Stream>;
+    /// type StreamEnd = StreamWritableEndClass | StreamReadableEndClass;
+    /// type GlobalStreamMap<T> = Map<i32, StreamEnd>;
     /// ```
     GlobalStreamMap,
 
@@ -1222,8 +1222,8 @@ pub fn render_intrinsics(
         intrinsics.extend([&Intrinsic::RepTableClass]);
     }
 
-    for i in intrinsics.iter() {
-        match i {
+    for current_intrinsic in intrinsics.iter() {
+        match current_intrinsic {
             Intrinsic::Base64Compile => if !no_nodejs_compat {
                 output.push_str("
                     const base64Compile = str => WebAssembly.compile(typeof Buffer !== 'undefined' ? Buffer.from(str, 'base64') : Uint8Array.from(atob(str), b => b.charCodeAt(0)));
@@ -2866,12 +2866,16 @@ pub fn render_intrinsics(
                 "));
             },
 
+            // TODO: implement lone waitable usage
             Intrinsic::StreamEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_end_class = Intrinsic::StreamEndClass.name();
                 output.push_str(&format!("
                     class {stream_end_class} {{
+                        #waitable = null;
                         #elementTypeRep = null;
+                        #componentInstanceID = null;
+                        #dropped = false;
 
                         constructor(args) {{
                             {debug_log_fn}('[{stream_end_class}#constructor()] args', args);
@@ -2882,45 +2886,62 @@ pub fn render_intrinsics(
                                 throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
                             }}
                             this.#elementTypeRep = args.elementTypeRep;
+                            this.#componentInstanceID = args.componentInstanceID ??= null;
                         }}
 
                         elementTypeRep() {{ return this.#elementTypeRep; }}
+
+                        isHostOwned() {{ return this.#componentInstanceID === null; }}
+
+                        drop() {{
+                            if (this.#dropped) {{ throw new Error('already dropped'); }}
+
+                            if (!this.#waitable) {{ throw new Error('missing/invalid waitable'); }}
+                            this.#waitable.drop();
+                            this.#waitable = null;
+
+                            this.#dropped = true;
+                        }}
                     }}
                 "));
             }
 
-            Intrinsic::StreamReadableEndClass => {
+            Intrinsic::StreamReadableEndClass | Intrinsic::StreamWritableEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
+                let (class_name, stream_var_name, js_stream_class_name) = match current_intrinsic {
+                    Intrinsic::StreamReadableEndClass => (current_intrinsic.name(), "readable", "ReadableStream"),
+                    Intrinsic::StreamWritableEndClass => (current_intrinsic.name(), "writable", "WritableStream"),
+                    _ => unreachable!(),
+                };
+
                 let stream_end_class = Intrinsic::StreamEndClass.name();
                 output.push_str(&format!("
-                    class {stream_readable_end_class} extends {stream_end_class} {{
+                    class {class_name} extends {stream_end_class} {{
                         #copying = false;
+                        #{stream_var_name} = null;
+                        #dropped = false;
 
                         constructor(args) {{
-                            {debug_log_fn}('[{stream_readable_end_class}#constructor()] args', args);
+                            {debug_log_fn}('[{class_name}#constructor()] args', args);
                             super(args);
+                            if (!args.stream || !(args.stream instanceof {js_stream_class_name})) {{
+                                throw new TypeError('missing/invalid stream, expected {js_stream_class_name}');
+                            }}
+                            this.#{stream_var_name} = args.stream;
                         }}
 
                         isCopying() {{ return this.#copying; }}
-                    }}
-                "));
-            }
 
-            Intrinsic::StreamWritableEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_writable_end_class = Intrinsic::StreamWritableEndClass.name();
-                let stream_end_class = Intrinsic::StreamEndClass.name();
-                output.push_str(&format!("
-                    class {stream_writable_end_class} extends {stream_end_class} {{
-                        #copying = false;
+                        drop() {{
+                            if (self.#dropped) {{ throw new Error('already dropped'); }}
+                            if (self.#copying) {{ throw new Error('cannot drop while copying'); }}
 
-                        constructor(args) {{
-                            {debug_log_fn}('[{stream_writable_end_class}#constructor()] args', args);
-                            super(args);
+                            if (!self.#{stream_var_name}) {{ throw new Error('missing/invalid stream'); }}
+                            this.#{stream_var_name}.close();
+
+                            super.drop();
+                            self.#dropped = true;
                         }}
-
-                        isCopying() {{ return this.#copying; }}
                     }}
                 "));
             }
@@ -2933,6 +2954,8 @@ pub fn render_intrinsics(
                 "));
             },
 
+            // TODO: allow customizable stream functionality (user should be able to specify a lib/import for a 'stream()' function
+            // (this will enable using p3-shim explicitly or any other implementation)
             Intrinsic::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_new_fn = Intrinsic::StreamNew.name();
@@ -2951,11 +2974,16 @@ pub fn render_intrinsics(
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
+                        let stream = new TransformStream();
                         let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
                             elementTypeRep,
+                            writable: stream.writable,
+                            componentInstanceID,
                         }}));
                         let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
                             elementTypeRep,
+                            readable: stream.readable,
+                            componentInstanceID,
                         }}));
 
                         return BigInt(writableIdx) << 32n | BigInt(readableIdx);
@@ -2995,10 +3023,11 @@ pub fn render_intrinsics(
             Intrinsic::BufferManagerClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
                 let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
                 output.push_str(&format!("
                     class {buffer_manager_class} {{
-                        #managedBuffers = new Map();
+                        #buffers = new Map();
                         #bufferIDs = new Map();
 
                         private constructor() {{ }}
@@ -3021,24 +3050,27 @@ pub fn render_intrinsics(
                             if (!args.len) {{ throw new TypeError('missing/invalid buffer length'); }}
                             const {{ componentInstanceID, start, len, typeIdx }} = args;
 
-                            if (!this.#managedBuffers.has(componentInstanceID)) {{
-                                this.#managedBuffers.set(componentInstanceID, new Map());
+                            if (!this.#buffers.has(componentInstanceID)) {{
+                                this.#buffers.set(componentInstanceID, new Map());
                             }}
-                            const instanceBuffers = this.#managedBuffers.get(componentInstanceID);
+                            const instanceBuffers = this.#buffers.get(componentInstanceID);
 
                             const nextBufID = this.getNextBufferID(args.componentInstanceID);
+
+                            // TODO: check alignment and bounds, if typeIdx is present
                             instanceBuffers.set(nextBufID, new {managed_buffer_class}());
 
                             return nextBufID;
                         }}
-
-                        const table = {defined_resource_tables}[componentInstanceID];
-                        if (!table) {{ return false; }}
-                        const handle = table[(typeIdx << 1) + 1];
-                        if (!handle) {{ return false; }}
-                        const isOwned = (handle & T_FLAG) !== 0;
-                        return !isOwned;
                     }}
+                "));
+            }
+
+            Intrinsic::GlobalBufferManager => {
+                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
+                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                output.push_str(&format!("
+                    const {global_buffer_manager} = new {buffer_manager_class}();
                 "));
             }
 
@@ -3049,7 +3081,7 @@ pub fn render_intrinsics(
                 let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 let is_borrowed_type = Intrinsic::IsBorrowedType.name();
-                let buf_mgr = Intrinsic::GlobalBufferManager.name();
+                let global_buffer_manager = Intrinsic::GlobalBufferManager.name();
                 output.push_str(&format!("
                     function {stream_read_fn}(
                         componentInstanceID,
@@ -3092,13 +3124,19 @@ pub fn render_intrinsics(
                             throw new Error('borrowed types cannot be used as elements in a stream');
                         }}
 
-                        // TODO: create writable buffer for guest (check alignment and bounds!)
-                        let buf = {buf_mgr}.new({{ componentInstanceID, start, len }});
+                        let bufID = {global_buffer_manager}.createBuffer({{ componentInstanceID, start, len, typeIdx }});
 
-                        // TODO: set copying to true on the readable/writable end before calling copy
-                        // TODO: call copy of the readable/writable end
-                        // TODO:   - pass on_copy callback
-                        // TODO:   - pass on_copy_done callback
+                        stream.copy({{
+                            bufID,
+                            onCopy: () => {{
+                                let e = {global_buffer_manager}.copy({{ status, buffer }});
+                                stream.setEvent(e);
+                            }},
+                            onDone: (status) => {{
+                                let e = {global_buffer_manager}.copy({{ status }});
+                                stream.setEvent(e);
+                            }},
+                        }});
 
                         // TODO: if sync, wait forever but allow task to do other things
 
@@ -3334,6 +3372,7 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     class {future_end_class} {{
                         #elementTypeRep = null;
+                        #componentInstanceID = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{future_end_class}#constructor()] args', args);
@@ -3344,45 +3383,51 @@ pub fn render_intrinsics(
                                 throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
                             }}
                             this.#elementTypeRep = args.elementTypeRep;
+                            this.#componentInstanceID = args.componentInstanceID ??= null;
                         }}
 
                         elementTypeRep() {{ return this.#elementTypeRep; }}
+                        isHostOwned() {{ return this.#componentInstanceID === null; }}
                     }}
                 "));
             }
 
-            Intrinsic::FutureReadableEndClass => {
+            Intrinsic::FutureReadableEndClass | Intrinsic::FutureWritableEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_readable_end_class = Intrinsic::FutureReadableEndClass.name();
+                let (class_name, future_var_name, js_future_var_type) = match current_intrinsic {
+                    Intrinsic::FutureReadableEndClass => (current_intrinsic.name(), "promise", "Promise"),
+                    Intrinsic::FutureWritableEndClass => (current_intrinsic.name(), "resolve", "Function"),
+                    _ => unreachable!(),
+                };
+
                 let future_end_class = Intrinsic::FutureEndClass.name();
                 output.push_str(&format!("
-                    class {future_readable_end_class} extends {future_end_class} {{
+                    class {class_name} extends {future_end_class} {{
                         #copying = false;
+                        #{future_var_name} = null;
+                        #dropped = false;
 
                         constructor(args) {{
-                            {debug_log_fn}('[{future_readable_end_class}#constructor()] args', args);
+                            {debug_log_fn}('[{class_name}#constructor()] args', args);
                             super(args);
+                            if (!args.{future_var_name} || !(args.{future_var_name} instanceof {js_future_var_type})) {{
+                                throw new TypeError('missing/invalid {future_var_name}, expected {js_future_var_type}');
+                            }}
+                            this.#{future_var_name} = args.{future_var_name};
                         }}
 
                         isCopying() {{ return this.#copying; }}
-                    }}
-                "));
-            }
 
-            Intrinsic::FutureWritableEndClass => {
-                let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_writable_end_class = Intrinsic::FutureWritableEndClass.name();
-                let future_end_class = Intrinsic::FutureEndClass.name();
-                output.push_str(&format!("
-                    class {future_writable_end_class} extends {future_end_class} {{
-                        #copying = false;
+                        drop() {{
+                            if (self.#dropped) {{ throw new Error('already dropped'); }}
+                            if (self.#copying) {{ throw new Error('cannot drop while copying'); }}
 
-                        constructor(args) {{
-                            {debug_log_fn}('[{future_writable_end_class}#constructor()] args', args);
-                            super(args);
+                            if (!self.#{future_var_name}) {{ throw new Error('missing/invalid {future_var_name}'); }}
+                            this.#{future_var_name}.close();
+
+                            super.drop();
+                            self.#dropped = true;
                         }}
-
-                        isCopying() {{ return this.#copying; }}
                     }}
                 "));
             }
