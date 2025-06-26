@@ -129,6 +129,11 @@ pub enum Intrinsic {
     DefinedResourceTables,
     HandleTables,
 
+    ManagedBufferClass,
+
+    /// Buffer manager that is used to synchronize component writes
+    BufferManagerClass,
+
     /// Reusable table structure for holding canonical ABI objects by their representation/identifier of (e.g. resources, waitables, etc)
     ///
     /// Representations of objects stored in one of these tables is a u32 (0 is expected to be an invalid index).
@@ -160,8 +165,18 @@ pub enum Intrinsic {
     /// The definition of the `StreamReadableEnd` JS class
     StreamReadableEndClass,
 
-    /// The definition of the `Future` JS class
-    FutureClass,
+    /// The definition of the `FutrueWritableEnd` JS class
+    ///
+    /// This class serves as a shared implementation used by writable and readable ends
+    FutureEndClass,
+
+    /// The definition of the `FutureWritableEnd` JS class
+    FutureWritableEndClass,
+
+    /// The definition of the `FutureReadableEnd` JS class
+    FutureReadableEndClass,
+
+    GlobalBufferManager,
 
     /// Global that stores the current task for a given invocation.
     ///
@@ -616,6 +631,12 @@ pub enum Intrinsic {
 
     /// JS helper function for removing a waitable set
     RemoveWaitableSet,
+
+    /// JS helper function for check whether a given type is borrowed
+    ///
+    /// Generally the only kind of type that can be borrowed is a resource
+    /// handle, so this helper checks for that.
+    IsBorrowedType,
 
     /// Join a given waitable set
     ///
@@ -1463,8 +1484,9 @@ pub fn render_intrinsics(
                 output.push_str(&format!("
                     function resourceTransferBorrow(handle, fromTid, toTid) {{
                         const fromTable = {handle_tables}[fromTid];
-                        const isOwn = (fromTable[(handle << 1) + 1] & T_FLAG) !== 0;
-                        const rep = isOwn ? fromTable[(handle << 1) + 1] & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
+                        const handle = fromTable[(handle << 1) + 1];
+                        const isOwn = (handle & T_FLAG) !== 0;
+                        const rep = isOwn ? handle & ~T_FLAG : {rsc_table_remove}(fromTable, handle).rep;
                         if ({defined_resource_tables}[toTid]) return rep;
                         const toTable = {handle_tables}[toTid] || ({handle_tables}[toTid] = [T_FLAG, 0]);
                         const newHandle = {rsc_table_create_borrow}(toTable, rep);
@@ -2941,12 +2963,93 @@ pub fn render_intrinsics(
                 "));
             }
 
+            Intrinsic::IsBorrowedType => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let is_borrowed_type_fn = Intrinsic::IsBorrowedType.name();
+                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+                output.push_str(&format!("
+                    function {is_borrowed_type_fn}(componentInstanceID, typeIdx) {{
+                        {debug_log_fn}('[{is_borrowed_type_fn}()] args', {{ componentInstanceID, typeIdx }});
+                        const table = {defined_resource_tables}[componentInstanceID];
+                        if (!table) {{ return false; }}
+                        const handle = table[(typeIdx << 1) + 1];
+                        if (!handle) {{ return false; }}
+                        const isOwned = (handle & T_FLAG) !== 0;
+                        return !isOwned;
+                    }}
+                "));
+            }
+
+            Intrinsic::ManagedBufferClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
+                output.push_str(&format!("
+                    class {managed_buffer_class} {{
+                        constructor(args) {{
+                            {debug_log_fn}('[{managed_buffer_class}#constructor()] args', args);
+                        }}
+                    }}
+                "));
+            }
+
+            Intrinsic::BufferManagerClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let buffer_manager_class = Intrinsic::BufferManagerClass.name();
+                let defined_resource_tables = Intrinsic::DefinedResourceTables.name();
+                output.push_str(&format!("
+                    class {buffer_manager_class} {{
+                        #managedBuffers = new Map();
+                        #bufferIDs = new Map();
+
+                        private constructor() {{ }}
+
+                        getNextBufferID(componentInstanceID) {{
+                            const current = this.#bufferIDs.get(args.componentInstanceID, 0);
+                            if (typeof current === 'undefined') {{
+                                this.#bufferIDs.set(args.componentInstanceID, 1);
+                                return 0;
+                            }}
+                            this.#bufferIDs.set(args.componentInstanceID, current + 1);
+                            return current;
+                        }}
+
+                        createBuffer(args) {{
+                            {debug_log_fn}('[{buffer_manager_class}#create()] args', args);
+                            if (!args || typeof args !== 'object') {{ throw new TypeError('missing/invalid argument object'); }}
+                            if (!args.componentInstanceID) {{ throw new TypeError('missing/invalid component instance ID'); }}
+                            if (!args.start) {{ throw new TypeError('missing/invalid start pointer'); }}
+                            if (!args.len) {{ throw new TypeError('missing/invalid buffer length'); }}
+                            const {{ componentInstanceID, start, len, typeIdx }} = args;
+
+                            if (!this.#managedBuffers.has(componentInstanceID)) {{
+                                this.#managedBuffers.set(componentInstanceID, new Map());
+                            }}
+                            const instanceBuffers = this.#managedBuffers.get(componentInstanceID);
+
+                            const nextBufID = this.getNextBufferID(args.componentInstanceID);
+                            instanceBuffers.set(nextBufID, new {managed_buffer_class}());
+
+                            return nextBufID;
+                        }}
+
+                        const table = {defined_resource_tables}[componentInstanceID];
+                        if (!table) {{ return false; }}
+                        const handle = table[(typeIdx << 1) + 1];
+                        if (!handle) {{ return false; }}
+                        const isOwned = (handle & T_FLAG) !== 0;
+                        return !isOwned;
+                    }}
+                "));
+            }
+
             Intrinsic::StreamRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_read_fn = Intrinsic::StreamRead.name();
                 let global_stream_map  = Intrinsic::GlobalStreamMap.name();
                 let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
+                let is_borrowed_type = Intrinsic::IsBorrowedType.name();
+                let buf_mgr = Intrinsic::GlobalBufferManager.name();
                 output.push_str(&format!("
                     function {stream_read_fn}(
                         componentInstanceID,
@@ -2985,8 +3088,12 @@ pub fn render_intrinsics(
                         }}
                         if (stream.isCopying()) {{ throw new Error('stream is currently undergoing a separate copy'); }}
 
+                        if (isBorrowedType(componentInstanceID, typeIdx)) {{
+                            throw new Error('borrowed types cannot be used as elements in a stream');
+                        }}
+
                         // TODO: create writable buffer for guest (check alignment and bounds!)
-                        // TODO: ensure the type is NOT a borrowed type
+                        let buf = {buf_mgr}.new({{ componentInstanceID, start, len }});
 
                         // TODO: set copying to true on the readable/writable end before calling copy
                         // TODO: call copy of the readable/writable end
@@ -3216,35 +3323,66 @@ pub fn render_intrinsics(
                 let global_future_map = Intrinsic::GlobalFutureMap.name();
                 let rep_table_class = Intrinsic::RepTableClass.name();
                 output.push_str(&format!("
-                    const {global_future_map} = {{
-                        send: new {rep_table_class}(),
-                        recv: new {rep_table_class}(),
-                        futures: new {rep_table_class}(),
-                    }}
+                    const {global_future_map} = new {rep_table_class}();
                 "));
             },
 
-            Intrinsic::FutureClass => {
+
+            Intrinsic::FutureEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let future_class = Intrinsic::FutureClass.name();
+                let future_end_class = Intrinsic::FutureEndClass.name();
                 output.push_str(&format!("
-                    class {future_class} {{
-                        #lenders = null;
-                        #waitable = null;
+                    class {future_end_class} {{
+                        #elementTypeRep = null;
 
-                        resolveDelivered() {{
-                            {debug_log_fn}('[{future_class}#resolveDelivered()] args', {{ }});
-                            if (this.#lenders || self.resolved) {{
-                                throw new Error('future has no lendors or has already been resolved');
+                        constructor(args) {{
+                            {debug_log_fn}('[{future_end_class}#constructor()] args', args);
+                            if (!args?.elementTypeRep || typeof args.elementTypeRep !== 'number') {{
+                                throw new TypeError('missing elementTypeRep [' + args.elementTypeRep + ']');
                             }}
-                           return this.#lenders !== null;
+                            if (args.elementTypeRep <= 0 || args.elementTypeRep > 2_147_483_647 ))  {{
+                                throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
+                            }}
+                            this.#elementTypeRep = args.elementTypeRep;
                         }}
 
-                        drop() {{
-                            {debug_log_fn}('[{future_class}#drop()] args', {{ }});
-                            this.resolveDelivered();
-                            if (#this.waitable) {{ this.#waitable.drop(); }}
+                        elementTypeRep() {{ return this.#elementTypeRep; }}
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureReadableEndClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_readable_end_class = Intrinsic::FutureReadableEndClass.name();
+                let future_end_class = Intrinsic::FutureEndClass.name();
+                output.push_str(&format!("
+                    class {future_readable_end_class} extends {future_end_class} {{
+                        #copying = false;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{future_readable_end_class}#constructor()] args', args);
+                            super(args);
                         }}
+
+                        isCopying() {{ return this.#copying; }}
+                    }}
+                "));
+            }
+
+            Intrinsic::FutureWritableEndClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let future_writable_end_class = Intrinsic::FutureWritableEndClass.name();
+                let future_end_class = Intrinsic::FutureEndClass.name();
+                output.push_str(&format!("
+                    class {future_writable_end_class} extends {future_end_class} {{
+                        #copying = false;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{future_writable_end_class}#constructor()] args', args);
+                            super(args);
+                        }}
+
+                        isCopying() {{ return this.#copying; }}
                     }}
                 "));
             }
@@ -3252,13 +3390,14 @@ pub fn render_intrinsics(
             Intrinsic::FutureNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let future_new_fn = Intrinsic::FutureNew.name();
-                let future_class = Intrinsic::FutureClass.name();
+                let stream_readable_end_class = Intrinsic::StreamReadableEndClass.name();
+                let stream_writable_end_class = Intrinsic::StreamWritableEndClass.name();
                 let global_future_map  = Intrinsic::GlobalFutureMap.name();
                 let current_task_get_fn = Intrinsic::GetCurrentTask.name();
                 let get_or_create_async_state_fn = Intrinsic::GetOrCreateAsyncState.name();
                 output.push_str(&format!("
-                    function {future_new_fn}(componentInstanceID, typeRep) {{
-                        {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, typeRep }});
+                    function {future_new_fn}(componentInstanceID, elementTypeRep) {{
+                        {debug_log_fn}('[{future_new_fn}()] args', {{ componentInstanceID, elementTypeRep }});
 
                         const task = {current_task_get_fn}();
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
@@ -3266,13 +3405,18 @@ pub fn render_intrinsics(
                         const state = {get_or_create_async_state_fn}(componentInstanceID);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        let futureIdx = {global_future_map}.futures.insert(new {future_class}());
-                        let sendIdx = {global_future_map}.send.insert(futureIdx);
-                        let recvIdx = {global_future_map}.recv.insert(futureIdx);
+                        let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
+                            isFuture: true,
+                            elementTypeRep,
+                        }}));
+                        let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
+                            isFuture: true,
+                            elementTypeRep,
+                        }}));
 
-                        return BigInt(sendIdx) << 32n | BigInt(recvIdx);
+                        return BigInt(writableIdx) << 32n | BigInt(readableIdx);
                     }}
-                "))
+                "));
             }
 
             Intrinsic::FutureRead => {
@@ -3768,10 +3912,17 @@ impl Intrinsic {
             Intrinsic::ValidateGuestChar => "validateGuestChar",
             Intrinsic::ValidateHostChar => "validateHostChar",
 
+            Intrinsic::IsBorrowedType => "_isBorrowedType",
+
             Intrinsic::DebugLog => "_debugLog",
 
             // Data structures
             Intrinsic::RepTableClass => "RepTable",
+
+            // Buffers for managed/synchronized writing to/from component memory
+            Intrinsic::ManagedBufferClass => "ManagedBuffer",
+            Intrinsic::BufferManagerClass => "BufferManager",
+            Intrinsic::GlobalBufferManager => "BUFFER_MGR",
 
             // Dealing with error-contexts
             Intrinsic::ErrorContextComponentGlobalTable => "errCtxGlobal",
@@ -3832,7 +3983,9 @@ impl Intrinsic {
 
             // Futures
             Intrinsic::GlobalFutureMap => "FUTURES",
-            Intrinsic::FutureClass => "Future",
+            Intrinsic::FutureEndClass => "FutureEnd",
+            Intrinsic::FutureWritableEndClass => "FutureWritableEnd",
+            Intrinsic::FutureReadableEndClass => "FutureReadableEnd",
             Intrinsic::FutureNew => "futureNew",
             Intrinsic::FutureRead => "futureRead",
             Intrinsic::FutureWrite => "futureWrite",
