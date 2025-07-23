@@ -76,12 +76,12 @@ jobs:
                   return;
                 }
 
-                if (!title?.startsWith("release:")) {
-                  console.log(`Invalid ref [${title}]: does not include 'prep-release'`);
+                if (!title?.match(/release([^\:]+)?:/)) {
+                  console.log(`Invalid ref [${title}]: does not match a release PR`);
                   return;
                 }
 
-                const [_, project, version] = /^release:\s+([^\s]+)\s+v([^\s]+)$/.exec(title);
+                const [_, _, project, version] = /^release([^\:]+)?:\s+([^\s]+)\s+v([^\s]+)$/.exec(title);
 
                 core.setOutput('proceed', "true");
                 core.setOutput('project', project);
