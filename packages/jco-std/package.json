@@ -1,0 +1,54 @@
+{
+  "name": "@bytecodealliance/jco-std",
+  "version": "0.0.1",
+  "description": "Library of shared functionality for use with the JS WebAssembly components",
+  "contributors": [
+    {
+      "name": "Victor Adossi",
+      "email": "vadossi@cosmonic.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "keywords": [
+    "Wasm",
+    "WebAssembly",
+    "Component"
+  ],
+  "type": "module",
+  "files": [
+    "dist"
+  ],
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    "./http/adapters/hono": {
+      "types": "./dist/src/http/adapters/hono.d.ts",
+      "browser": "./dist/src/http/adapters/hono.js",
+      "default": "./dist/src/http/adapters/hono.js"
+    },
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/src/index.js"
+    }
+  },
+  "scripts": {
+    "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
+    "lint:fix": "npm run lint -- --fix",
+    "build:bindings:wasi:http:0.2.x": "WIT_PATH=wit/ WIT_WORLD=http-v0m2px WASI_HTTP_VERSION=0.2.4 node scripts/generate-wasi-bindings.mjs",
+    "build": "npm run build:bindings:wasi:http:0.2.x",
+    "test": "vitest run -c test/vitest.ts",
+    "setup:vendor": "npm run -w @bytecodealliance/jco build:release && cp ../jco/obj/*.core*.wasm vendor && cp ../jco/obj/*.js vendor && cp ../jco/obj/*.ts vendor && cp -r ../jco/obj/interfaces vendor",
+    "prepack": "npm run setup:vendor"
+  },
+  "devDependencies": {
+    "@bytecodealliance/jco-transpile": "^0.0.3",
+    "@bytecodealliance/preview2-shim": "^0.17.2"
+  }
+}
