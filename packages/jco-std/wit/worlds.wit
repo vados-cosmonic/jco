@@ -1,0 +1,6 @@
+package bytecodealliance:jco-std;
+
+/// World that corresponds to the HTTP types
+world http-v0m2px {
+      import wasi:http/incoming-handler@0.2.4;
+}
