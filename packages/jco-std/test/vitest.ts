@@ -14,7 +14,7 @@ export default defineConfig({
         printConsoleTrace: true,
         passWithNoTests: false,
         include: ['test/*.js'],
-        exclude: ['test/helpers.js'],
+        exclude: [],
         setupFiles: ['test/meta-resolve-stub.ts'],
         testTimeout: DEFAULT_TIMEOUT_MS,
         hookTimeout: DEFAULT_TIMEOUT_MS,

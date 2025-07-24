@@ -28,9 +28,14 @@
   ],
   "types": "./dist/types/index.d.ts",
   "exports": {
+    "./http/adapters/hono": {
+      "types": "./dist/src/http/adapters/hono.d.ts",
+      "browser": "./dist/src/http/adapters/hono.js",
+      "default": "./dist/src/http/adapters/hono.js"
+    },
     ".": {
       "types": "./dist/index.d.ts",
-      "default": "./dist/src/index.ts"
+      "default": "./dist/src/index.js"
     }
   },
   "scripts": {
