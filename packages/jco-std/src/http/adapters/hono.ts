@@ -1,4 +1,4 @@
-import type { Hono } from 'hono';
+import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
 /** Strategy for interfacing with WASI environment */
 enum AppAdapterType {
@@ -25,9 +25,13 @@ interface AppAdapterOpts {
  *
  * @class AppAdapter
  */
-class AppAdapter {
+class AppAdapter<
+    Env extends HonoEnv,
+    Schema extends HonoSchema,
+    BasePath extends string,
+> {
     /** The Hono App that should be used */
-    #app: Hono;
+    #app: Hono<Env, Schema, BasePath>;
 
     /** The Hono App that should be used */
     #type: AppAdapterType;
@@ -64,4 +68,22 @@ class AppAdapter {
                 throw new Error(`unexpected adapter type [${this.#type}]`);
         }
     }
+}
+
+/**
+ * Serves a Hono application as a `wasi:http/incoming-handler` compliant server
+ *
+ * @param {Hono} app
+ */
+export function serve<
+    Env extends HonoEnv = HonoEnv,
+    Schema extends HonoSchema = {},
+    BasePath extends string = '/',
+>(app: Hono<Env, Schema, BasePath>) {
+    // TODO: detect whether the application is a HTTP incoming handler or not
+    const adapter = new AppAdapter({
+        app,
+    });
+    throw new Error('not done');
+    return adapter.asESMExport();
 }
