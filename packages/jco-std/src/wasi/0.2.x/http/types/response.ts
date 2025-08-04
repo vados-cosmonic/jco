@@ -1,12 +1,6 @@
 /* global globalThis */
 
-// /** Get the global `TextEncoder` */
-// function ensureGlobalTextEncoder() {
-//     if (!globalThis.TextEncoder) {
-//         throw new TypeError('TextEncoder not provided by platform');
-//     }
-//     return globalThis.TextEncoder;
-// }
+/// <reference types="../../bindings/world/wasi-http-v0m2px/wit.d.ts" />
 
 /**
  * Write an `outgoing-response`
