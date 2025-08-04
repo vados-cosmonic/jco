@@ -84,6 +84,20 @@ export function serve<
     const adapter = new AppAdapter({
         app,
     });
+
+    // TODO: create logger that can be used from every request
+    //   - wrap this around wasi:logging
+
+    // TODO: create env as second arg to app.fetch(Request, Env, ExecutionContext)
+    //   - use wasi:config to build this
+
+    // TODO: create request as first arg to app.fetch(Request, Env, ExecutionContext)
+
+    // TODO: add ExecutionContext as 3rd arg
+    //   - add logger in there?
+
+    // TODO: reuse bytes for stored web requests?
+
     throw new Error('not done');
     return adapter.asESMExport();
 }
