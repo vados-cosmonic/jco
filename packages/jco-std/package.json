@@ -48,6 +48,7 @@
     "prepack": "npm run setup:vendor"
   },
   "devDependencies": {
-    "@bytecodealliance/jco-transpile": "^0.0.3"
+    "@bytecodealliance/jco-transpile": "^0.0.3",
+    "@bytecodealliance/preview2-shim": "^0.17.2"
   }
 }
