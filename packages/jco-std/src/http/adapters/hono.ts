@@ -98,6 +98,15 @@ export function serve<
 
     // TODO: reuse bytes for stored web requests?
 
+    // The interface could actually look like this:
+    //
+    // ```
+    // import { fire } from "./export.mjs";
+    // export { incomingHandler } from "./export.mjs"; // EXTRA emphasis here.
+    //
+    // fire({ get: () => console.log("INSIDE APP!") });
+    // ```
+
     throw new Error('not done');
     return adapter.asESMExport();
 }
