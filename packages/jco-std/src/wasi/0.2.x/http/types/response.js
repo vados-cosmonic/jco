@@ -51,7 +51,7 @@ export async function writeWasiResponse(resp, outgoingWasiResp) {
         outputStream[Symbol.dispose]();
     }
 
-    // Set the outgoing response body
+    // Set the outgoing response body w/ no trailers
     OutgoingBody.finish(outgoingBody, undefined);
 
     // Set the outparam
