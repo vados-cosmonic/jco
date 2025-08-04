@@ -1,5 +1,7 @@
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
+import { createWebPlatformRequest, writeWasiResponse } from "../types/request.js";
+
 /** Strategy for interfacing with WASI environment */
 enum AppAdapterType {
     WasiHTTP = 'wasi-http',
@@ -53,8 +55,12 @@ class AppAdapter<
             case AppAdapterType.WasiHTTP:
                 return {
                     incomingHandler: {
-                        handle(req, responseOutParam) {
-                            throw new Error('not implemented');
+                        handle(incomingRequest, responseOutParam) {
+                            const req = createWebPlatformRequest(incomingRequest);
+                            const env = {};
+                            const executionContext = {};
+                            const resp = this.#app.fetch(req, env, executionContext);
+                            writeWasiResponse(resp);
                         },
                     },
                 };
