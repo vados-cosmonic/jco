@@ -1,3 +1,4 @@
+import { env } from 'node:process';
 import { join, basename } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
@@ -94,9 +95,26 @@ const P3_FIXTURE_COMPONENTS = [
 ];
 
 suite('Transpile (WASI P3)', () => {
+    if (env.TEST_P3_FIXTURE_TARGET) {
+        console.error(
+            `TEST_P3_FIXTURE_TARGET specified, only running components that match [${env.TEST_P3_FIXTURE_TARGET}]`
+        );
+    }
     for (const componentRelPath of P3_FIXTURE_COMPONENTS) {
         const componentPath = join(P3_COMPONENT_FIXTURES_DIR, componentRelPath);
         const componentName = basename(componentPath);
+
+        // Limit to a specific fixture if specified
+        if (
+            env.TEST_P3_FIXTURE_TARGET &&
+            env.TEST_P3_FIXTURE_TARGET !== componentName
+        ) {
+            console.error(
+                `TEST_P3_TARGET [${env.TEST_P3_FIXTURE_TARGET}] specified, skipping [${componentName}]`
+            );
+            continue;
+        }
+
         test.concurrent(`transpile [${componentName}]`, async ({ expect }) => {
             const { files } = await transpile(await readFile(componentPath));
             assert.isNotEmpty(files);
