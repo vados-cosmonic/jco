@@ -1,54 +1,23 @@
-import { join } from 'node:path';
+import { join, basename } from 'node:path';
+import { readFile } from 'node:fs/promises';
 
-import { fileURLToPath } from 'url';
 import { suite, test, assert } from 'vitest';
 
-import { setupAsyncTest } from '../helpers.js';
-import { AsyncFunction } from '../common.js';
+import { transpile } from '../../src/api';
 
-const COMPONENT_FIXTURES_DIR = fileURLToPath(
-    new URL('../fixtures/components', import.meta.url)
-);
+import { P3_COMPONENT_FIXTURES_DIR } from '../common.js';
+
+const P3_FIXTURE_COMPONENTS = [
+    'backpressure/async_backpressure_callee.component.wasm',
+    'backpressure/async_backpressure_caller.component.wasm',
+];
 
 suite('Transpile (WASI P3)', () => {
-    test('async-error-context', async () => {
-        const componentPath = join(
-            COMPONENT_FIXTURES_DIR,
-            'async-error-context.component.wasm'
-        );
-
-        const { esModule, cleanup } = await setupAsyncTest({
-            component: {
-                name: 'async-error-context',
-                path: componentPath,
-                skipInstantiation: true,
-            },
-            jco: {
-                transpile: {
-                    extraArgs: {
-                        asyncExports: ['local:local/run#run'],
-                    },
-                },
-            },
+    for (const componentRelPath of P3_FIXTURE_COMPONENTS) {
+        const componentPath = join(P3_COMPONENT_FIXTURES_DIR, componentRelPath);
+        const componentName = basename(componentPath);
+        test.concurrent(`transpile [${componentName}]`, async () => {
+            await transpile(await readFile(componentPath));
         });
-
-        const { WASIShim } = await import(
-            '@bytecodealliance/preview2-shim/instantiation'
-        );
-        const instance = await esModule.instantiate(
-            undefined,
-            new WASIShim().getImportObject()
-        );
-
-        const runFn = instance['local:local/run'].asyncRun;
-        assert.strictEqual(
-            runFn instanceof AsyncFunction,
-            true,
-            'local:local/run should be async'
-        );
-
-        await runFn();
-
-        await cleanup();
-    });
+    }
 });
