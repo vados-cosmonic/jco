@@ -1824,11 +1824,20 @@ impl Bindgen for FunctionBindgen<'_> {
                 }
             }
 
-            Instruction::ErrorContextLift { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLift] async is not yet implemented');");
+            Instruction::ErrorContextLift => {
+                let item = operands
+                    .first()
+                    .expect("unexpectedly missing ErrorContextLift arg");
+                results.push(item.clone());
+                // TODO: fill out implementation
             }
-            Instruction::ErrorContextLower { .. } => {
-                uwrite!(self.src, "throw new Error('[Instruction::ErrorContextLower] async is not yet implemented');");
+
+            Instruction::ErrorContextLower => {
+                let item = operands
+                    .first()
+                    .expect("unexpectedly missign ErrorContextLower arg");
+                results.push(item.clone());
+                // TODO: fill out implementation
             }
 
             Instruction::FutureLower { .. } => {

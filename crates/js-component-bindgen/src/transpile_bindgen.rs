@@ -113,10 +113,16 @@ pub enum InstantiationMode {
 enum CallType {
     /// Standard calls - inner function is called directly with parameters
     Standard,
+    /// Standard calls that are async (p3)
+    AsyncStandard,
     /// Exported resource method calls - this is passed as the first argument
     FirstArgIsThis,
+    /// Exported resource method calls that are async (p3)
+    AsyncFirstArgIsThis,
     /// Imported resource method calls - callee is a member of the parameter
     CalleeResourceDispatch,
+    /// Imported resource method calls that are async (p3)
+    AsyncCalleeResourceDispatch,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -2297,29 +2303,18 @@ impl<'a> Instantiator<'a, '_> {
                 import_name
             } else {
                 match func.kind {
-                    FunctionKind::Method(_) => {
+                    FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
                         let stripped = import_name.strip_prefix("[method]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
-                    FunctionKind::Static(_) => {
+                    FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
                         let stripped = import_name.strip_prefix("[static]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
                     FunctionKind::Constructor(_) => {
                         import_name.strip_prefix("[constructor]").unwrap()
                     }
-                    FunctionKind::Freestanding => import_name,
-                    FunctionKind::AsyncFreestanding => {
-                        todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import specifier)")
-                    }
-                    FunctionKind::AsyncMethod(id) => {
-                        let _ = id;
-                        todo!("[lower_import()] FunctionKind::AsyncMethod (import specifier)")
-                    }
-                    FunctionKind::AsyncStatic(id) => {
-                        let _ = id;
-                        todo!("[lower_import()] FunctionKind::AsyncStatic (import specifier)")
-                    }
+                    FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => import_name,
                 }
             },
         );
@@ -2339,10 +2334,10 @@ impl<'a> Instantiator<'a, '_> {
                     .local_names
                     .get_or_create(
                         format!(
-                            "import:{}-{}-{}",
-                            import_specifier,
-                            maybe_iface_member.as_deref().unwrap_or(""),
-                            &func.name
+                            "import:{import}-{maybe_iface_member}-{func_name}",
+                            import = import_specifier,
+                            maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
+                            func_name = &func.name
                         ),
                         &func.name,
                     )
@@ -2350,10 +2345,34 @@ impl<'a> Instantiator<'a, '_> {
                     .to_string(),
                 CallType::Standard,
             ),
+
+            FunctionKind::AsyncFreestanding => (
+                self.gen
+                    .local_names
+                    .get_or_create(
+                        format!(
+                            "import:async-{import}-{maybe_iface_member}-{func_name}",
+                            import = import_specifier,
+                            maybe_iface_member = maybe_iface_member.as_deref().unwrap_or(""),
+                            func_name = &func.name
+                        ),
+                        &func.name,
+                    )
+                    .0
+                    .to_string(),
+                CallType::AsyncStandard,
+            ),
+
             FunctionKind::Method(_) => (
                 func.item_name().to_lower_camel_case(),
                 CallType::CalleeResourceDispatch,
             ),
+
+            FunctionKind::AsyncMethod(_) => (
+                func.item_name().to_lower_camel_case(),
+                CallType::AsyncCalleeResourceDispatch,
+            ),
+
             FunctionKind::Static(resource_id) => (
                 format!(
                     "{}.{}",
@@ -2368,6 +2387,20 @@ impl<'a> Instantiator<'a, '_> {
                 CallType::Standard,
             ),
 
+            FunctionKind::AsyncStatic(resource_id) => (
+                format!(
+                    "{}.{}",
+                    Instantiator::resource_name(
+                        self.resolve,
+                        &mut self.gen.local_names,
+                        resource_id,
+                        &self.imports_resource_types
+                    ),
+                    func.item_name().to_lower_camel_case()
+                ),
+                CallType::AsyncStandard,
+            ),
+
             FunctionKind::Constructor(resource_id) => (
                 format!(
                     "new {}",
@@ -2380,18 +2413,6 @@ impl<'a> Instantiator<'a, '_> {
                 ),
                 CallType::Standard,
             ),
-
-            FunctionKind::AsyncFreestanding => {
-                todo!("[lower_import()] FunctionKind::AsyncFreeStanding")
-            }
-            FunctionKind::AsyncMethod(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncMethod");
-            }
-            FunctionKind::AsyncStatic(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncStatic");
-            }
         };
 
         let nparams = self
@@ -2399,17 +2420,26 @@ impl<'a> Instantiator<'a, '_> {
             .wasm_signature(AbiVariant::GuestImport, func)
             .params
             .len();
+
+        // Generate the JS trampoline function
         match self.gen.opts.import_bindings {
             None | Some(BindingsMode::Js) | Some(BindingsMode::Hybrid) => {
-                if requires_async_porcelain {
+                // Write out function declaration start
+                if requires_async_porcelain | is_guest_async_lifted {
+                    // If an import is either an async host import (i.e. JSPI powered)
+                    // or a guest async lifted import from another component,
+                    // use WebAssembly.Suspending to allow suspending this component
                     uwrite!(
                         self.src.js,
                         "\nconst trampoline{} = new WebAssembly.Suspending(async function",
                         trampoline.as_u32()
                     );
                 } else {
+                    // If the import is not async in any way, use a regular trampoline
                     uwrite!(self.src.js, "\nfunction trampoline{}", trampoline.as_u32());
                 }
+
+                // Write out the function (brace + body + brace)
                 self.bindgen(JsFunctionBindgenArgs {
                     nparams,
                     call_type,
@@ -2427,14 +2457,16 @@ impl<'a> Instantiator<'a, '_> {
                     requires_async_porcelain,
                     is_guest_async_lifted,
                 });
-
                 uwriteln!(self.src.js, "");
+
+                // Write new function ending
                 if requires_async_porcelain {
                     uwriteln!(self.src.js, ");");
                 } else {
                     uwriteln!(self.src.js, "");
                 }
             }
+
             Some(BindingsMode::Optimized) | Some(BindingsMode::DirectOptimized) => {
                 uwriteln!(self.src.js, "let trampoline{};", trampoline.as_u32());
             }
@@ -2474,27 +2506,23 @@ impl<'a> Instantiator<'a, '_> {
             };
 
             let callee_name = match func.kind {
-                FunctionKind::Static(_) | FunctionKind::Freestanding => callee_name.to_string(),
-                FunctionKind::Method(resource_id) => format!(
-                    "{}.prototype.{callee_name}",
-                    Instantiator::resource_name(
-                        self.resolve,
-                        &mut self.gen.local_names,
-                        resource_id,
-                        &self.imports_resource_types
-                    )
-                ),
                 FunctionKind::Constructor(_) => callee_name[4..].to_string(),
-                FunctionKind::AsyncFreestanding => {
-                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
-                }
-                FunctionKind::AsyncMethod(id) => {
-                    let _ = id;
-                    todo!("[lower_import()] FunctionKind::AsyncMethod (callee name gen)")
-                }
-                FunctionKind::AsyncStatic(id) => {
-                    let _ = id;
-                    todo!("[lower_import()] FunctionKind::AsyncFreeStanding (callee name gen)")
+
+                FunctionKind::Static(_)
+                | FunctionKind::AsyncStatic(_)
+                | FunctionKind::Freestanding
+                | FunctionKind::AsyncFreestanding => callee_name.to_string(),
+
+                FunctionKind::Method(resource_id) | FunctionKind::AsyncMethod(resource_id) => {
+                    format!(
+                        "{}.prototype.{callee_name}",
+                        Instantiator::resource_name(
+                            self.resolve,
+                            &mut self.gen.local_names,
+                            resource_id,
+                            &self.imports_resource_types
+                        )
+                    )
                 }
             };
 
@@ -2554,11 +2582,16 @@ impl<'a> Instantiator<'a, '_> {
             };
         }
 
-        // Generate import name
+        // Figure out the function name and callee (e.g. class for a given resource) to use
         let (import_name, binding_name) = match func.kind {
-            FunctionKind::Freestanding => (func_name.to_lower_camel_case(), callee_name),
+            FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
+                (func_name.to_lower_camel_case(), callee_name)
+            }
+
             FunctionKind::Method(tid)
+            | FunctionKind::AsyncMethod(tid)
             | FunctionKind::Static(tid)
+            | FunctionKind::AsyncStatic(tid)
             | FunctionKind::Constructor(tid) => {
                 let ty = &self.resolve.types[tid];
                 (
@@ -2571,17 +2604,6 @@ impl<'a> Instantiator<'a, '_> {
                     )
                     .to_string(),
                 )
-            }
-            FunctionKind::AsyncFreestanding => {
-                todo!("[lower_import()] FunctionKind::AsyncFreeStanding (import name gen)")
-            }
-            FunctionKind::AsyncMethod(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncMethod (import name gen)")
-            }
-            FunctionKind::AsyncStatic(id) => {
-                let _ = id;
-                todo!("[lower_import()] FunctionKind::AsyncStatic (import name gen)")
             }
         };
 
@@ -3026,7 +3048,12 @@ impl<'a> Instantiator<'a, '_> {
         let mut params = Vec::new();
         let mut first = true;
         for i in 0..nparams {
-            if i == 0 && matches!(call_type, CallType::FirstArgIsThis) {
+            if i == 0
+                && matches!(
+                    call_type,
+                    CallType::FirstArgIsThis | CallType::AsyncFirstArgIsThis
+                )
+            {
                 params.push("this".into());
                 continue;
             }
@@ -3555,7 +3582,13 @@ impl<'a> Instantiator<'a, '_> {
             nparams: func.params.len(),
             call_type: match func.kind {
                 FunctionKind::Method(_) => CallType::FirstArgIsThis,
-                _ => CallType::Standard,
+                FunctionKind::AsyncMethod(_) => CallType::AsyncFirstArgIsThis,
+                FunctionKind::Freestanding
+                | FunctionKind::Static(_)
+                | FunctionKind::Constructor(_) => CallType::Standard,
+                FunctionKind::AsyncFreestanding | FunctionKind::AsyncStatic(_) => {
+                    CallType::AsyncStandard
+                }
             },
             iface_name: if export_name.is_empty() {
                 None

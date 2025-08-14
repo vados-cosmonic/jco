@@ -109,9 +109,6 @@ suite('Transpile (WASI P3)', () => {
             env.TEST_P3_FIXTURE_TARGET &&
             env.TEST_P3_FIXTURE_TARGET !== componentName
         ) {
-            console.error(
-                `TEST_P3_TARGET [${env.TEST_P3_FIXTURE_TARGET}] specified, skipping [${componentName}]`
-            );
             continue;
         }
 
