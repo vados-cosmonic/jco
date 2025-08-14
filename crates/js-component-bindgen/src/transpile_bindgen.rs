@@ -2303,12 +2303,20 @@ impl<'a> Instantiator<'a, '_> {
                 import_name
             } else {
                 match func.kind {
-                    FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
+                    FunctionKind::Method(_) => {
                         let stripped = import_name.strip_prefix("[method]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
-                    FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
+                    FunctionKind::AsyncMethod(_) => {
+                        let stripped = import_name.strip_prefix("[async method]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
+                    FunctionKind::Static(_) => {
                         let stripped = import_name.strip_prefix("[static]").unwrap();
+                        &stripped[0..stripped.find(".").unwrap()]
+                    }
+                    FunctionKind::AsyncStatic(_) => {
+                        let stripped = import_name.strip_prefix("[async static]").unwrap();
                         &stripped[0..stripped.find(".").unwrap()]
                     }
                     FunctionKind::Constructor(_) => {
@@ -3107,11 +3115,12 @@ impl<'a> Instantiator<'a, '_> {
             sizes: &self.sizes,
             err: if get_thrown_type(self.resolve, func.result).is_some() {
                 match abi {
-                    AbiVariant::GuestExport => ErrHandling::ThrowResultErr,
-                    AbiVariant::GuestImport => ErrHandling::ResultCatchHandler,
-                    AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (ERR) not yet implemented"),
-                    AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (ERR) not yet implemented"),
-                    AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (ERR) not yet implemented"),
+                    AbiVariant::GuestExport
+                    | AbiVariant::GuestExportAsync
+                    | AbiVariant::GuestExportAsyncStackful => ErrHandling::ThrowResultErr,
+                    AbiVariant::GuestImport | AbiVariant::GuestImportAsync => {
+                        ErrHandling::ResultCatchHandler
+                    }
                 }
             } else {
                 ErrHandling::None
@@ -3148,15 +3157,18 @@ impl<'a> Instantiator<'a, '_> {
             self.resolve,
             abi,
             match abi {
-                AbiVariant::GuestImport => LiftLower::LiftArgsLowerResults,
-                AbiVariant::GuestExport => if is_guest_async_lifted {
+                AbiVariant::GuestImport | AbiVariant::GuestImportAsync => {
                     LiftLower::LiftArgsLowerResults
-                } else {
-                    LiftLower::LowerArgsLiftResults
-                },
-                AbiVariant::GuestImportAsync => todo!("[transpile_bindgen::bindgen()] GuestImportAsync (LIFT_LOWER) not yet implemented"),
-                AbiVariant::GuestExportAsync => todo!("[transpile_bindgen::bindgen()] GuestExportAsync (LIFT_LOWER) not yet implemented"),
-                AbiVariant::GuestExportAsyncStackful => todo!("[transpile_bindgen::bindgen()] GuestExportAsyncStackful (LIFT_LOWER) not yet implemented"),
+                }
+                AbiVariant::GuestExport
+                | AbiVariant::GuestExportAsync
+                | AbiVariant::GuestExportAsyncStackful => {
+                    if is_guest_async_lifted {
+                        LiftLower::LiftArgsLowerResults
+                    } else {
+                        LiftLower::LowerArgsLiftResults
+                    }
+                }
             },
             func,
             &mut f,

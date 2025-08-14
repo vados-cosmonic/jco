@@ -39,8 +39,8 @@ wasm-metadata = { version = "0.236.0", default-features = false }
 wasmparser = { version = "0.236.0", default-features = false }
 wasmprinter = { version = "0.236.0", default-features = false }
 wat = { version = "1.236.0", default-features = false }
-wit-bindgen = { version = "0.44.0", default-features = false }
-wit-bindgen-core = { version = "0.44.0", default-features = false }
+#wit-bindgen = { version = "0.44.0", default-features = false }
+#wit-bindgen-core = { version = "0.44.0", default-features = false }
 wit-component = { version = "0.236.0", features = ["dummy-module"] }
 wit-parser = { version = "0.236.0", default-features = false }
 
@@ -51,3 +51,6 @@ wasmtime-environ = { git = "https://github.com/bytecodealliance/wasip3-prototypi
   "component-model",
   "compile",
 ] }
+
+wit-bindgen = { path = "../wit-bindgen/crates/guest-rust", default-features = false }
+wit-bindgen-core = { path = "../wit-bindgen/crates/core", default-features = false }
