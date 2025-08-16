@@ -1909,12 +1909,11 @@ impl Bindgen for FunctionBindgen<'_> {
                 let unpack_callback_result_fn = self.intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::UnpackCallbackResult,
                 ));
+                // NOTE: callback fns are sometimes missing (e.g. when processing a `[task-return]some-fn`)
                 let callback_fn_name = self
                     .canon_opts
                     .callback
-                    // see: GlobalInitializer::ExtractCallback
-                    .map(|v| format!("callback_{}", v.as_u32()))
-                    .expect("callback function name missing");
+                    .map(|v| format!("callback_{}", v.as_u32()));
 
                 // Generate the fn signatures for task function calls,
                 // since we may be using async porcelain or not for this function
@@ -1991,20 +1990,26 @@ impl Bindgen for FunctionBindgen<'_> {
                                     throw new Error('invalid async return value [' + retCopy + ']');
                             }}
 
-                            eventCode = taskRes[0];
-                            index = taskRes[1];
-                            result = taskRes[2];
-                            {debug_log_fn}('performing callback', {{ fn: "{callback_fn_name}", eventCode, index, result }});
-                            currentRes = {callback_fn_name}(
-                                {to_int32_fn}(eventCode),
-                                {to_int32_fn}(index),
-                                {to_int32_fn}(result),
-                            );
+                            {maybe_callback_call}
                         }}
                     }}
                     "#,
                     first_op = operands.first().map(|s| s.as_str()).unwrap_or("undefined"),
                     prefix = self.tracing_prefix,
+                    maybe_callback_call = match callback_fn_name {
+                        Some(fn_name) => format!(r#"
+                            eventCode = taskRes[0];
+                            index = taskRes[1];
+                            result = taskRes[2];
+                            {debug_log_fn}('performing callback', {{ fn: "{fn_name}", eventCode, index, result }});
+                            currentRes = {fn_name}(
+                                {to_int32_fn}(eventCode),
+                                {to_int32_fn}(index),
+                                {to_int32_fn}(result),
+                            );
+                            "#),
+                        None => "if (taskRes !== 0) {{ throw new Error('function with no callback returned a non-zero result'); }}".into(),
+                    }
                 );
 
                 // Inject machinery for ending an async 'current' task

@@ -2259,6 +2259,7 @@ impl<'a> Instantiator<'a, '_> {
     fn lower_import(&mut self, index: LoweredIndex, import: RuntimeImportIndex) {
         let (options, trampoline, func_ty) = self.lowering_options[index];
 
+        // Get the world key for the CM import
         let (import_index, path) = &self.component.imports[import];
         let (import_name, _) = &self.component.import_types[*import_index];
         let world_key = &self.imports[import_name];
@@ -2283,8 +2284,8 @@ impl<'a> Instantiator<'a, '_> {
                 WorldItem::Type(_) => unreachable!("unexpected imported world item type"),
             };
 
-        // WASI P3 async lifted functions should not have post returns
         let is_guest_async_lifted = is_guest_async_lifted_fn(func, options);
+
         if options.async_ {
             assert!(
                 options.post_return.is_none(),
@@ -2296,7 +2297,7 @@ impl<'a> Instantiator<'a, '_> {
         let requires_async_porcelain =
             requires_async_porcelain(func, import_name, &self.async_imports);
 
-        // nested interfaces only currently possible through mapping
+        // Nested interfaces only currently possible through mapping
         let (import_specifier, maybe_iface_member) = map_import(
             &self.gen.opts.map,
             if iface_name.is_some() {
