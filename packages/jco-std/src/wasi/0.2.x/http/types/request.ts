@@ -8,12 +8,22 @@
  * @see: https://github.com/WebAssembly/wasi-http
  */
 
+const DEFAULT_INCOMING_BODY_READ_MAX_BYTES = 4096n;
+
 /** Get the global `Request` */
 function ensureGlobalRequest() {
     if (!globalThis.Request) {
         throw new TypeError('Request not provided by platform');
     }
     return globalThis.Request;
+}
+
+/** Get the global `ReadableStream` */
+function ensureGlobalReadableStream() {
+    if (!globalThis.ReadableStream) {
+        throw new TypeError('ReadableStream not provided by platform');
+    }
+    return globalThis.ReadableStream;
 }
 
 /** Convert a `wasi:http` `method` to a string */
@@ -60,7 +70,9 @@ function wasiHTTPMethodToString(wasiMethod) {
  * @see https://github.com/WebAssembly/wasi-http
  */
 export async function createWebPlatformRequest(wasiIncomingRequest) {
-    if (wasiIncomingRequest) {
+    // TODO: reuse bytes for subsequent web requests, doing pruning/growing where necessary
+    // TODO: trailer support
+    if (!wasiIncomingRequest) {
         throw new TypeError('WASI incoming request not provided');
     }
     const method = wasiHTTPMethodToString(wasiIncomingRequest.method());
@@ -69,8 +81,52 @@ export async function createWebPlatformRequest(wasiIncomingRequest) {
     const authority = wasiIncomingRequest.authority();
     const headers = Object.fromEntries(wasiIncomingRequest.headers().entries());
     const Request = ensureGlobalRequest();
+    const ReadableStream = ensureGlobalReadableStream();
+
+    let incomingBody;
+    let incomingBodyStream;
+    let incomingBodyPollable;
+    const body = new ReadableStream({
+        async pull(controller) {
+            if (!incomingBody) {
+                incomingBody = wasiIncomingRequest.consume();
+                incomingBodyStream = incomingBody.stream();
+                incomingBodyPollable = incomingBodyPollable.subscribe();
+            }
+
+            // Read all information coming from the request
+            while (true) {
+                // Wait until the pollable is ready
+                if (!incomingBodyPollable.ready()) {
+                    incomingBodyPollable.block();
+                }
+
+                try {
+                    const bytes = incomingBodyStream.read(
+                        DEFAULT_INCOMING_BODY_READ_MAX_BYTES
+                    );
+                    if (bytes.length === 0) {
+                        break;
+                    } else {
+                        controller.enqueue(bytes);
+                    }
+                } catch (err) {
+                    console.error('error while reading bytes', err);
+                    controller.close();
+                    break;
+                }
+            }
+
+            incomingBodyPollable[Symbol.dispose]();
+            incomingBodyStream[Symbol.dispose]();
+            incomingBody[Symbol.dispose]();
+            controller.close();
+        },
+    });
+
     return new Request(`${scheme}://${authority}/${pathWithQuery}`, {
         method,
         headers,
+        body,
     });
 }

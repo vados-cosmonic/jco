@@ -27,12 +27,11 @@ use the `@bytecodealliance/jco-std/http/adapters/hono` export:
 
 ```ts
 import { Hono } from 'hono';
-import { AppAdapter } from '@bytecodealliance/jco-std/http/adapters/hono';
 
 const app = new Hono();
 app.get('/', () => "Hello World!");
 
-export new AppAdapter({ app });
+export { incomingHandler } from '@bytecodealliance/jco-std/http/adapters/hono';
 ```
 
 [hono]: https://hono.dev
