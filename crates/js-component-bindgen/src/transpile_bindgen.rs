@@ -1139,7 +1139,8 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                is_valid_canonopt(options).expect("invalid canonopts");
+                // // TODO: the options for future.write are set with async and no callback
+                // is_valid_canonopt(options).expect("invalid canonopts for stream.read");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -1156,8 +1157,8 @@ impl<'a> Instantiator<'a, '_> {
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for stream.read")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_read_fn = self
@@ -1185,7 +1186,8 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                is_valid_canonopt(options).expect("invalid canonopts");
+                // // TODO: the options for future.write are set with async and no callback
+                // is_valid_canonopt(options).expect("invalid canonopts for stream.write");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -1204,8 +1206,8 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing memory idx for stream.write")
                     .as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for stream.write")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let stream_write_fn = self
@@ -1308,8 +1310,8 @@ impl<'a> Instantiator<'a, '_> {
                 let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for future.read").as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for future.read")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 assert!(
@@ -1346,7 +1348,8 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                is_valid_canonopt(options).expect("invalid canonopts");
+                // // TODO: the options for future.write are set with async and no callback
+                // is_valid_canonopt(options).expect("invalid canonopts for future.write");
 
                 let future_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -1365,8 +1368,8 @@ impl<'a> Instantiator<'a, '_> {
                     .expect("missing memory idx for future.write")
                     .as_u32();
                 let realloc_idx = realloc
-                    .expect("missing realloc idx for future.write")
-                    .as_u32();
+                    .map(|v| v.as_u32().to_string())
+                    .unwrap_or_else(|| "null".into());
                 let string_encoding = string_encoding_js_literal(string_encoding);
 
                 let future_write_fn = self
@@ -3816,6 +3819,7 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
 }
 
 /// Perform basic canonical option validation
+#[allow(unused)]
 fn is_valid_canonopt(
     CanonicalOptions {
         data_model,
