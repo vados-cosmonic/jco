@@ -1856,10 +1856,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 // Into a component-local Future instance
                 //
-                let futureArg = operands
+                let future_arg = operands
                     .first()
                     .expect("unexpectedly missing ErrorContextLower arg");
-                results.push(futureArg.clone());
+                results.push(future_arg.clone());
             }
 
             Instruction::FutureLift { payload, ty } => {
@@ -1950,10 +1950,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 // Into a component-local Future instance
                 //
-                let streamArg = operands
+                let stream_arg = operands
                     .first()
                     .expect("unexpectedly missing ErrorContextLower arg");
-                results.push(streamArg.clone());
+                results.push(stream_arg.clone());
             }
 
             Instruction::StreamLift { payload, ty } => {
