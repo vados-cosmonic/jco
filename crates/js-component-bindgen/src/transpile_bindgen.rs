@@ -23,8 +23,8 @@ use wit_bindgen_core::abi::{self, LiftLower};
 use wit_component::StringEncoding;
 use wit_parser::abi::AbiVariant;
 use wit_parser::{
-    Function, FunctionKind, Handle, Resolve, SizeAlign, Type, TypeDefKind, TypeId, WorldId,
-    WorldItem, WorldKey,
+    Function, FunctionKind, Handle, Resolve, Result_, SizeAlign, Type, TypeDefKind, TypeId,
+    WorldId, WorldItem, WorldKey,
 };
 
 use crate::esm_bindgen::EsmBindgen;
@@ -1119,13 +1119,15 @@ impl<'a> Instantiator<'a, '_> {
             // TODO: build a lookup of types that could be used in streams for a given component?
             // Need to have a way to look up/serialize the type indices per component into
             // a lookup of lifting functions? Or just use the cabiLower?
+            //
+            // TODO: Do we need the component idx
             Trampoline::StreamNew { ty } => {
                 let stream_new_fn = self
                     .gen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {});\n",
+                    "const trampoline{i} = {stream_new_fn}.bind(null, {{ streamTypeRep: {} }});\n",
                     ty.as_u32(),
                 );
             }
@@ -2995,21 +2997,82 @@ impl<'a> Instantiator<'a, '_> {
                     None => {
                         self.connect_remote_resources(iface_ty, remote_resource_map);
                     }
-                    // For
+                    // For custom types we can connect the inner type
                     Some(Type::Id(t)) => {
                         self.connect_resource_types(*t, iface_ty, resource_map, remote_resource_map)
                     }
+                    // For basic types that are connected (non inner types) we can do a generic connect
                     Some(_) => {
-                        unreachable!("unexpected interface type [{iface_ty:?}]")
+                        self.connect_remote_resources(iface_ty, remote_resource_map);
                     }
                 }
             }
 
-            // These types should never need to be connected
-            (TypeDefKind::Resource, _) => {
-                unreachable!("resource types do not need to be connected")
+            // Connect the types in an ok/error variant of a Result to the future that they're being sent in
+            (
+                TypeDefKind::Result(Result_ { ok, err }),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                if let Some(Type::Id(ok_t)) = ok {
+                    self.connect_resource_types(*ok_t, tk2, resource_map, remote_resource_map)
+                }
+                if let Some(Type::Id(err_t)) = err {
+                    self.connect_resource_types(*err_t, tk2, resource_map, remote_resource_map)
+                }
             }
-            (TypeDefKind::Unknown, _) => unreachable!("unknown types cannot be connected"),
+
+            // Connect the types in an option to the future that they're being sent in
+            (
+                TypeDefKind::Option(ty),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                if let Type::Id(some_t) = ty {
+                    self.connect_resource_types(*some_t, tk2, resource_map, remote_resource_map)
+                }
+            }
+
+            // Connect resources to the future/stream that they're being sent in
+            (
+                TypeDefKind::Handle(Handle::Own(t1) | Handle::Borrow(t1)),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => self.connect_resource_types(*t1, tk2, resource_map, remote_resource_map),
+
+            (TypeDefKind::Resource, InterfaceType::Future(_) | InterfaceType::Stream(_)) => {}
+
+            // Connect the inner types of variants to the future they're being sent in
+            (
+                TypeDefKind::Variant(variant),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                for f1 in variant.cases.iter() {
+                    if let Some(Type::Id(id)) = &f1.ty {
+                        self.connect_resource_types(*id, tk2, resource_map, remote_resource_map);
+                    }
+                }
+            }
+
+            // Connect the inner types of variants to the future they're being sent in
+            (
+                TypeDefKind::Record(record),
+                tk2 @ (InterfaceType::Future(_) | InterfaceType::Stream(_)),
+            ) => {
+                for f1 in record.fields.iter() {
+                    if let Type::Id(id) = f1.ty {
+                        self.connect_resource_types(id, tk2, resource_map, remote_resource_map);
+                    }
+                }
+            }
+
+            (TypeDefKind::Resource, tk2) => {
+                unreachable!(
+                    "resource types do not need to be connected (in this case, to [{tk2:?}])"
+                )
+            }
+
+            (TypeDefKind::Unknown, tk2) => {
+                unreachable!("unknown types cannot be connected (in this case to [{tk2:?}])")
+            }
+
             (tk1, tk2) => unreachable!("invalid typedef kind combination [{tk1:?}] [{tk2:?}]",),
         }
     }
