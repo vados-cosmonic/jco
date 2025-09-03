@@ -14,6 +14,8 @@ use wit_parser::{
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::js_helper::JsHelperIntrinsic;
+use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
@@ -1836,42 +1838,192 @@ impl Bindgen for FunctionBindgen<'_> {
                     .first()
                     .expect("unexpectedly missing ErrorContextLift arg");
                 results.push(item.clone());
-                // TODO: fill out implementation
             }
 
             Instruction::ErrorContextLower => {
                 let item = operands
                     .first()
-                    .expect("unexpectedly missign ErrorContextLower arg");
+                    .expect("unexpectedly missing ErrorContextLower arg");
                 results.push(item.clone());
-                // TODO: fill out implementation
             }
 
             Instruction::FutureLower { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('[Instruction::FutureLower] async is not yet implemented');"
-                );
+                // TODO: convert this return of the lifted Future:
+                //
+                // ```
+                //     return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                // ```
+                //
+                // Into a component-local Future instance
+                //
+                let futureArg = operands
+                    .first()
+                    .expect("unexpectedly missing ErrorContextLower arg");
+                results.push(futureArg.clone());
             }
-            Instruction::FutureLift { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('[Instruction::FutureLift] async is not yet implemented');"
-                );
+
+            Instruction::FutureLift { payload, ty } => {
+                let future_ty = &crate::dealias(self.resolve, *ty);
+
+                // TODO: save payload information in lifted future
+                match payload {
+                    Some(payload_ty) => {
+                        let _payload_ty_lift_fn = match payload_ty {
+                            // TODO: reuse existing lifts
+                            Type::Bool |
+                            Type::U8 |
+                            Type::U16 |
+                            Type::U32 |
+                            Type::U64 |
+                            Type::S8 |
+                            Type::S16 |
+                            Type::S32 |
+                            Type::S64 |
+                            Type::F32 |
+                            Type::F64 |
+                            Type::Char |
+                            Type::String |
+                            Type::ErrorContext => uwriteln!(
+                                self.src,
+                                "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
+                            ),
+                            Type::Id(payload_ty_id) => {
+                                if self.resource_map.contains_key(payload_ty_id) {
+                                    let ResourceTable { data, .. } = &self.resource_map[payload_ty_id];
+                                    uwriteln!(
+                                        self.src,
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
+                                        payload_ty_id.index(),
+                                        match data {
+                                            ResourceData::Host {
+                                                local_name,
+                                                ..
+                                            } => local_name,
+                                            ResourceData::Guest {
+                                                resource_name,
+                                                ..
+                                            } => resource_name,
+                                        }
+                                    );
+                                } else {
+                                    // NOTE: the missing type here is normally a result with nested types...
+                                    // the resource_map may not be indexing these properly
+                                    //
+                                    // TODO: fix resource_map population for results that are passed through,
+                                    // Right now we associate the ok and err type, but the result *itself* should be associated?
+                                    //
+                                    // eprintln!("warning: missing resource map def {:#?}", self.resolve.types[*payload_ty_id]);
+                                }
+                            }
+                        };
+
+                        // // TODO: save payload type size below and more information about the type w/ the future?
+                        // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+
+                        // NOTE: here, rather than create a new `Future` "resource" using the saved
+                        // ResourceData, we use the future.new intrinsic directly.
+                        //
+                        // TODO: differentiate "locally" created futures and futures that are lifted in?
+                        //
+                        let tmp = self.tmp();
+                        let result_var = format!("futureResult{tmp}");
+                        let component_idx = self.canon_opts.instance.as_u32();
+                        let future_new_fn =
+                            self.intrinsic(Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew));
+                        uwriteln!(
+                            self.src,
+                            "const {result_var} = {future_new_fn}({{ componentIdx: {component_idx}, futureTypeRep: {} }});",
+                            future_ty.index(),
+                        );
+                        results.push(result_var.clone());
+                    }
+
+                    None => unreachable!("future with no payload unsupported"),
+                }
             }
 
             Instruction::StreamLower { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('[Instruction::StreamLower] async is not yet implemented');"
-                );
+                // TODO: convert this return of the lifted Future:
+                // ```
+                //     return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                // ```
+                //
+                // Into a component-local Future instance
+                //
+                let streamArg = operands
+                    .first()
+                    .expect("unexpectedly missing ErrorContextLower arg");
+                results.push(streamArg.clone());
             }
 
-            Instruction::StreamLift { .. } => {
-                uwrite!(
-                    self.src,
-                    "throw new Error('[Instruction::StreamLift] async is not yet implemented');"
-                );
+            Instruction::StreamLift { payload, ty } => {
+                let stream_ty = &crate::dealias(self.resolve, *ty);
+
+                // TODO: save payload information in lifted stream
+                match payload {
+                    Some(payload_ty) => {
+                        let _payload_ty_lift_fn = match payload_ty {
+                            // TODO: reuse existing lifts
+                            Type::Bool |
+                            Type::U8 |
+                            Type::U16 |
+                            Type::U32 |
+                            Type::U64 |
+                            Type::S8 |
+                            Type::S16 |
+                            Type::S32 |
+                            Type::S64 |
+                            Type::F32 |
+                            Type::F64 |
+                            Type::Char |
+                            Type::String |
+                            Type::ErrorContext => uwriteln!(
+                                self.src,
+                                "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
+                            ),
+                            Type::Id(payload_ty_id) => {
+                                let ResourceTable { data, .. } = &self.resource_map[payload_ty_id];
+                                uwriteln!(
+                                    self.src,
+                                    "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
+                                    payload_ty_id.index(),
+                                    match data {
+                                        ResourceData::Host {
+                                            local_name,
+                                            ..
+                                        } => local_name,
+                                        ResourceData::Guest {
+                                            resource_name,
+                                            ..
+                                        } => resource_name,
+                                    }
+                                );
+                            }
+                        };
+
+                        // // TODO: save payload type size below and more information about the type w/ the stream?
+                        // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+
+                        // NOTE: here, rather than create a new `Stream` "resource" using the saved
+                        // ResourceData, we use the stream.new intrinsic directly.
+                        //
+                        // TODO: differentiate "locally" created streams and streams that are lifted in?
+                        //
+                        let tmp = self.tmp();
+                        let result_var = format!("streamResult{tmp}");
+                        let component_idx = self.canon_opts.instance.as_u32();
+                        let stream_new_fn =
+                            self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                        uwriteln!(
+                            self.src,
+                            "const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {} }});",
+                            stream_ty.index(),
+                        );
+                        results.push(result_var.clone());
+                    }
+
+                    None => unreachable!("stream with no payload unsupported"),
+                }
             }
 
             // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
