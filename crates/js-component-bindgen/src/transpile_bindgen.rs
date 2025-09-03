@@ -1139,9 +1139,6 @@ impl<'a> Instantiator<'a, '_> {
                     .get(*options)
                     .expect("failed to find options");
 
-                // // TODO: the options for future.write are set with async and no callback
-                // is_valid_canonopt(options).expect("invalid canonopts for stream.read");
-
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
@@ -1185,9 +1182,6 @@ impl<'a> Instantiator<'a, '_> {
                     .options
                     .get(*options)
                     .expect("failed to find options");
-
-                // // TODO: the options for future.write are set with async and no callback
-                // is_valid_canonopt(options).expect("invalid canonopts for stream.write");
 
                 let stream_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -1347,9 +1341,6 @@ impl<'a> Instantiator<'a, '_> {
                     .options
                     .get(*options)
                     .expect("failed to find options");
-
-                // // TODO: the options for future.write are set with async and no callback
-                // is_valid_canonopt(options).expect("invalid canonopts for future.write");
 
                 let future_idx = ty.as_u32();
                 let CanonicalOptions {
@@ -3816,31 +3807,4 @@ fn string_encoding_js_literal(val: &wasmtime_environ::component::StringEncoding)
         wasmtime_environ::component::StringEncoding::Utf16 => "'utf16'",
         wasmtime_environ::component::StringEncoding::CompactUtf16 => "'compact-utf16'",
     }
-}
-
-/// Perform basic canonical option validation
-#[allow(unused)]
-fn is_valid_canonopt(
-    CanonicalOptions {
-        data_model,
-        callback,
-        post_return,
-        async_,
-        ..
-    }: &CanonicalOptions,
-) -> Result<()> {
-    if let CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, realloc }) =
-        data_model
-    {
-        if realloc.is_some() && memory.is_none() {
-            bail!("memory must be present if realloc is");
-        }
-    }
-    if *async_ && post_return.is_some() {
-        bail!("async and post return must not be specified together");
-    }
-    if *async_ && callback.is_none() {
-        bail!("callback must be specified for async");
-    }
-    Ok(())
 }
