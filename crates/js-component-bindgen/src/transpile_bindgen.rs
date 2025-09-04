@@ -3057,6 +3057,13 @@ impl<'a> Instantiator<'a, '_> {
                 }
             }
 
+            // Simliar to the non-stream/future case, we don't have to do anything for
+            // flags and plain enums as they are read directly
+            (
+                TypeDefKind::Enum(_) | TypeDefKind::Flags(_),
+                InterfaceType::Future(_) | InterfaceType::Stream(_),
+            ) => {}
+
             (TypeDefKind::Resource, tk2) => {
                 unreachable!(
                     "resource types do not need to be connected (in this case, to [{tk2:?}])"
