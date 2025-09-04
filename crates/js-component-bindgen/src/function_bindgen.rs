@@ -1992,7 +1992,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
                             ),
                             Type::Id(payload_ty_id) => {
-                                // TODO: deal with msising payload type, should it be possible here?
+                                // TODO: deal with missing payload type, should it be possible here?
                                 if let Some(ResourceTable { data, .. }) = &self.resource_map.get(payload_ty_id) {
                                 uwriteln!(
                                     self.src,
