@@ -3,7 +3,6 @@ use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::fmt::Write;
 use std::mem;
 
-use anyhow::{bail, Result};
 use base64::engine::general_purpose;
 use base64::Engine as _;
 use heck::{ToKebabCase, ToLowerCamelCase, ToUpperCamelCase};

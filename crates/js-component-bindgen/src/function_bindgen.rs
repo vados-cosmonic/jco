@@ -334,27 +334,38 @@ impl FunctionBindgen<'_> {
 impl Bindgen for FunctionBindgen<'_> {
     type Operand = String;
 
+    /// Get the sizes and alignment for a given structure
     fn sizes(&self) -> &SizeAlign {
         self.sizes
     }
 
+    /// Push a new block of code
     fn push_block(&mut self) {
         let prev = mem::take(&mut self.src);
         self.block_storage.push(prev);
     }
 
+    /// Finish a block of code
     fn finish_block(&mut self, operands: &mut Vec<String>) {
         let to_restore = self.block_storage.pop().unwrap();
         let src = mem::replace(&mut self.src, to_restore);
         self.blocks.push((src.into(), mem::take(operands)));
     }
 
+    /// Output the return pointer
     fn return_pointer(&mut self, _size: ArchitectureSize, _align: Alignment) -> String {
-        unimplemented!();
+        unimplemented!("determining the return pointer for this function is not implemented");
     }
 
-    fn is_list_canonical(&self, resolve: &Resolve, ty: &Type) -> bool {
-        array_ty(resolve, ty).is_some()
+    /// Check whether a list of the given element type can be represented as a builtni JS type
+    ///
+    /// # Arguments
+    ///
+    /// * `resolve` - the [`Resolve`] that might be used to resolve nested types (i.e. [`Type::TypeId`])
+    /// * `elem_ty` - the [`Type`] of the element stored in the list
+    ///
+    fn is_list_canonical(&self, resolve: &Resolve, elem_ty: &Type) -> bool {
+        js_array_ty(resolve, elem_ty).is_some()
     }
 
     fn emit(
@@ -1053,13 +1064,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 let memory = self.memory.as_ref().unwrap();
                 uwriteln!(self.src, "var ptr{tmp} = {};", operands[0]);
                 uwriteln!(self.src, "var len{tmp} = {};", operands[1]);
-                // TODO: this is the wrong endianness
-                let array_ty = array_ty(resolve, element).unwrap();
                 uwriteln!(
-                            self.src,
-                            "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {}));",
-                            self.sizes.size(element).size_wasm32(),
-                        );
+                    self.src,
+                    "var result{tmp} = new {array_ty}({memory}.buffer.slice(ptr{tmp}, ptr{tmp} + len{tmp} * {elem_size}));",
+                    elem_size = self.sizes.size(element).size_wasm32(),
+                    array_ty = js_array_ty(resolve, element).unwrap(), // TODO: this is the wrong endianness
+                );
                 results.push(format!("result{tmp}"));
             }
 
@@ -2225,8 +2235,18 @@ pub fn maybe_null(resolve: &Resolve, ty: &Type) -> bool {
     as_nullable(resolve, ty).is_some()
 }
 
-pub fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
-    match ty {
+/// Retrieve the JS array type that would contain a given element type
+///
+/// e.g. a Wasm [`Type::U8`] would be represetned by a JS `Uint8Array`
+///
+/// Note that function does not handle compound types (i.e. lists/structs/variants, user defined types)
+///
+/// # Arguments
+///
+/// * `resolve` - The [`Resolve`] used to look up nested type IDs if necessary
+/// * `element_ty` - The [`Type`] that represents elements of the array
+pub fn js_array_ty(resolve: &Resolve, element_ty: &Type) -> Option<&'static str> {
+    match element_ty {
         Type::Bool => None,
         Type::U8 => Some("Uint8Array"),
         Type::S8 => Some("Int8Array"),
@@ -2242,7 +2262,8 @@ pub fn array_ty(resolve: &Resolve, ty: &Type) -> Option<&'static str> {
         Type::String => None,
         Type::ErrorContext => None,
         Type::Id(id) => match &resolve.types[*id].kind {
-            TypeDefKind::Type(t) => array_ty(resolve, t),
+            // If we have a nested type, we may have to recur (i.e. `list<list<u32>>`)
+            TypeDefKind::Type(t) => js_array_ty(resolve, t),
             _ => None,
         },
     }
