@@ -1992,7 +1992,8 @@ impl Bindgen for FunctionBindgen<'_> {
                                 "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
                             ),
                             Type::Id(payload_ty_id) => {
-                                let ResourceTable { data, .. } = &self.resource_map[payload_ty_id];
+                                // TODO: deal with msising payload type, should it be possible here?
+                                if let Some(ResourceTable { data, .. }) = &self.resource_map.get(payload_ty_id) {
                                 uwriteln!(
                                     self.src,
                                     "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
@@ -2008,6 +2009,13 @@ impl Bindgen for FunctionBindgen<'_> {
                                         } => resource_name,
                                     }
                                 );
+                                } else {
+                                    // TODO: should it be possible for the type to be missing/not found here?
+                                    uwriteln!(
+                                        self.src,
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }}",
+                                    );
+                                }
                             }
                         };
 
@@ -2235,11 +2243,10 @@ pub fn maybe_null(resolve: &Resolve, ty: &Type) -> bool {
     as_nullable(resolve, ty).is_some()
 }
 
-/// Retrieve the JS array type that would contain a given element type
+/// Retrieve the specialized JS array type that would contain a given element type,
+/// if one exists.
 ///
 /// e.g. a Wasm [`Type::U8`] would be represetned by a JS `Uint8Array`
-///
-/// Note that function does not handle compound types (i.e. lists/structs/variants, user defined types)
 ///
 /// # Arguments
 ///
@@ -2262,7 +2269,7 @@ pub fn js_array_ty(resolve: &Resolve, element_ty: &Type) -> Option<&'static str>
         Type::String => None,
         Type::ErrorContext => None,
         Type::Id(id) => match &resolve.types[*id].kind {
-            // If we have a nested type, we may have to recur (i.e. `list<list<u32>>`)
+            // Recur to resolve type aliases, etc.
             TypeDefKind::Type(t) => js_array_ty(resolve, t),
             _ => None,
         },
