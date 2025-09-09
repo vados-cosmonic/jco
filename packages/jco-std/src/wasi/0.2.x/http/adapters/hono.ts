@@ -1,7 +1,8 @@
+/// <reference path="../../generated/types/wit.d.ts" />
+
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
-/// <reference path="../../generated/types/wit.d.ts">
-import { log, level } from 'wasi:logging/logging@0.1.0-draft';
+import { log } from 'wasi:logging/logging@0.1.0-draft';
 import type { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.4";
 
 import { createWebPlatformRequest } from '../types/request.js';
@@ -308,34 +309,36 @@ function buildExecContext(args?: BuildExecContextArgs) {
 // Logging //
 /////////////
 
+const DEFAULT_CONTEXT = 'jco-std/http/adapter/hono';
+
 /** Default logger which uses info logging */
 const logInfo = (msg: string, ...rest: string[]) => {
-    log(level.info, [msg, ...rest].join(' '));
+    log('info', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 /** Default logger which uses error logging */
 const logError = (msg: string, ...rest: string[]) => {
-    log(level.error, [msg, ...rest].join(' '));
+    log('error', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 /** Default logger which uses trace logging */
 const logTrace = (msg: string, ...rest: string[]) => {
-    log(level.trace, [msg, ...rest].join(' '));
+    log('trace', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 /** Default logger which uses debug logging */
 const logDebug = (msg: string, ...rest: string[]) => {
-    log(level.debug, [msg, ...rest].join(' '));
+    log('debug', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 /** Default logger which uses warn logging */
 const logWarn = (msg: string, ...rest: string[]) => {
-    log(level.warn, [msg, ...rest].join(' '));
+    log('warn', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 /** Default logger which uses critical logging */
 const logCritical = (msg: string, ...rest: string[]) => {
-    log(level.critical, [msg, ...rest].join(' '));
+    log('critical', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
 let LOGGER_FN: (msg: string, ...rest: string[]) => void;
@@ -348,25 +351,25 @@ function buildLogger() {
         return LOGGER_FN;
     }
     const fn = (msg: string, ...rest: string[]) => {
-        log(level.info, [msg, ...rest].join(' '));
+        log('info', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.trace = (msg: string, ...rest: string[]) => {
-        log(level.trace, [msg, ...rest].join(' '));
+        log('trace', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.debug = (msg: string, ...rest: string[]) => {
-        log(level.debug, [msg, ...rest].join(' '));
+        log('debug', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.info = (msg: string, ...rest: string[]) => {
-        log(level.info, [msg, ...rest].join(' '));
+        log('info', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.warn = (msg: string, ...rest: string[]) => {
-        log(level.warn, [msg, ...rest].join(' '));
+        log('warn', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.critical = (msg: string, ...rest: string[]) => {
-        log(level.critical, [msg, ...rest].join(' '));
+        log('critical', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     fn.error = (msg: string, ...rest: string[]) => {
-        log(level.error, [msg, ...rest].join(' '));
+        log('error', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
     };
     LOGGER_FN = fn;
     return LOGGER_FN;
