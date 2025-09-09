@@ -1,6 +1,6 @@
-/* global globalThis */
+/// <reference types="../../generated/types/wit.d.ts" />
 
-/// <reference types="../../bindings/world/wasi-http-v0m2px/wit.d.ts" />
+import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse } from 'wasi:http/incoming-hander@0.2.4';
 
 /**
  * Write an `outgoing-response`
@@ -8,9 +8,7 @@
  * @param {Response} resp
  * @param {object} outparam
  */
-export async function writeWasiResponse(resp, outgoingWasiResp) {
-    const { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse } =
-        await import('wasi:http/incoming-hander@0.2.4');
+export async function writeWasiResponse(resp: Response, outgoingWasiResp: OutgoingResponse) {
 
     // Start buliding the outgoing response
     const headers = new Fields.fromList([...resp.headers.entries()]);
@@ -21,10 +19,10 @@ export async function writeWasiResponse(resp, outgoingWasiResp) {
     outgoingResponse.setStatusCode(status);
 
     // Build the outgoing response body
-    let outgoingBody = outgoingResponse.body();
+    const outgoingBody = outgoingResponse.body();
     {
         // Create a stream for the response body
-        let outputStream = outgoingBody.write();
+        const outputStream = outgoingBody.write();
         for await (const chunk of resp.body) {
             if (chunk.length === 0) {
                 continue;
