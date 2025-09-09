@@ -1,5 +1,6 @@
 import { env } from 'node:process';
-import { mkdir, dirname, access, writeFile } from 'node:fs/promises';
+import { mkdir, access, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
 
