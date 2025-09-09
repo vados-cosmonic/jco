@@ -13,7 +13,7 @@ export default defineConfig({
         disableConsoleIntercept: true,
         printConsoleTrace: true,
         passWithNoTests: false,
-        include: ['test/*.js'],
+        include: ['test/e2e/**/*.ts'],
         exclude: [],
         setupFiles: ['test/meta-resolve-stub.ts'],
         testTimeout: DEFAULT_TIMEOUT_MS,
