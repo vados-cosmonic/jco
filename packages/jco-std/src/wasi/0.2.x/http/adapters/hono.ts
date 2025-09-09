@@ -1,14 +1,12 @@
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
+/// <reference path="../../generated/types/wit.d.ts">
 import { log, level } from 'wasi:logging/logging@0.1.0-draft';
+import type { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.4";
 
 import { createWebPlatformRequest } from '../types/request.js';
 import { writeWasiResponse } from '../types/response.js';
 import { buildEnvFromWASI, buildConfigHelperFromWASI } from '../types/index.js';
-
-// TODO: use type bindings for types below
-type IncomingRequest = any;
-type ResponseOutparam = any;
 
 /** Get the global `AddEventListener` */
 function ensureGlobalAddEventListener() {
