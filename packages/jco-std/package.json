@@ -39,7 +39,7 @@
     }
   },
   "scripts": {
-    "lint": "eslint -c ../../eslint.config.mjs ./src/**/*.js ./test/**/*.js",
+    "lint": "eslint -c ./eslint.config.mjs",
     "lint:fix": "npm run lint -- --fix",
     "build:bindings:wasi:http:0.2.x": "WIT_PATH=wit/ WIT_WORLD=http-v0m2px WASI_HTTP_VERSION=0.2.4 OUTPUT_DIR_PATH=src/wasi/0.2.x/generated/types node scripts/generate-wasi-bindings.mjs",
     "build": "npm run build:bindings:wasi:http:0.2.x",
