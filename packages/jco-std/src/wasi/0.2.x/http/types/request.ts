@@ -1,12 +1,13 @@
 /* global globalThis */
-
-// TODO: type support via generated bindings
-
 /**
  * This file implements helpers and relevant types for use with `wasi:http` 0.2.x APIs
  *
  * @see: https://github.com/WebAssembly/wasi-http
  */
+
+import { IncomingBody, IncomingRequest, Method } from "wasi:http/types@0.2.4";
+import { Pollable } from "wasi:io/poll@0.2.4";
+import { InputStream } from "wasi:io/streams@0.2.4";
 
 const DEFAULT_INCOMING_BODY_READ_MAX_BYTES = 4096n;
 
@@ -27,34 +28,34 @@ function ensureGlobalReadableStream() {
 }
 
 /** Convert a `wasi:http` `method` to a string */
-function wasiHTTPMethodToString(wasiMethod) {
+function wasiHTTPMethodToString(wasiMethod: Method) {
     if (!wasiMethod?.tag) {
         throw new TypeError(
             'invalid wasi HTTP method variant, does not contain tag'
         );
     }
     switch (wasiMethod.tag) {
-        case 'get':
-        case 'head':
-        case 'post':
-        case 'put':
-        case 'delete':
-        case 'connect':
-        case 'options':
-        case 'trace':
-        case 'patch':
-            return wasiMethod.tag.toUpperCase();
-        case 'other':
-            if (!wasiMethod.val || typeof wasiMethod.val !== 'string') {
-                throw new TypeError(
-                    "HTTP method variant 'other' with missing/invaldi payload"
-                );
-            }
-            return wasiMethod.val;
-        default:
+    case 'get':
+    case 'head':
+    case 'post':
+    case 'put':
+    case 'delete':
+    case 'connect':
+    case 'options':
+    case 'trace':
+    case 'patch':
+        return wasiMethod.tag.toUpperCase();
+    case 'other':
+        if (!wasiMethod.val || typeof wasiMethod.val !== 'string') {
             throw new TypeError(
-                `unrecognized wasi HTTP method tag [${wasiMethod.tag}]`
+                "HTTP method variant 'other' with missing/invaldi payload"
             );
+        }
+        return wasiMethod.val;
+    default:
+        throw new TypeError(
+            `unrecognized wasi HTTP method tag [${wasiMethod}]`
+        );
     }
 }
 
@@ -69,7 +70,7 @@ function wasiHTTPMethodToString(wasiMethod) {
  * @see https://developer.mozilla.org/en-US/docs/Web/API/Request
  * @see https://github.com/WebAssembly/wasi-http
  */
-export async function createWebPlatformRequest(wasiIncomingRequest) {
+export async function createWebPlatformRequest(wasiIncomingRequest: IncomingRequest) {
     // TODO: reuse bytes for subsequent web requests, doing pruning/growing where necessary
     // TODO: trailer support
     if (!wasiIncomingRequest) {
@@ -79,19 +80,24 @@ export async function createWebPlatformRequest(wasiIncomingRequest) {
     const pathWithQuery = wasiIncomingRequest.pathWithQuery();
     const scheme = wasiIncomingRequest.scheme();
     const authority = wasiIncomingRequest.authority();
-    const headers = Object.fromEntries(wasiIncomingRequest.headers().entries());
+    const decoder = new TextDecoder('utf-8');
+    const headers = Object.fromEntries(
+        wasiIncomingRequest.headers().entries().map(([k,valueBytes]) => {
+            return [k, decoder.decode(valueBytes)];
+        })
+    );
     const Request = ensureGlobalRequest();
     const ReadableStream = ensureGlobalReadableStream();
 
-    let incomingBody;
-    let incomingBodyStream;
-    let incomingBodyPollable;
+    let incomingBody: IncomingBody;
+    let incomingBodyStream: InputStream;
+    let incomingBodyPollable: Pollable;
     const body = new ReadableStream({
         async pull(controller) {
             if (!incomingBody) {
                 incomingBody = wasiIncomingRequest.consume();
                 incomingBodyStream = incomingBody.stream();
-                incomingBodyPollable = incomingBodyPollable.subscribe();
+                incomingBodyPollable = incomingBodyStream.subscribe();
             }
 
             // Read all information coming from the request
@@ -123,7 +129,7 @@ export async function createWebPlatformRequest(wasiIncomingRequest) {
             controller.close();
         },
     });
-
+    
     return new Request(`${scheme}://${authority}/${pathWithQuery}`, {
         method,
         headers,

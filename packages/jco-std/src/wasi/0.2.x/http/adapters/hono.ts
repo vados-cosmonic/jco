@@ -1,5 +1,3 @@
-/// <reference path="../../generated/types/wit.d.ts" />
-
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
 import { log } from 'wasi:logging/logging@0.1.0-draft';
@@ -8,6 +6,7 @@ import type { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.4";
 import { createWebPlatformRequest } from '../types/request.js';
 import { writeWasiResponse } from '../types/response.js';
 import { buildEnvFromWASI, buildConfigHelperFromWASI } from '../types/index.js';
+import { FetchEventLike } from 'hono/types';
 
 /** Get the global `AddEventListener` */
 function ensureGlobalAddEventListener() {
@@ -19,17 +18,22 @@ function ensureGlobalAddEventListener() {
 
 /** Strategy for interfacing with WASI environment */
 enum AppAdapterType {
+    // eslint-disable-next-line no-unused-vars
     WasiHTTP = 'wasi-http',
+    // eslint-disable-next-line no-unused-vars
     FetchEvent = 'fetch-event',
 }
 
 /** Configuration for generating ENV variables that will be used in the Hono app */
 export enum WASIEnvGenerationStrategy {
     /** Don't generate environment variables from WASI */
+    // eslint-disable-next-line no-unused-vars
     Never = 'never',
     /** Generate environment variables from WASI once at app startup */
+    // eslint-disable-next-line no-unused-vars
     OnceBeforeStartup = 'once-before-startup',
     /** Generate environment variables from WASI once at app startup */
+    // eslint-disable-next-line no-unused-vars
     OncePerRequest = 'on-request',
 }
 
@@ -120,54 +124,55 @@ class WasiHttpAdapter<
      */
     asESMExport() {
         switch (this.#adapterType) {
-            // Build an export that would satisfy wasi:http/incoming-handler
-            case AppAdapterType.WasiHTTP:
-                let env;
-                if (
-                    this.#wasiEnvGenerationStrategy ===
+        // Build an export that would satisfy wasi:http/incoming-handler
+        case AppAdapterType.WasiHTTP:
+            let env;
+            if (
+                this.#wasiEnvGenerationStrategy ===
                     WASIEnvGenerationStrategy.OnceBeforeStartup
-                ) {
-                    env = buildEnvFromWASI();
-                }
+            ) {
+                env = buildEnvFromWASI();
+            }
 
-                return {
-                    incomingHandler: {
-                        handle(
-                            wasiRequest: IncomingRequest,
-                            wasiResponse: ResponseOutparam
-                        ) {
-                            if (
-                                this.#wasiEnvGenerationStrategy ===
+            return {
+                incomingHandler: {
+                    handle(
+                        wasiRequest: IncomingRequest,
+                        wasiResponse: ResponseOutparam
+                    ) {
+                        if (
+                            this.#wasiEnvGenerationStrategy ===
                                 WASIEnvGenerationStrategy.OncePerRequest
-                            ) {
-                                env = buildEnvFromWASI();
-                            }
-                            const resp = this.#app.fetch(
-                                createWebPlatformRequest(wasiRequest),
-                                env,
-                                buildExecContext({
-                                    adapterConfigHelperEnabled:
+                        ) {
+                            env = buildEnvFromWASI();
+                        }
+                        const resp = this.#app.fetch(
+                            createWebPlatformRequest(wasiRequest),
+                            env,
+                            buildExecContext({
+                                adapterConfigHelperEnabled:
                                         this.#execCtxConfig
                                             .enableWasiConfigHelper,
-                                })
-                            );
-                            writeWasiResponse(resp, wasiResponse);
-                        },
+                            })
+                        );
+                        writeWasiResponse(resp, wasiResponse);
                     },
-                };
+                },
+            };
 
             // Given that fetch-event is implemented natively for StarlingMonkey,
             // we know that we have already set the handle  already set the we only ahve
-            case AppAdapterType.FetchEvent:
-            default:
-                throw new Error(
-                    `unexpected adapter type [${this.#adapterType}], fetch-event adapters should be use via 'fire()'`
-                );
+        case AppAdapterType.FetchEvent:
+        default:
+            throw new Error(
+                `unexpected adapter type [${this.#adapterType}], fetch-event adapters should be use via 'fire()'`
+            );
         }
     }
 }
 
 /** This global variable will be set to the application adapter when present */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let ADAPTER: WasiHttpAdapter<any, any, any>;
 
 /**
@@ -222,9 +227,10 @@ export interface FireOpts {
  *
  * @param {Hono} app
  */
+
 export function fire<
     Env extends HonoEnv = HonoEnv,
-    Schema extends HonoSchema = {},
+    Schema extends HonoSchema = {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
     BasePath extends string = '/',
 >(app: Hono<Env, Schema, BasePath>, opts?: FireOpts) {
     const adapter = new WasiHttpAdapter({
@@ -248,29 +254,34 @@ export function fire<
             env = buildEnvFromWASI();
         }
 
-        import('hono/service-worker')
-            .then((m) => {
-                const addEventListener = ensureGlobalAddEventListener();
-                addEventListener('fetch', (evt: any) => {
-                    if (
-                        adapterEnvGenerationStrategy ===
+        // TODO: try ??
+        //         import('hono/service-worker').then((m) => { m.fire(app); });
+
+        try {
+            // NOTE: addEventListener does not yet have typings for FetchEvent
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const addEventListener = ensureGlobalAddEventListener() as any;
+            addEventListener('fetch', (evt: FetchEventLike) => {
+                if (
+                    adapterEnvGenerationStrategy ===
                         WASIEnvGenerationStrategy.OncePerRequest
-                    ) {
-                        env = buildEnvFromWASI();
-                    }
-                    evt.respondWith(
-                        app.fetch(
-                            evt.request,
-                            env,
-                            buildExecContext({ adapterConfigHelperEnabled })
-                        )
-                    );
-                });
-            })
-            .catch((err) => {
-                console.error('failed to build fetch event listener', err);
-                throw err;
+                ) {
+                    env = buildEnvFromWASI();
+                }
+                evt.respondWith(
+                    app.fetch(
+                        evt.request,
+                        env,
+                        buildExecContext({ adapterConfigHelperEnabled })
+                    )
+                );
             });
+        } catch (err) {
+            console.error('failed to build fetch event listener', err);
+            throw err;
+        }
+
+        // Return early since we've set up fetchEvent
         return;
     }
 
@@ -341,7 +352,8 @@ const logCritical = (msg: string, ...rest: string[]) => {
     log('critical', DEFAULT_CONTEXT, [msg, ...rest].join(' '));
 };
 
-let LOGGER_FN: (msg: string, ...rest: string[]) => void;
+let LOGGER_FN: (_msg: string, ..._rest: string[]) => void;
+
 /**
  * Function for building a reusable logger function that can be used
  * for logging at various levels
