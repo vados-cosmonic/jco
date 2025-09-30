@@ -3251,13 +3251,7 @@ impl<'a> Instantiator<'a, '_> {
                 }
                 AbiVariant::GuestExport
                 | AbiVariant::GuestExportAsync
-                | AbiVariant::GuestExportAsyncStackful => {
-                    if is_guest_async_lifted {
-                        LiftLower::LiftArgsLowerResults
-                    } else {
-                        LiftLower::LowerArgsLiftResults
-                    }
-                }
+                | AbiVariant::GuestExportAsyncStackful => LiftLower::LowerArgsLiftResults,
             },
             func,
             &mut f,
