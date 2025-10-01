@@ -163,7 +163,7 @@ pub struct FunctionBindgen<'a> {
     pub requires_async_porcelain: bool,
 
     /// Whether the function is guest async lifted (i.e. WASI P3)
-    pub is_guest_async_lifted: bool,
+    pub is_async: bool,
 
     /// Canon opts
     pub canon_opts: &'a CanonicalOptions,
@@ -200,7 +200,12 @@ impl FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         let view = self.intrinsic(Intrinsic::JsHelper(JsHelperIntrinsic::DataView));
-        let memory = self.memory.as_ref().unwrap();
+        let Some(memory) = self.memory.as_ref() else {
+            panic!(
+                "unexpectedly missing memory during bindgen for interface [{:?}] (callee {})",
+                self.iface_name, self.callee,
+            );
+        };
         results.push(format!(
             "{view}({memory}).{method}({} + {offset}, true)",
             operands[0],
@@ -1193,11 +1198,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] (async? {async_}, @ enter)');",
                     prefix = self.tracing_prefix,
-                    async_ = self.is_guest_async_lifted,
+                    async_ = self.is_async,
                 );
 
                 // Inject machinery for starting an async 'current' task
-                self.start_current_task(inst, self.is_guest_async_lifted, self.callee);
+                self.start_current_task(inst, self.is_async, self.callee);
 
                 // Output result binding preamble (e.g. 'var ret =', 'var [ ret0, ret1] = exports...() ')
                 let sig_results_length = sig.results.len();
@@ -1400,12 +1405,20 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Output code for combinations of results
                 match amt {
+                    // TODO: SOMETIMES THEY DONT RETURN A RESULT?
+                    // top level async run?
+                    //
+                    // If we're dealing with the lifted function here, then it doesn't return a result!
+                    // (in the case of exports this is true??, which are we executing!?)
+                    //
+                    // The lifted function *DOES* return a result in this case!
+                    // https://github.com/WebAssembly/wasi-cli/blob/main/wit-0.3.0-draft/run.wit
+                    //
+                    // Should we be trying to interpret results from the lifted thing here, or the lower level thing...?
+                    // Maybe it's the lifted thing? given the LiftLower change?
+
                     // Handle no result case
                     0 => {
-                        assert!(
-                            !self.is_guest_async_lifted,
-                            "async lifted guest functions must return a single i32"
-                        );
                         if let Some(f) = &self.post_return {
                             uwriteln!(
                                 self.src,
@@ -1417,10 +1430,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                     // Handle single result<t> case
                     1 if self.err == ErrHandling::ThrowResultErr => {
-                        assert!(
-                            !self.is_guest_async_lifted,
-                            "async lifted guest functions must return a single i32"
-                        );
                         let component_err = self.intrinsic(Intrinsic::ComponentError);
                         let op = &operands[0];
                         uwriteln!(self.src, "const retCopy = {op};");
@@ -1452,13 +1461,14 @@ impl Bindgen for FunctionBindgen<'_> {
                             _ => format!("[{}]", operands.join(", ")),
                         };
 
-                        match (self.post_return, self.is_guest_async_lifted) {
-                            (Some(_), true) => unreachable!(
-                                "async lifted guest functions cannot have post returns"
-                            ),
+                        match (self.post_return, self.is_async) {
                             (Some(post_return_fn), _) => {
                                 // In the case there is a post return function, we'll want to copy the value
                                 // then perform the post return before leaving
+                                //
+                                // NOTE: the is_async indicator that a function is async here only tells us about
+                                // the lowering on this side (i.e. it is possible to lower a sync export which
+                                // validly has a post_return)
 
                                 // Write out the assignment for the given return value
                                 uwriteln!(self.src, "const retCopy = {ret_val};");
@@ -2068,12 +2078,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
 
                 assert!(
-                    self.is_guest_async_lifted,
+                    self.is_async,
                     "non-async functions should not be performing async returns (func {name})",
                 );
                 assert!(
                     self.post_return.is_none(),
-                    "async fns cannot have post_return specified (func {name})"
+                    "async fn cannot have post_return specified (func {name})"
                 );
 
                 let get_current_task_fn =
