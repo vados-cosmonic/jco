@@ -1405,18 +1405,6 @@ impl Bindgen for FunctionBindgen<'_> {
 
                 // Output code for combinations of results
                 match amt {
-                    // TODO: SOMETIMES THEY DONT RETURN A RESULT?
-                    // top level async run?
-                    //
-                    // If we're dealing with the lifted function here, then it doesn't return a result!
-                    // (in the case of exports this is true??, which are we executing!?)
-                    //
-                    // The lifted function *DOES* return a result in this case!
-                    // https://github.com/WebAssembly/wasi-cli/blob/main/wit-0.3.0-draft/run.wit
-                    //
-                    // Should we be trying to interpret results from the lifted thing here, or the lower level thing...?
-                    // Maybe it's the lifted thing? given the LiftLower change?
-
                     // Handle no result case
                     0 => {
                         if let Some(f) = &self.post_return {
@@ -1489,6 +1477,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 uwriteln!(self.src, "return {ret_val};",)
                             }
                             // Async functions never have post returns, but they must interpret async behavior
+                            //
+                            // TODO: implement and return a promise that tracks the result of the async fn
+                            // implementation below takes the returned value (which may be only an async turn indicator)
+                            //
                             (None, _is_guest_async_lifted @ true) => {
                                 uwriteln!(self.src, r#"throw new Error("not yet implemented!");"#,);
                             }
