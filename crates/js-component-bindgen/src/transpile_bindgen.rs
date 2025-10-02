@@ -273,19 +273,19 @@ pub fn transpile_bindgen(
         .exports()
         .iter()
         .map(|(export_name, canon_export_name)| {
-            let export = if canon_export_name.contains(':') {
-                instantiator
-                    .component
-                    .exports
-                    .get(canon_export_name, &NameMapNoIntern)
-                    .unwrap()
-            } else {
-                instantiator
-                    .component
-                    .exports
-                    .get(&canon_export_name.to_kebab_case(), &NameMapNoIntern)
-                    .unwrap()
-            };
+            let expected_export_name =
+                if canon_export_name.contains(':') || canon_export_name.starts_with("[async]") {
+                    canon_export_name.to_string()
+                } else {
+                    canon_export_name.to_kebab_case()
+                };
+            let export = instantiator
+                .component
+                .exports
+                .get(&expected_export_name, &NameMapNoIntern)
+                .expect(&format!(
+                    "failed to find component export [{expected_export_name}] (original '{canon_export_name}')",
+                ));
             (
                 export_name.to_string(),
                 instantiator.component.export_items[*export].clone(),
