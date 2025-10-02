@@ -1978,37 +1978,42 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::StreamLift { payload, ty } => {
                 let stream_ty = &crate::dealias(self.resolve, *ty);
+                let component_idx = self.canon_opts.instance.as_u32();
+                let stream_new_fn =
+                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
 
                 // TODO: save payload information in lifted stream
-                match payload {
+                let (payload_lift_fn, payload_lower_fn) = match payload {
+                    None => ("".into(), "".into()),
                     Some(payload_ty) => {
                         match payload_ty {
-                            // TODO: reuse existing lifts
-                            Type::Bool |
-                            Type::U8 |
-                            Type::U16 |
-                            Type::U32 |
-                            Type::U64 |
-                            Type::S8 |
-                            Type::S16 |
-                            Type::S32 |
-                            Type::S64 |
-                            Type::F32 |
-                            Type::F64 |
-                            Type::Char |
-                            Type::String |
-                            Type::ErrorContext => uwriteln!(
-                                self.src,
-                                "const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }}",
-                            ),
-                            Type::Id(payload_ty_id) => {
-                                // TODO: deal with missing payload type, should it be possible here?
-                                if let Some(ResourceTable { data, .. }) = &self.resource_map.get(payload_ty_id) {
-                                uwriteln!(
-                                    self.src,
-                                    "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {})'); }}",
-                                    payload_ty_id.index(),
-                                    match data {
+                        // TODO: reuse existing lifts
+                        Type::Bool
+                        | Type::U8
+                        | Type::U16
+                        | Type::U32
+                        | Type::U64
+                        | Type::S8
+                        | Type::S16
+                        | Type::S32
+                        | Type::S64
+                        | Type::F32
+                        | Type::F64
+                        | Type::Char
+                        | Type::String
+                        | Type::ErrorContext => {
+                            (
+                                format!("const payloadLiftFn = () => {{ throw new Error('lift for {payload_ty:?}'); }};"),
+                                format!("const payloadLowerFn = () => {{ throw new Error('lower for {payload_ty:?}'); }};")
+                            )
+                        }
+
+                        Type::Id(payload_ty_id) => {
+                            // TODO: deal with missing payload type, should it be possible here?
+                            if let Some(ResourceTable { data, .. }) =
+                                &self.resource_map.get(payload_ty_id)
+                            {
+                                let identifier = match data {
                                         ResourceData::Host {
                                             local_name,
                                             ..
@@ -2017,41 +2022,57 @@ impl Bindgen for FunctionBindgen<'_> {
                                             resource_name,
                                             ..
                                         } => resource_name,
-                                    }
-                                );
-                                } else {
-                                    // TODO: should it be possible for the type to be missing/not found here?
-                                    uwriteln!(
-                                        self.src,
-                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }}",
-                                    );
-                                }
+                                    };
+
+
+                                (
+                                    format!(
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for {} (identifier {identifier})'); }};",
+                                        payload_ty_id.index(),
+                                    ),
+                                    format!(
+                                        "const payloadLowerFn = () => {{ throw new Error('lower for {} (identifier {identifier})'); }};",
+                                        payload_ty_id.index(),
+                                    )
+                                )
+
+                            } else {
+                                // TODO: should it be possible for the type to be missing/not found here?
+                                (
+                                    format!(
+                                        "const payloadLiftFn = () => {{ throw new Error('lift for missing type with type idx {payload_ty:?}'); }};",
+                                    ),
+                                    format!(
+                                        "const payloadLowerFn = () => {{ throw new Error('lower for missing type with type idx {payload_ty:?}'); }};",
+                                    )
+                                )
+
                             }
-                        };
-
-                        // // TODO: save payload type size below and more information about the type w/ the stream?
-                        // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
-
-                        // NOTE: here, rather than create a new `Stream` "resource" using the saved
-                        // ResourceData, we use the stream.new intrinsic directly.
-                        //
-                        // TODO: differentiate "locally" created streams and streams that are lifted in?
-                        //
-                        let tmp = self.tmp();
-                        let result_var = format!("streamResult{tmp}");
-                        let component_idx = self.canon_opts.instance.as_u32();
-                        let stream_new_fn =
-                            self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
-                        uwriteln!(
-                            self.src,
-                            "const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {} }});",
-                            stream_ty.index(),
-                        );
-                        results.push(result_var.clone());
+                        }
                     }
+                    }
+                };
 
-                    None => unreachable!("stream with no payload unsupported"),
-                }
+                // // TODO: save payload type size below and more information about the type w/ the stream?
+                // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+
+                // NOTE: here, rather than create a new `Stream` "resource" using the saved
+                // ResourceData, we use the stream.new intrinsic directly.
+                //
+                // TODO: differentiate "locally" created streams and streams that are lifted in?
+                //
+                let tmp = self.tmp();
+                let result_var = format!("streamResult{tmp}");
+                uwriteln!(
+                    self.src,
+                    "
+                    {payload_lift_fn}
+                    {payload_lower_fn}
+                     const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {}, payloadLiftFn, payloadLowerFn, isUnitStream: {} }});",
+                    stream_ty.index(),
+                    payload.is_none(),
+                );
+                results.push(result_var.clone());
             }
 
             // Instruction::AsyncTaskReturn does *not* correspond to an canonical `task.return`,
