@@ -3447,23 +3447,25 @@ impl<'a> Instantiator<'a, '_> {
                         &export_resource_map,
                         &export_remote_resource_map,
                     );
-                    if let FunctionKind::Constructor(ty)
+
+                    // Determine the correct export func name
+                    let js_func_name = if let FunctionKind::Constructor(ty)
                     | FunctionKind::Method(ty)
                     | FunctionKind::Static(ty) = func.kind
                     {
-                        let ty = &self.resolve.types[ty];
-                        self.gen.esm_bindgen.add_export_binding(
-                            None,
-                            local_name,
-                            ty.name.as_ref().unwrap().to_upper_camel_case(),
-                        );
+                        self.resolve.types[ty]
+                            .name
+                            .as_ref()
+                            .unwrap()
+                            .to_upper_camel_case()
                     } else {
-                        self.gen.esm_bindgen.add_export_binding(
-                            None,
-                            local_name,
-                            export_name.to_lower_camel_case(),
-                        );
-                    }
+                        export_name.to_lower_camel_case()
+                    };
+
+                    // Add the export binding
+                    self.gen
+                        .esm_bindgen
+                        .add_export_binding(None, local_name, js_func_name, &func);
                 }
 
                 Export::Instance { exports, .. } => {
@@ -3521,24 +3523,27 @@ impl<'a> Instantiator<'a, '_> {
                             &export_remote_resource_map,
                         );
 
-                        if let FunctionKind::Constructor(ty)
+                        // Determine the export func name
+                        let export_func_name = if let FunctionKind::Constructor(ty)
                         | FunctionKind::Method(ty)
                         | FunctionKind::Static(ty) = func.kind
                         {
-                            let ty = &self.resolve.types[ty];
-                            let resource = ty.name.as_ref().unwrap();
-                            self.gen.esm_bindgen.add_export_binding(
-                                Some(export_name),
-                                local_name,
-                                resource.to_upper_camel_case(),
-                            );
+                            self.resolve.types[ty]
+                                .name
+                                .as_ref()
+                                .unwrap()
+                                .to_upper_camel_case()
                         } else {
-                            self.gen.esm_bindgen.add_export_binding(
-                                Some(export_name),
-                                local_name,
-                                func_name.to_lower_camel_case(),
-                            );
-                        }
+                            func_name.to_lower_camel_case()
+                        };
+
+                        // Add the export binding
+                        self.gen.esm_bindgen.add_export_binding(
+                            Some(export_name),
+                            local_name,
+                            export_func_name,
+                            &func,
+                        );
                     }
                 }
 
