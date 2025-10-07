@@ -5,7 +5,7 @@ import {
     logger as customLogger
 } from '@bytecodealliance/jco-std/http/adapters/hono';
 
-const app = Hono();
+const app = new Hono();
 // Use logging middleware, via the custom logger
 app.use(logger(customLogger.build()));
 app.get('/', (c) => {

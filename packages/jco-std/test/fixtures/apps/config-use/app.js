@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { HTTPException } from 'hono/http-exception';
 import { fire } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono';
 
-const app = Hono();
+const app = new Hono();
 // Use logging middleware, via the custom logger
 app.get('/', (c, ctx) => {
     const key = c.param('key');
