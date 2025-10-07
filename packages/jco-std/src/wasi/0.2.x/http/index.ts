@@ -1,1 +1,1 @@
-export * as adapters from 'adapters/index.js';
+export * as adapters from './adapters/index.js';

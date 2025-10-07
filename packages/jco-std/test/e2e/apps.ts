@@ -1,10 +1,16 @@
-import { readdir, stat } from "node:fs/promises";
 import { fileURLToPath, URL } from "node:url";
-import { join } from "node:path";
+import { join, normalize, sep } from "node:path";
+import { readdir, stat, mkdtemp, mkdir } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { debuglog } from "node:util";
 
 import { suite, test, assert } from "vitest";
 import { default as which } from "which";
 import { componentize } from "@bytecodealliance/componentize-js";
+
+import { rolldown } from "rolldown";
+import typescript from "@rollup/plugin-typescript";
+import nodeResolve from "@rollup/plugin-node-resolve";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
@@ -25,11 +31,27 @@ async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
     }
 }
 
+/**
+ * Securely creates a temporary directory and returns its path.
+ *
+ * The new directory is created using `fsPromises.mkdtemp()`.
+ */
+export async function getTmpDir() {
+    return await mkdtemp(normalize(tmpdir() + sep));
+}
+
+const log = debuglog("test-e2e");
+
 suite("apps", async () => {
+    const tmpdir = await getTmpDir();
+    const builtComponentDir = join(tmpdir, "built-components");
+    await mkdir(builtComponentDir, { recursive: true });
+    log("writing component output to dir", builtComponentDir);
+
     // Run tests for all app.js scripts at ./fixtures/apps/*/app.js
     const dirs = await readdir(FIXTURE_APPS_DIR, { withFileTypes: true });
     for (const appDir of dirs) {
-        // Get the script path, skip the folder if it doesn't 
+        // Get the script path, skip the folder if it doesn't
         if (!appDir.isDirectory()) { continue; }
         const sourcePath = join(FIXTURE_APPS_DIR, appDir.name, "app.js");
         const scriptExists = await (stat(sourcePath).then(() => true).catch(() => false));
@@ -38,19 +60,60 @@ suite("apps", async () => {
             continue;
         }
 
+        const testComponentName = appDir.name;
+
         // Get the WIT path & world for the given test
         const witPath = join(FIXTURE_APPS_DIR, "wit");
-        const worldName = TEST_WIT_WORLD_LOOKUP[appDir.name] ?? DEFAULT_TEST_WIT_WORLD;
+        const worldName = TEST_WIT_WORLD_LOOKUP[testComponentName] ?? DEFAULT_TEST_WIT_WORLD;
+
+        // Create an output dir for building the component
+        const componentOutputDir = join(builtComponentDir, testComponentName);
+        await mkdir(componentOutputDir, { recursive: true });
+
+        const componentOutputPath = join(componentOutputDir, "component.js");
 
         // Get wasmtime dir path, ensure it exists
         const wasmtimeBin = await getWasmtimeBin();
 
-        test.concurrent(`[${appDir}]`, async () => {
-            // TODO: bundle w/ hono lib via rollup (rolldown?)
+        test.concurrent(`[${testComponentName}]`, async () => {
+            if (testComponentName !== "config-use") { return; } // TODO: REMOVE
+
+            // TODO: generate types
             
+
+            log(`testing app [${testComponentName}]`);
+            // Bundle the application w/ deps via rolldown
+            const bundle = await rolldown({
+                input: sourcePath,
+                external: /wasi:.*/,
+                plugins: [
+                    typescript({
+                        noEmitOnError: true,
+                        target: "esnext",
+                        module: "nodenext",
+                        moduleResolution: "nodenext",
+                        esModuleInterop: true,
+                        // types: [
+                        //     "./generated/types/wit.d.ts",
+                        // ],
+                        allowJs: false,
+                        noEmit: true,
+                        forceConsistentCasingInFileNames: true,
+                        strict: true
+                    }),
+                    nodeResolve(),
+                ],
+            });
+            await bundle.generate({
+                format: 'esm',
+            });
+            await bundle.write({
+                    file: componentOutputPath,
+            });
+
             // Build the component with componentize-js
             let { component } = await componentize({
-                sourcePath,
+                sourcePath: componentOutputPath,
                 witPath,
                 worldName,
             });
