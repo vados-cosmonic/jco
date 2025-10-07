@@ -12,34 +12,32 @@ declare module 'wasi:io/streams@0.2.4' {
     tag: 'closed',
   }
   
-  export class InputStream implements Disposable {
-      /**
+  export class InputStream {
+    /**
      * This type does not have a public constructor.
      */
-      private constructor();
-      read(len: bigint): Uint8Array;
-      blockingRead(len: bigint): Uint8Array;
-      skip(len: bigint): bigint;
-      blockingSkip(len: bigint): bigint;
-      subscribe(): Pollable;
-      [Symbol.dispose](): void;
+    private constructor();
+    read(len: bigint): Uint8Array;
+    blockingRead(len: bigint): Uint8Array;
+    skip(len: bigint): bigint;
+    blockingSkip(len: bigint): bigint;
+    subscribe(): Pollable;
   }
   
-  export class OutputStream implements Disposable {
-      /**
+  export class OutputStream {
+    /**
      * This type does not have a public constructor.
      */
-      private constructor();
-      checkWrite(): bigint;
-      write(contents: Uint8Array): void;
-      blockingWriteAndFlush(contents: Uint8Array): void;
-      flush(): void;
-      blockingFlush(): void;
-      subscribe(): Pollable;
-      writeZeroes(len: bigint): void;
-      blockingWriteZeroesAndFlush(len: bigint): void;
-      splice(src: InputStream, len: bigint): bigint;
-      blockingSplice(src: InputStream, len: bigint): bigint;
-      [Symbol.dispose](): void;
+    private constructor();
+    checkWrite(): bigint;
+    write(contents: Uint8Array): void;
+    blockingWriteAndFlush(contents: Uint8Array): void;
+    flush(): void;
+    blockingFlush(): void;
+    subscribe(): Pollable;
+    writeZeroes(len: bigint): void;
+    blockingWriteZeroesAndFlush(len: bigint): void;
+    splice(src: InputStream, len: bigint): bigint;
+    blockingSplice(src: InputStream, len: bigint): bigint;
   }
 }

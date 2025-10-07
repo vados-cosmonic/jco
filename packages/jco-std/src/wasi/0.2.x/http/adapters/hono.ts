@@ -123,12 +123,16 @@ class WasiHttpAdapter<
      * Build an ESM export that represents the app
      */
     asESMExport() {
+        const envGenerationStrategy = this.#wasiEnvGenerationStrategy;
+        const app = this.#app;
+        const execCtxConfig = this.#execCtxConfig;
+
         switch (this.#adapterType) {
         // Build an export that would satisfy wasi:http/incoming-handler
         case AppAdapterType.WasiHTTP:
-            let env;
+            let env: Record<string, string>;
             if (
-                this.#wasiEnvGenerationStrategy ===
+                envGenerationStrategy ===
                     WASIEnvGenerationStrategy.OnceBeforeStartup
             ) {
                 env = buildEnvFromWASI();
@@ -136,24 +140,23 @@ class WasiHttpAdapter<
 
             return {
                 incomingHandler: {
-                    handle(
+                    async handle(
                         wasiRequest: IncomingRequest,
                         wasiResponse: ResponseOutparam
                     ) {
                         if (
-                            this.#wasiEnvGenerationStrategy ===
+                            envGenerationStrategy ===
                                 WASIEnvGenerationStrategy.OncePerRequest
                         ) {
                             env = buildEnvFromWASI();
                         }
-                        const resp = this.#app.fetch(
-                            createWebPlatformRequest(wasiRequest),
+                        const request = await createWebPlatformRequest(wasiRequest);
+                        const resp = await app.fetch(
+                            request,
                             env,
                             buildExecContext({
-                                adapterConfigHelperEnabled:
-                                        this.#execCtxConfig
-                                            .enableWasiConfigHelper,
-                            })
+                                adapterConfigHelperEnabled: execCtxConfig.enableWasiConfigHelper,
+                            }),
                         );
                         writeWasiResponse(resp, wasiResponse);
                     },
@@ -246,7 +249,7 @@ export function fire<
 
     // If we're doing fetch-event, set up the application and exit early
     if (adapterType === AppAdapterType.FetchEvent) {
-        let env;
+        let env: Record<string, string>;
         if (
             adapterEnvGenerationStrategy ===
             WASIEnvGenerationStrategy.OnceBeforeStartup
