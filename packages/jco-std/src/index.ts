@@ -1,1 +1,1 @@
-export * as http from "./http/index.js";
+export * as wasi from "./wasi/index.js";
