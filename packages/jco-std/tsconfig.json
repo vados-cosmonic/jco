@@ -2,13 +2,9 @@
   "compilerOptions": {
     "outDir": "dist",
     "module": "nodenext",
-    "": [
-      "src/wasi/0.2.x/generated/types/wit.d.ts"
-    ],
     "moduleResolution": "nodenext",
     "allowJs": true,
     "declaration": true,
-    "emitDeclarationOnly": true,
     "declarationMap": true,
     "skipLibCheck": true
   },
