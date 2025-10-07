@@ -1,6 +1,6 @@
 import { fileURLToPath, URL } from "node:url";
 import { join, normalize, sep } from "node:path";
-import { readdir, stat, mkdtemp, mkdir } from "node:fs/promises";
+import { readdir, stat, mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { debuglog } from "node:util";
 
@@ -12,13 +12,6 @@ import { rolldown } from "rolldown";
 import typescript from "@rollup/plugin-typescript";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
-
-/** WIT world to use for individual tests by fixture app app dir */
-const TEST_WIT_WORLD_LOOKUP = {
-    "config-use": "simple",
-};
-
-const DEFAULT_TEST_WIT_WORLD = "simple";
 
 /** Get the binary path to wasmtime if it doesn't exist */
 async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
@@ -41,7 +34,7 @@ export async function getTmpDir() {
 
 const log = debuglog("test-e2e");
 
-suite("apps", async () => {
+suite("hono apps", async () => {
     const tmpdir = await getTmpDir();
     const builtComponentDir = join(tmpdir, "built-components");
     await mkdir(builtComponentDir, { recursive: true });
@@ -63,13 +56,12 @@ suite("apps", async () => {
 
         // Get the WIT path & world for the given test
         const witPath = join(FIXTURE_APPS_DIR, "wit");
-        const worldName = TEST_WIT_WORLD_LOOKUP[testComponentName] ?? DEFAULT_TEST_WIT_WORLD;
 
         // Create an output dir for building the component
         const componentOutputDir = join(builtComponentDir, testComponentName);
         await mkdir(componentOutputDir, { recursive: true });
 
-        const componentOutputPath = join(componentOutputDir, "component.js");
+        const jsOutputPath = join(componentOutputDir, "component.js");
 
         // Get wasmtime dir path, ensure it exists
         const wasmtimeBin = await getWasmtimeBin();
@@ -99,16 +91,20 @@ suite("apps", async () => {
                 ],
             });
             await bundle.write({
-                file: componentOutputPath,
+                file: jsOutputPath,
                 format: 'esm',
             });
 
             // Build the component with componentize-js
             let { component } = await componentize({
-                sourcePath: componentOutputPath,
+                sourcePath: jsOutputPath,
                 witPath,
-                worldName,
+                worldName: "hono",
             });
+
+            // Write out the component to a file
+            const componentOutputPath = join(componentOutputDir, "component.wasm");
+            await writeFile(componentOutputPath, component);
 
             // TODO: Serve with wasmtime?
 

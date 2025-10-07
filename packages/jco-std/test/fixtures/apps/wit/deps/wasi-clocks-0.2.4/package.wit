@@ -27,3 +27,17 @@ interface wall-clock {
   resolution: func() -> datetime;
 }
 
+interface timezone {
+  use wall-clock.{datetime};
+
+  record timezone-display {
+    utc-offset: s32,
+    name: string,
+    in-daylight-saving-time: bool,
+  }
+
+  display: func(when: datetime) -> timezone-display;
+
+  utc-offset: func(when: datetime) -> s32;
+}
+
