@@ -2,7 +2,11 @@ import { env } from 'node:process';
 import { mkdir, access, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
-import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
+// TODO: update jco-transpile so it can be used here
+// import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
+
+import { types as generateTypes } from "@bytecodealliance/jco";
+
 
 /** World that should be used for binding generation */
 const BINDING_WORLD = env.BINDING_WORLD;
@@ -23,7 +27,7 @@ async function main() {
     }
 
     // Generate options
-    const opts = {};
+    const opts = {guest: true};
     if (BINDING_WORLD) {
         opts.worldName = BINDING_WORLD;
     }
@@ -32,8 +36,14 @@ async function main() {
     }
 
     // Generate types and write them to disk
-    const files = await generateGuestTypes(WIT_PATH, opts);
+
+    // TODO: use this once jco-transpile is updated
+    // const files = await generateGuestTypes(WIT_PATH, opts);
+
+    const files = await generateTypes(WIT_PATH, opts);
     await writeFiles(files, false);
+
+    // await writeFiles(files, false);
 }
 
 /**

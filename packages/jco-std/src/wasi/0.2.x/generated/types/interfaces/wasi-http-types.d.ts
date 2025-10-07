@@ -301,7 +301,7 @@ declare module 'wasi:http/types@0.2.4' {
   export type StatusCode = number;
   export type Result<T, E> = { tag: 'ok', val: T } | { tag: 'err', val: E };
   
-  export class Fields {
+  export class Fields implements Disposable {
     /**
     * Construct an empty HTTP Fields.
     * 
@@ -384,9 +384,10 @@ declare module 'wasi:http/types@0.2.4' {
     * `fields` is mutable.
     */
     clone(): Fields;
+    [Symbol.dispose](): void;
   }
   
-  export class FutureIncomingResponse {
+  export class FutureIncomingResponse implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -414,9 +415,10 @@ declare module 'wasi:http/types@0.2.4' {
     * `output-stream` child.
     */
     get(): Result<Result<IncomingResponse, ErrorCode>, void> | undefined;
+    [Symbol.dispose](): void;
   }
   
-  export class FutureTrailers {
+  export class FutureTrailers implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -449,9 +451,10 @@ declare module 'wasi:http/types@0.2.4' {
     * dropped before the parent `future-trailers` is dropped.
     */
     get(): Result<Result<Trailers | undefined, ErrorCode>, void> | undefined;
+    [Symbol.dispose](): void;
   }
   
-  export class IncomingBody {
+  export class IncomingBody implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -479,9 +482,10 @@ declare module 'wasi:http/types@0.2.4' {
     * This function will trap if the `input-stream` child is still alive.
     */
     static finish(this_: IncomingBody): FutureTrailers;
+    [Symbol.dispose](): void;
   }
   
-  export class IncomingRequest {
+  export class IncomingRequest implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -518,9 +522,10 @@ declare module 'wasi:http/types@0.2.4' {
     * return success at most once, and subsequent calls will return error.
     */
     consume(): IncomingBody;
+    [Symbol.dispose](): void;
   }
   
-  export class IncomingResponse {
+  export class IncomingResponse implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -544,9 +549,10 @@ declare module 'wasi:http/types@0.2.4' {
     * if called additional times.
     */
     consume(): IncomingBody;
+    [Symbol.dispose](): void;
   }
   
-  export class OutgoingBody {
+  export class OutgoingBody implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -575,9 +581,10 @@ declare module 'wasi:http/types@0.2.4' {
     * Content-Length.
     */
     static finish(this_: OutgoingBody, trailers: Trailers | undefined): void;
+    [Symbol.dispose](): void;
   }
   
-  export class OutgoingRequest {
+  export class OutgoingRequest implements Disposable {
     /**
     * Construct a new `outgoing-request` with a default `method` of `GET`, and
     * `none` values for `path-with-query`, `scheme`, and `authority`.
@@ -655,9 +662,10 @@ declare module 'wasi:http/types@0.2.4' {
     * another component by e.g. `outgoing-handler.handle`.
     */
     headers(): Headers;
+    [Symbol.dispose](): void;
   }
   
-  export class OutgoingResponse {
+  export class OutgoingResponse implements Disposable {
     /**
     * Construct an `outgoing-response`, with a default `status-code` of `200`.
     * If a different `status-code` is needed, it must be set via the
@@ -694,9 +702,10 @@ declare module 'wasi:http/types@0.2.4' {
     * calls will return error.
     */
     body(): OutgoingBody;
+    [Symbol.dispose](): void;
   }
   
-  export class RequestOptions {
+  export class RequestOptions implements Disposable {
     /**
     * Construct a default `request-options` value.
     */
@@ -730,9 +739,10 @@ declare module 'wasi:http/types@0.2.4' {
     * supported.
     */
     setBetweenBytesTimeout(duration: Duration | undefined): void;
+    [Symbol.dispose](): void;
   }
   
-  export class ResponseOutparam {
+  export class ResponseOutparam implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -749,5 +759,6 @@ declare module 'wasi:http/types@0.2.4' {
     * implementation determine how to respond with an HTTP error response.
     */
     static set(param: ResponseOutparam, response: Result<OutgoingResponse, ErrorCode>): void;
+    [Symbol.dispose](): void;
   }
 }

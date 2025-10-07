@@ -1,10 +1,10 @@
+/// <reference path="../../generated/types/wit.d.ts" />
 
-export * from './request';
-export * from './response';
-
-/// <reference types="../../generated/types/wit.d.ts" />
 import { getEnvironment } from 'wasi:cli/environment@0.2.4';
 import * as wasiConfig from 'wasi:config/runtime@0.2.0-draft';
+
+export * from './request.js';
+export * from './response.js';
 
 /**
  * Build request environment variables via `wasi:cli/environment`
@@ -18,7 +18,7 @@ export function buildEnvFromWASI(): Record<string, string> {
  */
 export function buildConfigHelperFromWASI() {
     return {
-        getString(k: string): string {
+        getString(k: string): string | undefined {
             return wasiConfig.get(k);
         },
         getAllString(): Record<string, string> {
