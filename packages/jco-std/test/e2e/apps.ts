@@ -93,9 +93,6 @@ suite("apps", async () => {
                         module: "nodenext",
                         moduleResolution: "nodenext",
                         esModuleInterop: true,
-                        // types: [
-                        //     "./generated/types/wit.d.ts",
-                        // ],
                         allowJs: false,
                         noEmit: true,
                         forceConsistentCasingInFileNames: true,
@@ -108,7 +105,7 @@ suite("apps", async () => {
                 format: 'esm',
             });
             await bundle.write({
-                    file: componentOutputPath,
+                file: componentOutputPath,
             });
 
             // Build the component with componentize-js
