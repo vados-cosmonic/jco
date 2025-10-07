@@ -2,6 +2,9 @@ package bytecodealliance:jco-std;
 
 /// World that corresponds to the HTTP types
 world http-v0m2px {
+    // NOTE: wasi:config/runtime was renamed to store but never re-published
+    import wasi:config/runtime@0.2.0-draft;
+    import wasi:cli/environment@0.2.4;
     import wasi:logging/logging@0.1.0-draft;
     import wasi:http/incoming-handler@0.2.4;
 }
