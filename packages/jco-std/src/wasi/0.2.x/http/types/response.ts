@@ -1,6 +1,4 @@
-/// <reference types="../../generated/types/wit.d.ts" />
-
-import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse } from 'wasi:http/incoming-hander@0.2.4';
+import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse, FieldValue } from 'wasi:http/types@0.2.4';
 
 /**
  * Write an `outgoing-response`
@@ -8,10 +6,16 @@ import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse } from 'wasi:h
  * @param {Response} resp
  * @param {object} outparam
  */
-export async function writeWasiResponse(resp: Response, outgoingWasiResp: OutgoingResponse) {
+export async function writeWasiResponse(resp: Response, outgoingWasiResp: ResponseOutparam) {
 
     // Start buliding the outgoing response
-    const headers = new Fields.fromList([...resp.headers.entries()]);
+
+    const encoder = new TextEncoder();
+    const fields: [string, FieldValue][] = [];
+    for (const [k,v] of [...resp.headers.entries()]) {
+        fields.push([k.toString(), encoder.encode(v)]);
+    }
+    const headers = Fields.fromList(fields);
     const outgoingResponse = new OutgoingResponse(headers);
 
     // Set status
@@ -23,6 +27,9 @@ export async function writeWasiResponse(resp: Response, outgoingWasiResp: Outgoi
     {
         // Create a stream for the response body
         const outputStream = outgoingBody.write();
+        if (resp.body === null) {
+            throw new Error("unexpectedly missing resp.body");
+        }
         for await (const chunk of resp.body) {
             if (chunk.length === 0) {
                 continue;
@@ -30,13 +37,19 @@ export async function writeWasiResponse(resp: Response, outgoingWasiResp: Outgoi
             let written = 0;
             while (written < chunk.length) {
                 await outputStream.subscribe();
-                const { tag, val: bytesAllowed } = outputStream.checkWrite();
-                if (tag == 'error') {
-                    throw new Error('response output write check failed');
+
+                let bytesAllowedRaw = outputStream.checkWrite();
+                if (!Number.isSafeInteger(bytesAllowedRaw)) {
+                    throw new Error("unexpectedly unsafe integer bytes allowed");
                 }
+                const bytesAllowed = Number(bytesAllowedRaw);
+
                 outputStream.write(
-                    new Uint8Array(new DataView(chunk, written, bytesAllowed))
+                    new Uint8Array(chunk.buffer, written, bytesAllowed)
                 );
+                if (written + bytesAllowed > Number.MAX_VALUE) {
+                    throw new Error("integer overflow for written bytes");
+                }
                 written += bytesAllowed;
             }
         }

@@ -12,7 +12,7 @@ declare module 'wasi:io/streams@0.2.4' {
     tag: 'closed',
   }
   
-  export class InputStream {
+  export class InputStream implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -22,9 +22,10 @@ declare module 'wasi:io/streams@0.2.4' {
     skip(len: bigint): bigint;
     blockingSkip(len: bigint): bigint;
     subscribe(): Pollable;
+    [Symbol.dispose](): void;
   }
   
-  export class OutputStream {
+  export class OutputStream implements Disposable {
     /**
      * This type does not have a public constructor.
      */
@@ -39,5 +40,6 @@ declare module 'wasi:io/streams@0.2.4' {
     blockingWriteZeroesAndFlush(len: bigint): void;
     splice(src: InputStream, len: bigint): bigint;
     blockingSplice(src: InputStream, len: bigint): bigint;
+    [Symbol.dispose](): void;
   }
 }
