@@ -1,8 +1,8 @@
 /// <reference path="./wasi-io-error.d.ts" />
 /// <reference path="./wasi-io-poll.d.ts" />
-declare module 'wasi:io/streams@0.2.4' {
-  export type Error = import('wasi:io/error@0.2.4').Error;
-  export type Pollable = import('wasi:io/poll@0.2.4').Pollable;
+declare module 'wasi:io/streams@0.2.6' {
+  export type Error = import('wasi:io/error@0.2.6').Error;
+  export type Pollable = import('wasi:io/poll@0.2.6').Pollable;
   export type StreamError = StreamErrorLastOperationFailed | StreamErrorClosed;
   export interface StreamErrorLastOperationFailed {
     tag: 'last-operation-failed',

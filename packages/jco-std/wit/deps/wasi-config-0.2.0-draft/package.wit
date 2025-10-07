@@ -1,6 +1,6 @@
 package wasi:config@0.2.0-draft;
 
-interface runtime {
+interface store {
   /// An error type that encapsulates the different errors that can occur fetching config
   variant config-error {
     /// This indicates an error from an "upstream" config source.
@@ -24,5 +24,5 @@ interface runtime {
 }
 
 world imports {
-  import runtime;
+  import store;
 }

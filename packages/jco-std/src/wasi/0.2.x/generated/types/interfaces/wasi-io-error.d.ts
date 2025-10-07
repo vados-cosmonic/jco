@@ -1,4 +1,4 @@
-declare module 'wasi:io/error@0.2.4' {
+declare module 'wasi:io/error@0.2.6' {
   
   export class Error implements Disposable {
     /**

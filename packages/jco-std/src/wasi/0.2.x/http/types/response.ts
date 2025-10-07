@@ -1,4 +1,4 @@
-import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse, FieldValue } from 'wasi:http/types@0.2.4';
+import { OutgoingBody, ResponseOutparam, Fields, OutgoingResponse, FieldValue } from 'wasi:http/types@0.2.6';
 
 /**
  * Write an `outgoing-response`

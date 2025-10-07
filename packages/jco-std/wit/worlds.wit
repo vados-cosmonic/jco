@@ -1,10 +1,17 @@
 package bytecodealliance:jco-std;
 
+// NOTE: wasmtime can be quite finnicky about versions when looking for exported
+// wasi:http instances -- this means we need to match the incoming-handler version directly.
+
 /// World that corresponds to the HTTP types
 world http-v0m2px {
-    // NOTE: wasi:config/runtime was renamed to store but never re-published
-    import wasi:config/runtime@0.2.0-draft;
-    import wasi:cli/environment@0.2.4;
-    import wasi:logging/logging@0.1.0-draft;
-    import wasi:http/incoming-handler@0.2.4;
+    import wasi:config/store@0.2.0-draft;
+    import wasi:cli/environment@0.2.6;
+
+    // NOTE: wasi logging shouldn't be used yet due to lack of support in hosts
+    // like wasmtime -- the 't be used yet due to lack of support in hosts
+    // like wasmtime.
+    // import wasi:logging/logging@0.1.0-draft;
+
+    import wasi:http/incoming-handler@0.2.6;
 }
