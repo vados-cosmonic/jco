@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
-import { fire } from '@bytecodealliance/jco-std/http/adapters/hono';
+import { fire } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono';
 
 const app = Hono();
 app.get('/', (c) => {
