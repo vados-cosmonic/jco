@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import { stream } from 'hono/streaming';
 import { fire } from '@bytecodealliance/jco-std/wasi/0.2.x/http/adapters/hono';
 
-const app = Hono();
+const app = new Hono();
 app.get('/', (c) => {
     return stream(c, async (stream) => {
         stream.onAbort(() => {

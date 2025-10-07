@@ -4,13 +4,12 @@ import { readdir, stat, mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { debuglog } from "node:util";
 
-import { suite, test, assert } from "vitest";
+import { suite, test, assert, vi } from "vitest";
 import { default as which } from "which";
 import { componentize } from "@bytecodealliance/componentize-js";
 
 import { rolldown } from "rolldown";
 import typescript from "@rollup/plugin-typescript";
-import nodeResolve from "@rollup/plugin-node-resolve";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
 
@@ -78,10 +77,8 @@ suite("apps", async () => {
         test.concurrent(`[${testComponentName}]`, async () => {
             if (testComponentName !== "config-use") { return; } // TODO: REMOVE
 
-            // TODO: generate types
-            
-
             log(`testing app [${testComponentName}]`);
+
             // Bundle the application w/ deps via rolldown
             const bundle = await rolldown({
                 input: sourcePath,
@@ -96,16 +93,14 @@ suite("apps", async () => {
                         allowJs: false,
                         noEmit: true,
                         forceConsistentCasingInFileNames: true,
-                        strict: true
+                        strict: true,
+                        outDir: componentOutputDir,
                     }),
-                    nodeResolve(),
                 ],
-            });
-            await bundle.generate({
-                format: 'esm',
             });
             await bundle.write({
                 file: componentOutputPath,
+                format: 'esm',
             });
 
             // Build the component with componentize-js
