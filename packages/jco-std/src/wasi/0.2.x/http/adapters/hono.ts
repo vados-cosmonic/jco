@@ -1,7 +1,11 @@
 import type { Hono, Schema as HonoSchema, Env as HonoEnv } from 'hono';
 
-import { log } from 'wasi:logging/logging@0.1.0-draft';
-import type { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.4";
+// NOTE: we can't use log just yet due to lack of support for 
+// off the shelf hosts like wasmtime
+//
+// import { log } from 'wasi:logging/logging@0.1.0-draft';
+
+import type { IncomingRequest, ResponseOutparam } from "wasi:http/types@0.2.6";
 
 import { createWebPlatformRequest } from '../types/request.js';
 import { writeWasiResponse } from '../types/response.js';
@@ -9,11 +13,11 @@ import { buildEnvFromWASI, buildConfigHelperFromWASI } from '../types/index.js';
 import { FetchEventLike } from 'hono/types';
 
 /** Get the global `AddEventListener` */
-function ensureGlobalAddEventListener() {
-    if (!globalThis.addEventListener) {
+function ensureGlobalAddEventListener(): any {
+    if (!('addEventListener' in globalThis)) {
         throw new TypeError('AddEventListener not provided by platform');
     }
-    return globalThis.addEventListener;
+    return (globalThis as any).addEventListener;
 }
 
 /** Strategy for interfacing with WASI environment */
@@ -230,7 +234,6 @@ export interface FireOpts {
  *
  * @param {Hono} app
  */
-
 export function fire<
     Env extends HonoEnv = HonoEnv,
     Schema extends HonoSchema = {}, // eslint-disable-line @typescript-eslint/no-empty-object-type
@@ -324,6 +327,8 @@ function buildExecContext(args?: BuildExecContextArgs) {
 /////////////
 
 const DEFAULT_CONTEXT = 'jco-std/http/adapter/hono';
+
+const log = console.log;
 
 /** Default logger which uses info logging */
 const logInfo = (msg: string, ...rest: string[]) => {

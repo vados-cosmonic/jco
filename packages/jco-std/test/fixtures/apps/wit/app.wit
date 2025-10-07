@@ -1,10 +1,28 @@
 package jco-std:tests;
 
-world hono {
-     // NOTE: the imports below are required by the hono adapter, to support all relevant functionality
-     import wasi:logging/logging@0.1.0-draft;
-     import wasi:config/runtime@0.2.0-draft;
-     import wasi:cli/environment@0.2.4;
+// NOTE: since wasi:config's 0.2.0-draft release is messed up ('runtime' wasn't renamed and published)
+// we have to manage the deps that get populated here *manually*. 
+//
+// Attempting to run `wkg wit fetch` will clear out the deps folder, and the folders have to be put back
+//
+// We need to use wasi:config/store explicitly because that's what wasmtime expects.
+// (along with matching up the versions)
+//
+// Generally `include wasi:config/imports@0.2.0-draft` will work, then the 
+// downloaded WIT must be edited manually (and the import below restored) 
 
-     export wasi:http/incoming-handler@0.2.4;
+world hono-fetch-event {
+     // NOTE: the imports below are required by the hono adapter, to support all relevant functionality
+     import wasi:config/store@0.2.0-draft;
+     import wasi:cli/environment@0.2.6;
+     import wasi:http/types@0.2.6;
+}
+
+world hono-wasi-http {
+     // NOTE: the imports below are required by the hono adapter, to support all relevant functionality
+     import wasi:config/store@0.2.0-draft;
+     import wasi:cli/environment@0.2.6;
+     import wasi:http/types@0.2.6;
+
+     export wasi:http/incoming-handler@0.2.6;
 }

@@ -1,6 +1,7 @@
 import { fileURLToPath, URL } from "node:url";
 import { join, normalize, sep } from "node:path";
-import { readdir, stat, mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { readdir, stat, mkdtemp, mkdir, writeFile, readFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { debuglog } from "node:util";
 
@@ -12,6 +13,11 @@ import { rolldown } from "rolldown";
 import typescript from "@rollup/plugin-typescript";
 
 const FIXTURE_APPS_DIR = fileURLToPath(new URL("../fixtures/apps", import.meta.url));
+
+/** WIT world to use for individual tests by fixture app app dir */
+const TEST_WIT_WORLD_LOOKUP = {};
+
+const DEFAULT_TEST_WIT_WORLD = "hono-fetch-event";
 
 /** Get the binary path to wasmtime if it doesn't exist */
 async function getWasmtimeBin(env?: Record<string, string>): Promise<string> {
@@ -90,23 +96,54 @@ suite("hono apps", async () => {
                     }),
                 ],
             });
+
             await bundle.write({
                 file: jsOutputPath,
                 format: 'esm',
             });
 
+            // Ensure the JS has been written to disk
+            const generatedJS = await readFile(jsOutputPath, 'utf8');
+
             // Build the component with componentize-js
-            let { component } = await componentize({
+            const opts = {
                 sourcePath: jsOutputPath,
                 witPath,
-                worldName: "hono",
-            });
+                worldName: TEST_WIT_WORLD_LOOKUP[testComponentName] ?? DEFAULT_TEST_WIT_WORLD,
+            };
+            let { component } = await componentize(opts);
 
             // Write out the component to a file
             const componentOutputPath = join(componentOutputDir, "component.wasm");
             await writeFile(componentOutputPath, component);
 
-            // TODO: Serve with wasmtime?
+            // Serve with wasmtime?
+            const wasmtime = spawn(
+                wasmtimeBin, 
+                [
+                    "serve", 
+                    "-S", 
+                    "config,cli", 
+                    "--addr", "127.0.0.1:0", 
+                    componentOutputPath,
+                ]
+            );
+
+            // Wait for wasmtime to start serving the component
+            const { promise: startupWait, resolve: resolveStartupWait } = Promise.withResolvers();
+            wasmtime.stderr.on('data', data => {
+                console.log(`[wasmtime] STDERR: ${data}`);
+                if (data.includes("127.0.0.1")) {
+                    resolveStartupWait(null);
+                }
+            });
+            wasmtime.stdout.on('data', data => {
+                console.log(`[wasmtime] STDOUT: ${data}`);
+                if (data.includes("127.0.0.1")) {
+                    resolveStartupWait(null);
+                }
+            });
+            await startupWait;
 
             // TODO: Perform HTTP requests
 

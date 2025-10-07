@@ -1,4 +1,4 @@
-declare module 'wasi:io/poll@0.2.4' {
+declare module 'wasi:io/poll@0.2.6' {
   export function poll(in_: Array<Pollable>): Uint32Array;
   
   export class Pollable implements Disposable {

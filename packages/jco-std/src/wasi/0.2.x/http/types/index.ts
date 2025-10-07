@@ -1,7 +1,7 @@
 /// <reference path="../../generated/types/wit.d.ts" />
 
-import { getEnvironment } from 'wasi:cli/environment@0.2.4';
-import * as wasiConfig from 'wasi:config/runtime@0.2.0-draft';
+import { getEnvironment } from 'wasi:cli/environment@0.2.6';
+import * as wasiConfig from 'wasi:config/store@0.2.0-draft';
 
 export * from './request.js';
 export * from './response.js';

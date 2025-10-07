@@ -5,9 +5,9 @@
  * @see: https://github.com/WebAssembly/wasi-http
  */
 
-import { IncomingBody, IncomingRequest, Method } from "wasi:http/types@0.2.4";
-import { Pollable } from "wasi:io/poll@0.2.4";
-import { InputStream } from "wasi:io/streams@0.2.4";
+import { IncomingBody, IncomingRequest, Method } from "wasi:http/types@0.2.6";
+import { Pollable } from "wasi:io/poll@0.2.6";
+import { InputStream } from "wasi:io/streams@0.2.6";
 
 const DEFAULT_INCOMING_BODY_READ_MAX_BYTES = 4096n;
 

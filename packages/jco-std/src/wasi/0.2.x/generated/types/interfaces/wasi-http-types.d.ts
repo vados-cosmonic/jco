@@ -2,7 +2,7 @@
 /// <reference path="./wasi-io-error.d.ts" />
 /// <reference path="./wasi-io-poll.d.ts" />
 /// <reference path="./wasi-io-streams.d.ts" />
-declare module 'wasi:http/types@0.2.4' {
+declare module 'wasi:http/types@0.2.6' {
   /**
    * Attempts to extract a http-related `error` from the wasi:io `error`
    * provided.
@@ -17,11 +17,11 @@ declare module 'wasi:http/types@0.2.4' {
    * http-related errors.
    */
   export function httpErrorCode(err: IoError): ErrorCode | undefined;
-  export type Duration = import('wasi:clocks/monotonic-clock@0.2.4').Duration;
-  export type InputStream = import('wasi:io/streams@0.2.4').InputStream;
-  export type OutputStream = import('wasi:io/streams@0.2.4').OutputStream;
-  export type IoError = import('wasi:io/error@0.2.4').Error;
-  export type Pollable = import('wasi:io/poll@0.2.4').Pollable;
+  export type Duration = import('wasi:clocks/monotonic-clock@0.2.6').Duration;
+  export type InputStream = import('wasi:io/streams@0.2.6').InputStream;
+  export type OutputStream = import('wasi:io/streams@0.2.6').OutputStream;
+  export type IoError = import('wasi:io/error@0.2.6').Error;
+  export type Pollable = import('wasi:io/poll@0.2.6').Pollable;
   /**
    * This type corresponds to HTTP standard Methods.
    */
