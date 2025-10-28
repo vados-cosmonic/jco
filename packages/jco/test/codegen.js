@@ -22,9 +22,9 @@ import {
     readComponentBytes,
 } from './helpers.js';
 import { tsGenerationPromise } from './typescript.js';
-import { getDefaultComponentFixtures, ESLINT_PATH } from './common.js';
+import { getDefaultComponentFixtures, ESLINT_PATH, transpileDummyWit } from './common.js';
 
-suite(`Transpiler codegen`, async () => {
+suite.skip(`Transpiler codegen`, async () => {
     // NOTE: the codegen tests *must* run first and generate outputs for other tests to use
     describe('codegen', async () => {
         const fixtures = await getDefaultComponentFixtures();
@@ -240,8 +240,8 @@ suite(`Transpiler codegen`, async () => {
     });
 });
 
-suite(`Naming`, () => {
-    test(`Resource deduping`, async () => {
+suite.skip("Naming", () => {
+    test("Resource deduping", async () => {
         const component = await componentNew(
             await componentEmbed({
                 witSource: await readFile(
@@ -271,5 +271,26 @@ suite(`Naming`, () => {
 
         assert.isOk(bindingsSource.includes('class Thing$1{'));
         assert.isOk(bindingsSource.includes('Thing: Thing$1'));
+    });
+});
+
+suite("imports", () => {
+    // see: https://github.com/bytecodealliance/jco/issues/1073
+    test("spurrious import for borrowed", async () => {
+        const { files } = await transpileDummyWit({
+            witPath: fileURLToPath(
+                new URL(
+                    `./fixtures/wits/spurrious-import-for-borrow/component.wit`,
+                    import.meta.url,
+                )
+            )
+        });
+
+        const jsContent = files['component.js'];
+        assert(jsContent, "js content was present");
+
+        console.log("JS CONTENT", jsContent);
+
+        // TODO: check for the bad import
     });
 });

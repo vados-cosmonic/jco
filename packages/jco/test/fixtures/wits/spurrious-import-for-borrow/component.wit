@@ -1,0 +1,19 @@
+package tests:spurrious-import-for-borrow;
+
+interface a {
+    resource reused-resource {
+        constructor();
+    }
+}
+
+interface b {
+    use a.{callback};
+
+    resource exported-resource {
+        constructor(cb: borrow<reused-resource>);
+    }
+}
+
+world root {
+    export b;
+}
