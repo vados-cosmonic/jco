@@ -289,8 +289,13 @@ suite("imports", () => {
         const jsContent = files['component.js'];
         assert(jsContent, "js content was present");
 
-        console.log("JS CONTENT", jsContent);
+        console.log(`JS CONTENT\n===${jsContent}\n===`);
 
-        // TODO: check for the bad import
+        assert(
+            !jsContent.includes('import { ReusedResource'),
+            "ReusedResource class should not be imported",
+        );
+
+        // TODO: actually fix the bug
     });
 });

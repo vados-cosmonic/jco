@@ -7,7 +7,7 @@ interface a {
 }
 
 interface b {
-    use a.{callback};
+    use a.{reused-resource};
 
     resource exported-resource {
         constructor(cb: borrow<reused-resource>);
