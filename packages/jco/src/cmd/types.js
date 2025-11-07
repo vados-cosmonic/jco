@@ -1,10 +1,7 @@
 import { stat, mkdir } from 'node:fs/promises';
 import { extname, basename, resolve } from 'node:path';
 
-import {
-    $init,
-    generateTypes,
-} from '../../obj/js-component-bindgen-component.js';
+import { generateHostTypes, generateGuestTypes } from "@bytecodealliance/jco-transpile";
 
 import {
     isWindows,
@@ -34,9 +31,20 @@ export async function types(witPath, opts) {
         );
     }
 
-    const files = await typesComponent(witPath, opts);
-
-    await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
+    try {
+        const files = await generateHostTypes(witPath, processOptions(opts, witPath));
+        await writeFiles(files);
+        // print? 'Generated Type Files');
+    } catch (err) {
+        if (err.toString().includes('does not match previous package name')) {
+            const hint = await printWITLayoutHint(absWitPath);
+            if (err.message) {
+                err.message += `\n${hint}`;
+            }
+            throw err;
+        }
+        throw err;
+    }
 }
 
 export async function guestTypes(witPath, opts) {
@@ -51,17 +59,30 @@ export async function guestTypes(witPath, opts) {
         );
     }
 
-    const files = await typesComponent(witPath, { ...opts, guest: true });
-    await writeFiles(
-        files,
-        opts.quiet
-            ? false
-            : 'Generated Guest Typescript Definition Files (.d.ts)'
-    );
+    try {
+        const files = await generateGuestTypes(witPath, processOptions(opts, witPath));
+        await writeFiles(files);
+        // print 'Generated Guest Typescript Definition Files (.d.ts)' ?
+    } catch (err) {
+        if (err.toString().includes('does not match previous package name')) {
+            const hint = await printWITLayoutHint(witPath);
+            if (err.message) {
+                err.message += `\n${hint}`;
+            }
+            throw err;
+        }
+        throw err;
+    }
 }
 
 /**
- * @param {string} witPath
+ * Bare-bones options processing and type generation.
+ *
+ * NOTE: this function is deprecated, and will be removed in a future version.
+ * use `types` or `guestTypes` exports instead, and if only transpile functionality is
+ * needed, consider using `@bytecodealliance/jco-transpile` instead.
+ *
+ * @param {string} componentPath - Path to the component to be transpiled
  * @param {{
  *   name?: string,
  *   worldName?: string,
@@ -79,16 +100,21 @@ export async function guestTypes(witPath, opts) {
  *   asyncExports?: string[],
  *   asyncImports?: string[],
  *   guest?: bool,
- * }} opts
+ * }} opts - options to use for transpilation
  * @returns {Promise<{ [filename: string]: Uint8Array }>}
  */
 export async function typesComponent(witPath, opts) {
-    await $init;
+    const generateFn = opts.guest ? generateGuestTypes : generateHostTypes;
+    return await generateFn(witPath, processOptions(opts, witPath));
+}
+
+/** Process specified options */
+function processOptions(opts, absWitPath) {
     const name =
-        opts.name ||
-        (opts.worldName
-            ? opts.worldName.split(':').pop().split('/').pop()
-            : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+          opts.name ||
+          (opts.worldName
+           ? opts.worldName.split(':').pop().split('/').pop()
+           : basename(absWitPath.slice(0, -extname(absWitPath).length || Infinity)));
     let instantiation;
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
@@ -137,31 +163,16 @@ export async function typesComponent(witPath, opts) {
         throw new Error(`invalid/unrecognized async mode [${asyncMode}]`);
     }
 
-    // Run the type generation
-    let types;
-    const absWitPath = resolve(witPath);
-    try {
-        types = generateTypes(name, {
-            wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
-            instantiation,
-            tlaCompat: opts.tlaCompat ?? false,
-            world: opts.worldName,
-            features,
-            guest: opts.guest ?? false,
-            asyncMode: asyncModeObj,
-        }).map(([name, file]) => [`${outDir}${name}`, file]);
-    } catch (err) {
-        if (err.toString().includes('does not match previous package name')) {
-            const hint = await printWITLayoutHint(absWitPath);
-            if (err.message) {
-                err.message += `\n${hint}`;
-            }
-            throw err;
-        }
-        throw err;
-    }
-
-    return Object.fromEntries(types);
+    return {
+        name,
+        wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
+        instantiation,
+        tlaCompat: opts.tlaCompat ?? false,
+        world: opts.worldName,
+        features,
+        guest: opts.guest ?? false,
+        asyncMode: asyncModeObj,
+    };
 }
 
 /**

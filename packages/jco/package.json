@@ -60,18 +60,17 @@
     "obj/interfaces"
   ],
   "scripts": {
-    "build": "cargo xtask build debug",
-    "build:release": "cargo xtask build release",
-    "build:types:preview2-shim": "npm run build:types:preview2-shim --include-workspace-root",
+    "build": "npm run build:types:preview2-shim",
+    "build:types:preview2-shim": "cargo xtask generate wasi-types preview2",
     "fmt": "npm run lint:fix",
     "lint": "eslint -c ../../eslint.config.mjs --ext .js src test",
     "lint:fix": "npm run lint -- --fix",
     "test": "vitest run -c test/vitest.ts",
-    "test:lts": "vitest run -c test/vitest.lts.ts",
-    "prepack": "cargo xtask build release"
+    "test:lts": "vitest run -c test/vitest.lts.ts"
   },
   "dependencies": {
     "@bytecodealliance/componentize-js": "^0.19.3",
+    "@bytecodealliance/jco-transpile": "^0.1.1",
     "@bytecodealliance/preview2-shim": "^0.17.3",
     "binaryen": "^123.0.0",
     "commander": "^14",
