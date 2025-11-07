@@ -105,8 +105,7 @@ export async function guestTypes(witPath, opts) {
  */
 export async function typesComponent(witPath, opts) {
     const generateFn = opts.guest ? generateGuestTypes : generateHostTypes;
-    const files = await generateFn(witPath, processOptions(opts, witPath));
-    await writeFiles(files);
+    return await generateFn(witPath, processOptions(opts, witPath));
 }
 
 /** Process specified options */
