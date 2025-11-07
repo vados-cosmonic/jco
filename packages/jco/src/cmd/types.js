@@ -13,9 +13,6 @@ import {
     DEFAULT_ASYNC_MODE,
 } from '../common.js';
 
-// This re-export exists to avoid breaking backwards compatibility
-export { typesComponent } from "@bytecodealliance/jco-transpile/components/types";
-
 /** Default relative path for guest type declaration generation */
 const DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH = './types/generated/wit/guest';
 
@@ -35,7 +32,7 @@ export async function types(witPath, opts) {
     }
 
     try {
-        const files = await runTypeGeneration(witPath, processOptions(opts, witPath), generateHostTypes);
+        const files = await generateHostTypes(witPath, processOptions(opts, witPath));
         await writeFiles(files);
         // print? 'Generated Type Files');
     } catch (err) {
@@ -63,7 +60,7 @@ export async function guestTypes(witPath, opts) {
     }
 
     try {
-        const files = await generateGuestTypes(witPath, processOptions(opts, witPath), generateGuestTypes);
+        const files = await generateGuestTypes(witPath, processOptions(opts, witPath));
         await writeFiles(files);
         // print 'Generated Guest Typescript Definition Files (.d.ts)' ?
     } catch (err) {
@@ -76,6 +73,40 @@ export async function guestTypes(witPath, opts) {
         }
         throw err;
     }
+}
+
+/**
+ * Bare-bones options processing and type generation.
+ *
+ * NOTE: this function is deprecated, and will be removed in a future version.
+ * use `types` or `guestTypes` exports instead, and if only transpile functionality is
+ * needed, consider using `@bytecodealliance/jco-transpile` instead.
+ *
+ * @param {string} componentPath - Path to the component to be transpiled
+ * @param {{
+ *   name?: string,
+ *   worldName?: string,
+ *   instantiation?: 'async' | 'sync',
+ *   tlaCompat?: bool,
+ *   asyncMode?: string,
+ *   asyncImports?: string[],
+ *   asyncExports?: string[],
+ *   outDir?: string,
+ *   allFeatures?: bool,
+ *   feature?: string[] | 'all', // backwards compat
+ *   features?: string[] | 'all',
+ *   asyncWasiImports?: string[],
+ *   asyncWasiExports?: string[],
+ *   asyncExports?: string[],
+ *   asyncImports?: string[],
+ *   guest?: bool,
+ * }} opts - options to use for transpilation
+ * @returns {Promise<{ [filename: string]: Uint8Array }>}
+ */
+export async function typesComponent(witPath, opts) {
+    const generateFn = opts.guest ? generateGuestTypes : generateHostTypes;
+    const files = await generateFn(witPath, processOptions(opts, witPath));
+    await writeFiles(files);
 }
 
 /** Process specified options */
