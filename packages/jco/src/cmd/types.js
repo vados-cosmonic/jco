@@ -1,10 +1,7 @@
 import { stat, mkdir } from 'node:fs/promises';
 import { extname, basename, resolve } from 'node:path';
 
-import {
-    $init,
-    generateTypes,
-} from '../../obj/js-component-bindgen-component.js';
+import { generateHostTypes, generateGuestTypes } from "@bytecodealliance/jco-transpile";
 
 import {
     isWindows,
@@ -15,6 +12,9 @@ import {
     ASYNC_WASI_EXPORTS,
     DEFAULT_ASYNC_MODE,
 } from '../common.js';
+
+// This re-export exists to avoid breaking backwards compatibility
+export { typesComponent } from "@bytecodealliance/jco-transpile/components/types";
 
 /** Default relative path for guest type declaration generation */
 const DEFAULT_GUEST_TYPES_OUTPUT_DIR_PATH = './types/generated/wit/guest';
@@ -34,9 +34,20 @@ export async function types(witPath, opts) {
         );
     }
 
-    const files = await typesComponent(witPath, opts);
-
-    await writeFiles(files, opts.quiet ? false : 'Generated Type Files');
+    try {
+        const files = await runTypeGeneration(witPath, processOptions(opts, witPath), generateHostTypes);
+        await writeFiles(files);
+        // print? 'Generated Type Files');
+    } catch (err) {
+        if (err.toString().includes('does not match previous package name')) {
+            const hint = await printWITLayoutHint(absWitPath);
+            if (err.message) {
+                err.message += `\n${hint}`;
+            }
+            throw err;
+        }
+        throw err;
+    }
 }
 
 export async function guestTypes(witPath, opts) {
@@ -51,44 +62,29 @@ export async function guestTypes(witPath, opts) {
         );
     }
 
-    const files = await typesComponent(witPath, { ...opts, guest: true });
-    await writeFiles(
-        files,
-        opts.quiet
-            ? false
-            : 'Generated Guest Typescript Definition Files (.d.ts)'
-    );
+    try {
+        const files = await generateGuestTypes(witPath, processOptions(opts, witPath), generateGuestTypes);
+        await writeFiles(files);
+        // print 'Generated Guest Typescript Definition Files (.d.ts)' ?
+    } catch (err) {
+        if (err.toString().includes('does not match previous package name')) {
+            const hint = await printWITLayoutHint(witPath);
+            if (err.message) {
+                err.message += `\n${hint}`;
+            }
+            throw err;
+        }
+        throw err;
+    }
 }
 
-/**
- * @param {string} witPath
- * @param {{
- *   name?: string,
- *   worldName?: string,
- *   instantiation?: 'async' | 'sync',
- *   tlaCompat?: bool,
- *   asyncMode?: string,
- *   asyncImports?: string[],
- *   asyncExports?: string[],
- *   outDir?: string,
- *   allFeatures?: bool,
- *   feature?: string[] | 'all', // backwards compat
- *   features?: string[] | 'all',
- *   asyncWasiImports?: string[],
- *   asyncWasiExports?: string[],
- *   asyncExports?: string[],
- *   asyncImports?: string[],
- *   guest?: bool,
- * }} opts
- * @returns {Promise<{ [filename: string]: Uint8Array }>}
- */
-export async function typesComponent(witPath, opts) {
-    await $init;
+/** Process specified options */
+function processOptions(opts, absWitPath) {
     const name =
-        opts.name ||
-        (opts.worldName
-            ? opts.worldName.split(':').pop().split('/').pop()
-            : basename(witPath.slice(0, -extname(witPath).length || Infinity)));
+          opts.name ||
+          (opts.worldName
+           ? opts.worldName.split(':').pop().split('/').pop()
+           : basename(absWitPath.slice(0, -extname(absWitPath).length || Infinity)));
     let instantiation;
     if (opts.instantiation) {
         instantiation = { tag: opts.instantiation };
@@ -137,31 +133,16 @@ export async function typesComponent(witPath, opts) {
         throw new Error(`invalid/unrecognized async mode [${asyncMode}]`);
     }
 
-    // Run the type generation
-    let types;
-    const absWitPath = resolve(witPath);
-    try {
-        types = generateTypes(name, {
-            wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
-            instantiation,
-            tlaCompat: opts.tlaCompat ?? false,
-            world: opts.worldName,
-            features,
-            guest: opts.guest ?? false,
-            asyncMode: asyncModeObj,
-        }).map(([name, file]) => [`${outDir}${name}`, file]);
-    } catch (err) {
-        if (err.toString().includes('does not match previous package name')) {
-            const hint = await printWITLayoutHint(absWitPath);
-            if (err.message) {
-                err.message += `\n${hint}`;
-            }
-            throw err;
-        }
-        throw err;
-    }
-
-    return Object.fromEntries(types);
+    return {
+        name,
+        wit: { tag: 'path', val: (isWindows ? '//?/' : '') + absWitPath },
+        instantiation,
+        tlaCompat: opts.tlaCompat ?? false,
+        world: opts.worldName,
+        features,
+        guest: opts.guest ?? false,
+        asyncMode: asyncModeObj,
+    };
 }
 
 /**

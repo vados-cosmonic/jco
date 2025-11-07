@@ -13,7 +13,7 @@ import { extractWITAsyncModeFromOpts, type FileBytes, isWindows } from './common
 import { ASYNC_WASI_IMPORTS, ASYNC_WASI_EXPORTS } from './constants.js';
 
 /** Options for type generation */
-interface TypegenOptions {
+export interface TypegenOptions {
     /** Name of the component */
     name?: string;
 
