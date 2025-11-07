@@ -1,4 +1,4 @@
-use anyhow::{Result, anyhow};
+use anyhow::{Context as _, Result, anyhow};
 use std::fs;
 use std::path::PathBuf;
 
@@ -33,8 +33,17 @@ fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
     for world in wasi.worlds {
         let name = world.replace([':', '/'], "-");
 
+        let xtask_manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let manifest_dir = xtask_manifest_dir
+            .parent()
+            .context("unexpectedly missing parent of xtask manifest dir")?
+            .parent()
+            .context("unexpectedly missing parent of parent of xtask manifest dir")?;
+        let wit_path = manifest_dir.join(wasi.wit_path);
+        let target_path = manifest_dir.join(wasi.target_path);
+
         let mut resolve = Resolve::default();
-        let (_, _) = resolve.push_dir(PathBuf::from(wasi.wit_path))?;
+        let (_, _) = resolve.push_dir(PathBuf::from(&wit_path))?;
 
         let (_, world_name) = world
             .split_once('/')
@@ -57,12 +66,12 @@ fn process_wasi_types(wasi: WasiTypes<'_>) -> Result<()> {
 
         let files = generate_types(&name, resolve, world, opts)?;
 
-        if fs::metadata(wasi.target_path).is_err() {
-            fs::remove_dir_all(wasi.target_path)?;
+        if fs::metadata(&target_path).is_err() {
+            fs::remove_dir_all(&target_path)?;
         }
 
         for (filename, contents) in files.iter() {
-            let outfile = PathBuf::from(wasi.target_path).join(filename);
+            let outfile = PathBuf::from(&target_path).join(filename);
             let parent = outfile.parent().expect("invalid target path");
 
             fs::create_dir_all(parent)?;
