@@ -1,5 +1,10 @@
 /* global Buffer */
-import { transpile, transpileBytes, writeFiles } from "@bytecodealliance/jco-transpile";
+import {
+    transpile as _transpile,
+    transpileBytes,
+} from "@bytecodealliance/jco-transpile";
+
+import { writeFiles } from '../common.js';
 
 // These re-exports exist to avoid breaking backwards compatibility
 export { generateHostTypes as types, generateGuestTypes as guestTypes } from "@bytecodealliance/jco-transpile";
@@ -20,7 +25,14 @@ export async function transpile(componentPath, opts, program) {
         opts.optArgs = program.parent.rawArgs.slice(varIdx + 1);
     }
 
-    const { files } = await transpile(componentPath, processOpts(opts));
+    // Convert --map CLI switch to object
+    if (opts.map) {
+        opts.map = Object.fromEntries(
+            opts.map.map((mapping) => mapping.split('='))
+        );
+    }
+
+    const { files } = await _transpile(componentPath, opts);
     await writeFiles(files);
 }
 
