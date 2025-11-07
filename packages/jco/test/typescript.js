@@ -1,10 +1,10 @@
 /* global TextDecoder */
 import { readFile } from 'node:fs/promises';
-
 import { fileURLToPath, URL } from 'node:url';
 
+import { generateGuestTypes } from '@bytecodealliance/jco-transpile';
+
 import { transpile, componentNew, componentEmbed } from '../src/api.js';
-import { typesComponent } from '../src/cmd/types.js';
 
 import { suite, test, beforeAll, assert } from 'vitest';
 
@@ -149,7 +149,7 @@ suite(`TypeScript`, async () => {
             )
         );
 
-        const files = await typesComponent(witPath, { guest: true });
+        const { files } = await generateGuestTypes(witPath);
 
         const mainDtsSource = new TextDecoder().decode(
             files['disposable.d.ts']
