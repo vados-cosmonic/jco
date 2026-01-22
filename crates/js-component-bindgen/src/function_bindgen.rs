@@ -1338,6 +1338,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 ));
                 let current_task_get_fn =
                     self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let component_instance_idx = self.canon_opts.instance.as_u32();
 
                 uwriteln!(
                     self.src,
@@ -1356,13 +1357,11 @@ impl Bindgen for FunctionBindgen<'_> {
                     (self.callee.into(), operands.join(", "))
                 };
 
+                uwriteln!(self.src, "let hostProvided = false;");
                 match func.kind {
                     wit_parser::FunctionKind::Constructor(_) => {
-                        uwriteln!(
-                            self.src,
-                            "const hostProvided = {}._isHostProvided;",
-                            fn_js.trim_start_matches("new ")
-                        )
+                        let cls = fn_js.trim_start_matches("new ");
+                        uwriteln!(self.src, "hostProvided = {cls}?._isHostProvided;");
                     }
                     wit_parser::FunctionKind::Freestanding
                     | wit_parser::FunctionKind::AsyncFreestanding
@@ -1370,10 +1369,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     | wit_parser::FunctionKind::AsyncMethod(_)
                     | wit_parser::FunctionKind::Static(_)
                     | wit_parser::FunctionKind::AsyncStatic(_) => {
-                        uwriteln!(self.src, "const hostProvided = {fn_js}._isHostProvided;")
+                        uwriteln!(self.src, "hostProvided = {fn_js}?._isHostProvided;");
                     }
                 }
-                let component_instance_idx = self.canon_opts.instance.as_u32();
 
                 // Start the necessary subtasks and/or host task
                 //
@@ -1958,22 +1956,29 @@ impl Bindgen for FunctionBindgen<'_> {
                             // Fall back to assign a new rep in the capture table, when the imported
                             // resource was constructed externally.
                             let symbol_resource_rep = self.intrinsic(Intrinsic::SymbolResourceRep);
-                            let rsc_table_create = if is_own {
-                                self.intrinsic(Intrinsic::Resource(
+
+                            // Build the code to initialize the owned/borrowed resource handle
+                            let handle_init_js = if is_own {
+                                let create_own_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateOwn,
-                                ))
+                                ));
+                                format!("{handle} = {create_own_fn}(handleTable{tid}, rep);")
                             } else {
-                                self.intrinsic(Intrinsic::ScopeId);
-                                self.intrinsic(Intrinsic::Resource(
+                                let scope_id = self.intrinsic(Intrinsic::ScopeId);
+                                let create_borrow_fn = self.intrinsic(Intrinsic::Resource(
                                     ResourceIntrinsic::ResourceTableCreateBorrow,
-                                ))
+                                ));
+                                format!(
+                                    "{handle} = {create_borrow_fn}(handleTable{tid}, rep, {scope_id});"
+                                )
                             };
+
                             uwriteln!(
                                 self.src,
                                 "if (!{handle}) {{
                                     const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
                                     captureTable{rid}.set(rep, {op});
-                                    {handle} = {rsc_table_create}(handleTable{tid}, rep);
+                                    {handle_init_js}
                                 }}"
                             );
                         }
