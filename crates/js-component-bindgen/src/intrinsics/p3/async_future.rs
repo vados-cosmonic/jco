@@ -7,7 +7,7 @@ use crate::source::Source;
 use super::async_task::AsyncTaskIntrinsic;
 
 /// This enum contains intrinsics that enable Stream
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncFutureIntrinsic {
     /// The definition of the `FutureWritableEnd` JS class
     ///

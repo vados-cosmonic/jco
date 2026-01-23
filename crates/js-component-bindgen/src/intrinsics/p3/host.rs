@@ -6,7 +6,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async calls
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 #[allow(clippy::enum_variant_names)]
 pub enum HostIntrinsic {
     /// Intrinsic used by the host to prepare trampoline calls

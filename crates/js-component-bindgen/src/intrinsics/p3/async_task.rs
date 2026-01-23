@@ -7,7 +7,7 @@ use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement async tasks
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncTaskIntrinsic {
     /// Set the value of a context local storage for the current task/thread
     ///

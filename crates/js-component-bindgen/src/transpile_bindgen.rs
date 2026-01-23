@@ -1035,6 +1035,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::StreamDropWritable { .. }
                 | Trampoline::StreamNew { .. }
                 | Trampoline::StreamRead { .. }
+                | Trampoline::StreamTransfer { .. }
                 | Trampoline::StreamWrite { .. }
                 | Trampoline::SubtaskCancel { .. }
                 | Trampoline::SubtaskDrop { .. }
@@ -1202,14 +1203,19 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamNew { ty, .. } => {
+            Trampoline::StreamNew { ty, instance } => {
                 let stream_new_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                let instance_idx = instance.as_u32();
+                let stream_table_idx = ty.as_u32();
+                // TODO: list stream types by table??
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_new_fn}.bind(null, {{ streamTypeRep: {} }});\n",
-                    ty.as_u32(),
+                    "const trampoline{i} = {stream_new_fn}.bind(null, {{
+                        streamTableIdx: {stream_table_idx},
+                        callerComponentIdx: {instance_idx},
+                    }});\n",
                 );
             }
 
@@ -1347,7 +1353,12 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamTransfer => todo!("Trampoline::StreamTransfer"),
+            Trampoline::StreamTransfer => {
+                let stream_transfer_fn = self
+                    .bindgen
+                    .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamTransfer));
+                uwriteln!(self.src.js, "const trampoline{i} = {stream_transfer_fn};\n",);
+            }
 
             Trampoline::FutureNew { ty, .. } => {
                 let future_new_fn = self

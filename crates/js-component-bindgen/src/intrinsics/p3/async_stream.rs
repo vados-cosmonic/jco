@@ -8,7 +8,7 @@ use crate::{
 use super::async_task::AsyncTaskIntrinsic;
 
 /// This enum contains intrinsics that enable Stream
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum AsyncStreamIntrinsic {
     /// Global that stores streams
     ///
@@ -162,6 +162,19 @@ pub enum AsyncStreamIntrinsic {
     /// function streamDropWritable(streamRep: u32, writerRep: u32): bool;
     /// ```
     StreamDropWritable,
+
+    /// Transfer a given stream from one component to another
+    ///
+    /// Note that all arguments for a stream transfer are provided via arguments at runtime,
+    /// and is generally called from the *guest* component (or at least the guest component idx is
+    /// discernable via the current task).
+    ///
+    /// ```ts
+    /// type u32 = number;
+    ///
+    /// function streamTransfer(srcComponentIdx: u32, srcTableIdx: u32, destTableIdx: u32): bool;
+    /// ```
+    StreamTransfer
 }
 
 impl AsyncStreamIntrinsic {
@@ -187,6 +200,7 @@ impl AsyncStreamIntrinsic {
             Self::StreamWrite => "streamWrite",
             Self::StreamDropReadable => "streamDropReadable",
             Self::StreamDropWritable => "streamDropWritable",
+            Self::StreamTransfer => "streamTransfer",
             Self::StreamCancelRead => "streamCancelRead",
             Self::StreamCancelWrite => "streamCancelWrite",
         }
@@ -347,37 +361,36 @@ impl AsyncStreamIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     function {stream_new_fn}(args) {{
-                        let {{ streamTypeRep, payloadLiftFn, isUnitStream, componentIdx }} = args;
-                        {debug_log_fn}('[{stream_new_fn}()] args', {{ streamTypeRep, payloadTypeRep, componentIdx }});
+                        {debug_log_fn}('[{stream_new_fn}()] args', args);
+                        const {{ streamTableIdx, callerComponentIdx }} = args;
 
-                        if (!componentIdx) {{
-                            const task = {current_task_get_fn}(componentIdx);
-                            if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
-                            componentIdx = task.componentIdx;
-                        }}
+                        console.log("args", args);
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        if (!callerComponentIdx) {{ throw new Error("missing caller component idx"); }}
+                        const taskMeta = {current_task_get_fn}(callerComponentIdx);
+                        if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
+
+                        const task = taskMeta.task
+                        if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
+
+                        const state = {get_or_create_async_state_fn}(callerComponentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave during stream.new'); }}
 
                         let stream = new TransformStream();
                         let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
-                            elementTypeRep,
-                            isUnitStream,
                             writable: stream.writable,
-                            componentInstanceID,
+                            componentIdx: callerComponentIdx,
                         }}));
                         let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
-                            elementTypeRep,
-                            isUnitStream,
                             readable: stream.readable,
-                            componentInstanceID,
+                            componentIdx: callerComponentIdx,
                         }}));
 
                         return BigInt(writableIdx) << 32n | BigInt(readableIdx);
                     }}
-                "));
+                "#));
             }
 
             Self::StreamWrite | Self::StreamRead => {
@@ -606,6 +619,26 @@ impl AsyncStreamIntrinsic {
                     }}
                 "));
             }
+
+            Self::StreamTransfer => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_drop_fn = self.name();
+                output.push_str(&format!(r#"
+                    function {stream_drop_fn}(
+                        srcComponentIdx,
+                        srcStreamTableIdx,
+                        destStreamTableIdx,
+                    ) {{
+                        {debug_log_fn}('[{stream_drop_fn}()] args', {{
+                            srcComponentIdx,
+                            srcStreamTableIdx,
+                            destStreamTableIdx,
+                        }});
+                        throw new Error('{stream_drop_fn} implemented');
+                      }}
+                "#));
+            }
+
         }
     }
 }

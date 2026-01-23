@@ -7,7 +7,7 @@ use crate::intrinsics::{AsyncDeterminismProfile, Intrinsic, RenderIntrinsicsArgs
 use crate::source::Source;
 
 /// This enum contains intrinsics that enable waitable sets
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum WaitableIntrinsic {
     /// The definition of the `WaitableSet` JS class
     WaitableSetClass,

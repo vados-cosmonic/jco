@@ -8,7 +8,7 @@ use crate::{
 use super::conversion::ConversionIntrinsic;
 
 /// This enum contains intrinsics that enable Lower
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LowerIntrinsic {
     /// Lower a boolean into provided storage, given a core type
     ///

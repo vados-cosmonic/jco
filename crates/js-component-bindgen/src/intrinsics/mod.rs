@@ -1,6 +1,6 @@
 //! Intrinsics used from JS
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashSet};
 use std::fmt::Write;
 
 use crate::source::Source;
@@ -43,7 +43,7 @@ use p3::waitable::WaitableIntrinsic;
 /// These intrinsics refer to JS code that is included in order to make
 /// transpiled WebAssembly components and their imports/exports functional
 /// in the relevant JS context.
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum Intrinsic {
     JsHelper(JsHelperIntrinsic),
     WebIdl(WebIdlIntrinsic),
@@ -147,350 +147,27 @@ pub enum Intrinsic {
     GlobalComponentMemoriesClass,
 }
 
-/// Profile for determinism to be used by async implementation
-#[derive(Debug, Default, PartialEq, Eq)]
-pub(crate) enum AsyncDeterminismProfile {
-    /// Allow random ordering non-determinism
-    #[default]
-    Random,
-
-    /// Require determinism
-    #[allow(unused)]
-    Deterministic,
-}
-
-impl std::fmt::Display for AsyncDeterminismProfile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Self::Deterministic => "deterministic",
-                Self::Random => "random",
-            }
-        )
-    }
-}
-
-/// Arguments to `render_intrinsics`
-pub struct RenderIntrinsicsArgs<'a> {
-    /// List of intrinsics being built for use
-    pub(crate) intrinsics: &'a mut BTreeSet<Intrinsic>,
-    /// Whether to use NodeJS compat
-    pub(crate) no_nodejs_compat: bool,
-    /// Whether instantiation has occurred
-    pub(crate) instantiation: bool,
-    /// The kind of determinism to use
-    pub(crate) determinism: AsyncDeterminismProfile,
-}
-
-/// Emits the intrinsic `i` to this file and then returns the name of the
-/// intrinsic.
-pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
-    let mut output = Source::default();
-
-    // Intrinsics that should just always be present
-    args.intrinsics.insert(Intrinsic::DebugLog);
-    args.intrinsics.insert(Intrinsic::GlobalAsyncDeterminism);
-    args.intrinsics
-        .insert(Intrinsic::GlobalComponentAsyncLowersClass);
-    args.intrinsics
-        .insert(Intrinsic::GlobalComponentMemoriesClass);
-    args.intrinsics.insert(Intrinsic::RepTableClass);
-    args.intrinsics.insert(Intrinsic::CoinFlip);
-    args.intrinsics.insert(Intrinsic::ConstantI32Min);
-    args.intrinsics.insert(Intrinsic::ConstantI32Max);
-    args.intrinsics.insert(Intrinsic::TypeCheckValidI32);
-    args.intrinsics.insert(Intrinsic::TypeCheckAsyncFn);
-    args.intrinsics.insert(Intrinsic::AsyncFunctionCtor);
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds,
-    ));
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs,
-    ));
-    args.intrinsics.insert(Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::UnpackCallbackResult,
-    ));
-    args.intrinsics
-        .insert(Intrinsic::PromiseWithResolversPonyfill);
-    args.intrinsics.extend([
-        &Intrinsic::Host(HostIntrinsic::PrepareCall),
-        &Intrinsic::Host(HostIntrinsic::AsyncStartCall),
-        &Intrinsic::Host(HostIntrinsic::SyncStartCall),
-    ]);
-
-    // Handle specific intrinsic inter-dependencies
-    if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
-        || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
-    {
-        args.intrinsics.insert(Intrinsic::HasOwnProperty);
-    }
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
-    {
-        args.intrinsics.insert(Intrinsic::IsLE);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
-    {
-        output.push_str(
-            "
-            const i32ToF32I = new Int32Array(1);
-            const i32ToF32F = new Float32Array(i32ToF32I.buffer);
-        ",
-        );
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
-    {
-        output.push_str(
-            "
-            const i64ToF64I = new BigInt64Array(1);
-            const i64ToF64F = new Float64Array(i64ToF64I.buffer);
-        ",
-        );
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrow,
-    )) || args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-    )) {
-        args.intrinsics.insert(Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTableCreateBorrow,
-        ));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8)]);
-    }
-
-    // Attempting to perform a debug message hoist will require string encoding to memory
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::String(StringIntrinsic::Utf8Encode),
-            &Intrinsic::String(StringIntrinsic::Utf16Encode),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncEventCodeEnum,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::TypeCheckValidI32,
-            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
-            &Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
-    {
-        args.intrinsics.extend([&Intrinsic::Component(
-            ComponentIntrinsic::GetOrCreateAsyncState,
-        )]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([&Intrinsic::RepTableClass]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-            &Intrinsic::RepTableClass,
-            &Intrinsic::AwaitableClass,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
-            &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
-    }
-
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ]);
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
-    }
-
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
-    }
-
-    if args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::CreateNewCurrentTask,
-    )) || args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-        ]);
-    }
-
-    // Render all provided intrinsics
-    for current_intrinsic in args.intrinsics.iter() {
-        match current_intrinsic {
-            Intrinsic::JsHelper(i) => i.render(&mut output),
-            Intrinsic::Conversion(i) => i.render(&mut output),
-            Intrinsic::String(i) => i.render(&mut output),
-            Intrinsic::ErrCtx(i) => i.render(&mut output),
-            Intrinsic::Resource(i) => i.render(&mut output),
-            Intrinsic::AsyncTask(i) => i.render(&mut output),
-            Intrinsic::Waitable(i) => i.render(&mut output, &args),
-            Intrinsic::Lift(i) => i.render(&mut output),
-            Intrinsic::Lower(i) => i.render(&mut output),
-            Intrinsic::AsyncStream(i) => i.render(&mut output),
-            Intrinsic::AsyncFuture(i) => i.render(&mut output),
-            Intrinsic::Component(i) => i.render(&mut output),
-            Intrinsic::Host(i) => i.render(&mut output),
+impl Intrinsic {
+    pub fn render(&self, output: &mut Source, args: &RenderIntrinsicsArgs) {
+        match self {
+            Intrinsic::JsHelper(i) => i.render(output),
+            Intrinsic::Conversion(i) => i.render(output),
+            Intrinsic::String(i) => i.render(output),
+            Intrinsic::ErrCtx(i) => i.render(output),
+            Intrinsic::Resource(i) => i.render(output),
+            Intrinsic::AsyncTask(i) => i.render(output),
+            Intrinsic::Waitable(i) => i.render(output, &args),
+            Intrinsic::Lift(i) => i.render(output),
+            Intrinsic::Lower(i) => i.render(output),
+            Intrinsic::AsyncStream(i) => i.render(output),
+            Intrinsic::AsyncFuture(i) => i.render(output),
+            Intrinsic::Component(i) => i.render(output),
+            Intrinsic::Host(i) => i.render(output),
 
             Intrinsic::GlobalAsyncDeterminism => {
                 output.push_str(&format!(
                     "const {var_name} = '{determinism}';\n",
-                    var_name = current_intrinsic.name(),
+                    var_name = self.name(),
                     determinism = args.determinism,
                 ));
             }
@@ -498,7 +175,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             Intrinsic::CoinFlip => {
                 output.push_str(&format!(
                     "const {var_name} = () => {{ return Math.random() > 0.5; }};\n",
-                    var_name = current_intrinsic.name(),
+                    var_name = self.name(),
                 ));
             }
 
@@ -532,22 +209,22 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                         then() {{ return this.#promise.then(...arguments); }}
                     }}
                 ",
-                    class_name = current_intrinsic.name(),
+                    class_name = self.name(),
                 ));
             }
 
             Intrinsic::ConstantI32Min => output.push_str(&format!(
                 "const {const_name} = -2_147_483_648;\n",
-                const_name = current_intrinsic.name()
+                const_name = self.name()
             )),
             Intrinsic::ConstantI32Max => output.push_str(&format!(
                 "const {const_name} = 2_147_483_647;\n",
-                const_name = current_intrinsic.name()
+                const_name = self.name()
             )),
             Intrinsic::TypeCheckValidI32 => {
                 let i32_const_min = Intrinsic::ConstantI32Min.name();
                 let i32_const_max = Intrinsic::ConstantI32Max.name();
-                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = current_intrinsic.name()))
+                output.push_str(&format!("const {fn_name} = (n) => typeof n === 'number' && n >= {i32_const_min} && n <= {i32_const_max};\n", fn_name = self.name()))
             }
 
             Intrinsic::AsyncFunctionCtor => {
@@ -668,7 +345,7 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
                 )
             }
 
-            Intrinsic::WebIdl(w) => w.render(&mut output),
+            Intrinsic::WebIdl(w) => w.render(output),
 
             Intrinsic::HandleTables => output.push_str(
                 "
@@ -763,23 +440,24 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             }
 
             Intrinsic::PromiseWithResolversPonyfill => {
-                output.push_str(
+                let fn_name = self.name();
+                output.push_str(&format!(
                     r#"
-                    function promiseWithResolvers() {
-                        if (Promise.withResolvers) {
+                    function {fn_name}() {{
+                        if (Promise.withResolvers) {{
                             return Promise.withResolvers();
-                        } else {
+                        }} else {{
                             let resolve;
                             let reject;
-                            const promise = new Promise((res, rej) => {
+                            const promise = new Promise((res, rej) => {{
                                 resolve = res;
                                 reject = rej;
-                            });
-                            return { promise, resolve, reject };
-                        }
-                    }
-                "#,
-                );
+                            }});
+                            return {{ promise, resolve, reject }};
+                        }}
+                    }}
+                "#
+                ));
             }
 
             Intrinsic::AsyncEventCodeEnum => {
@@ -1032,6 +710,349 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
             }
         }
     }
+}
+
+/// Profile for determinism to be used by async implementation
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) enum AsyncDeterminismProfile {
+    /// Allow random ordering non-determinism
+    #[default]
+    Random,
+
+    /// Require determinism
+    #[allow(unused)]
+    Deterministic,
+}
+
+impl std::fmt::Display for AsyncDeterminismProfile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Self::Deterministic => "deterministic",
+                Self::Random => "random",
+            }
+        )
+    }
+}
+
+/// Arguments to `render_intrinsics`
+pub struct RenderIntrinsicsArgs<'a> {
+    /// List of intrinsics being built for use
+    pub(crate) intrinsics: &'a mut BTreeSet<Intrinsic>,
+    /// Whether to use NodeJS compat
+    pub(crate) no_nodejs_compat: bool,
+    /// Whether instantiation has occurred
+    pub(crate) instantiation: bool,
+    /// The kind of determinism to use
+    pub(crate) determinism: AsyncDeterminismProfile,
+}
+
+/// Intrinsics that should be rendered as early as possible
+const EARLY_INTRINSICS: [Intrinsic; 18] = [
+    Intrinsic::DebugLog,
+    Intrinsic::GlobalAsyncDeterminism,
+    Intrinsic::GlobalComponentAsyncLowersClass,
+    Intrinsic::GlobalComponentMemoriesClass,
+    Intrinsic::RepTableClass,
+    Intrinsic::CoinFlip,
+    Intrinsic::ConstantI32Min,
+    Intrinsic::ConstantI32Max,
+    Intrinsic::TypeCheckValidI32,
+    Intrinsic::TypeCheckAsyncFn,
+    Intrinsic::AsyncFunctionCtor,
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
+    Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
+    Intrinsic::PromiseWithResolversPonyfill,
+    Intrinsic::Host(HostIntrinsic::PrepareCall),
+    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
+    Intrinsic::Host(HostIntrinsic::SyncStartCall),
+];
+
+/// Emits the intrinsic `i` to this file and then returns the name of the
+/// intrinsic.
+pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
+    let mut output = Source::default();
+    let mut rendered_intrinsics = HashSet::new();
+
+    // Render some early intrinsics
+    for intrinsic in EARLY_INTRINSICS {
+        intrinsic.render(&mut output, &args);
+        rendered_intrinsics.insert(intrinsic.name());
+    }
+
+    // Add intrinsics to the list we must render
+    if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
+        || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
+    {
+        args.intrinsics.insert(Intrinsic::HasOwnProperty);
+    }
+    if args
+        .intrinsics
+        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
+    {
+        args.intrinsics.insert(Intrinsic::IsLE);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
+    {
+        output.push_str(
+            "
+            const i32ToF32I = new Int32Array(1);
+            const i32ToF32F = new Float32Array(i32ToF32I.buffer);
+        ",
+        );
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
+    {
+        output.push_str(
+            "
+            const i64ToF64I = new BigInt64Array(1);
+            const i64ToF64F = new Float64Array(i64ToF64I.buffer);
+        ",
+        );
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Resource(
+        ResourceIntrinsic::ResourceTransferBorrow,
+    )) || args.intrinsics.contains(&Intrinsic::Resource(
+        ResourceIntrinsic::ResourceTransferBorrowValidLifting,
+    )) {
+        args.intrinsics.insert(Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTableCreateBorrow,
+        ));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8)]);
+    }
+
+    // Attempting to perform a debug message hoist will require string encoding to memory
+    if args.intrinsics.contains(&Intrinsic::ErrCtx(
+        ErrCtxIntrinsic::ErrorContextDebugMessage,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::String(StringIntrinsic::Utf8Encode),
+            &Intrinsic::String(StringIntrinsic::Utf16Encode),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+        ]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::ErrCtx(
+        ErrCtxIntrinsic::ErrorContextDebugMessage,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
+            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+            &Intrinsic::AsyncEventCodeEnum,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::TypeCheckValidI32,
+            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+            &Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Component(ComponentIntrinsic::BackpressureSet))
+    {
+        args.intrinsics.extend([&Intrinsic::Component(
+            ComponentIntrinsic::GetOrCreateAsyncState,
+        )]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Component(
+        ComponentIntrinsic::GetOrCreateAsyncState,
+    )) {
+        args.intrinsics.extend([&Intrinsic::RepTableClass]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+            &Intrinsic::RepTableClass,
+            &Intrinsic::AwaitableClass,
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
+            &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::Component(
+        ComponentIntrinsic::GetOrCreateAsyncState,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
+            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
+        | args
+            .intrinsics
+            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+        | args
+            .intrinsics
+            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+    {
+        args.intrinsics
+            .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
+            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
+            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+    {
+        args.intrinsics
+            .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncTask(
+        AsyncTaskIntrinsic::CreateNewCurrentTask,
+    )) || args
+        .intrinsics
+        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
+        || args
+            .intrinsics
+            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::EndCurrentTask))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+        ]);
+    }
+
+    if args
+        .intrinsics
+        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
+    {
+        args.intrinsics.extend([
+            &Intrinsic::RepTableClass,
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
+        ]);
+    }
+
+    for current_intrinsic in args.intrinsics.iter() {
+        // Skip already rendered intrinsics (i.e. the early intrinsics)
+        if rendered_intrinsics.contains(current_intrinsic.name()) {
+            continue;
+        }
+
+        current_intrinsic.render(&mut output, &args);
+    }
 
     output
 }
@@ -1130,7 +1151,7 @@ impl Intrinsic {
 
             // Debugging
             Intrinsic::DebugLog => "_debugLog",
-            Intrinsic::PromiseWithResolversPonyfill => unreachable!("always global"),
+            Intrinsic::PromiseWithResolversPonyfill => "promiseWithResolvers",
 
             // Types
             Intrinsic::ConstantI32Min => "I32_MIN",

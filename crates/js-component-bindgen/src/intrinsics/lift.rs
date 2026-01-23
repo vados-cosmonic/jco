@@ -8,7 +8,7 @@ use crate::source::Source;
 use super::conversion::ConversionIntrinsic;
 
 /// This enum contains intrinsics that enable Lift
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum LiftIntrinsic {
     /// Lift a boolean into provided storage, given a core type
     ///

@@ -5,7 +5,7 @@ use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement error contexts
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ErrCtxIntrinsic {
     /// Storage of component-wide "global" `error-context` metadata
     ///

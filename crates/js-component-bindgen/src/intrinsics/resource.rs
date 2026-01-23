@@ -4,7 +4,7 @@ use crate::intrinsics::Intrinsic;
 use crate::source::Source;
 
 /// This enum contains intrinsics for supporting Component Model resources
-#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
 pub enum ResourceIntrinsic {
     /// # Resource table slab implementation
     ///
