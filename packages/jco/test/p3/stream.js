@@ -18,7 +18,7 @@ suite('Stream (WASI P3)', () => {
             jco: {
                 transpile: {
                     extraArgs: {
-                        asyncExports: ['local:local/run#run'],
+                        minify: false,
                     },
                 },
             },
