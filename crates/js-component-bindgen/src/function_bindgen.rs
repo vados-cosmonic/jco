@@ -2173,10 +2173,10 @@ impl Bindgen for FunctionBindgen<'_> {
             Instruction::StreamLift { payload, ty } => {
                 let stream_ty = &crate::dealias(self.resolve, *ty);
                 let component_idx = self.canon_opts.instance.as_u32();
-                let stream_new_fn =
-                    self.intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
+                let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
+                    AsyncStreamIntrinsic::StreamNewFromLift,
+                ));
 
-                // TODO: save payload information in lifted stream
                 let (payload_lift_fn, payload_lower_fn) = match payload {
                     None => ("".into(), "".into()),
                     Some(payload_ty) => {
@@ -2238,14 +2238,12 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 };
 
-                // // TODO: save payload type size below and more information about the type w/ the stream?
-                // let payload_ty_size = self.sizes.size(payload_ty).size_wasm32();
+                let payload_ty_size_js = if let Some(payload_ty) = payload {
+                    self.sizes.size(payload_ty).size_wasm32().to_string()
+                } else {
+                    "null".into()
+                };
 
-                // NOTE: here, rather than create a new `Stream` "resource" using the saved
-                // ResourceData, we use the stream.new intrinsic directly.
-                //
-                // TODO: differentiate "locally" created streams and streams that are lifted in?
-                //
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
                 uwriteln!(
@@ -2253,7 +2251,14 @@ impl Bindgen for FunctionBindgen<'_> {
                     "
                     {payload_lift_fn}
                     {payload_lower_fn}
-                     const {result_var} = {stream_new_fn}({{ componentIdx: {component_idx}, streamTypeRep: {}, payloadLiftFn, payloadLowerFn, isUnitStream: {} }});",
+                    const {result_var} = {stream_new_from_lift_fn}({{
+                        componentIdx: {component_idx},
+                        streamTypeRep: {},
+                        payloadLiftFn,
+                        payloadTypeSize32: {payload_ty_size_js},
+                        payloadLowerFn,
+                        isUnitStream: {},
+                    }});",
                     stream_ty.index(),
                     payload.is_none(),
                 );

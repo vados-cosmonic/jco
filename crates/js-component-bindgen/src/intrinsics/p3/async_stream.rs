@@ -45,6 +45,24 @@ pub enum AsyncStreamIntrinsic {
     /// ```
     StreamNew,
 
+    /// Create a new stream during a lift (`Instruction::StreamLift`).
+    ///
+    /// This is distinct from plain stream creation, because we are provided more information,
+    /// particularly the relevant types to teh stream and lift/lower fns for the stream.
+    ///
+    /// ```ts
+    /// type params = {
+    ///     componentIdx: number,
+    ///     streamTypeRep: number,
+    ///     payloadLiftFn: Array<Function>,
+    ///     payloadLowerFn: Array<Function>,
+    ///     isUnitStream: boolean,
+    /// }
+    /// function streamNewFromLift(p: params);
+    /// ```
+    ///
+    StreamNewFromLift,
+
     /// Read from a stream
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturereadwrite
@@ -379,8 +397,45 @@ impl AsyncStreamIntrinsic {
                     function {stream_new_fn}(args) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', args);
                         const {{ streamTableIdx, callerComponentIdx }} = args;
+                        console.log("ARGS??", args);
+                        if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
 
-                        if (!callerComponentIdx) {{ throw new Error("missing caller component idx"); }}
+                        const taskMeta = {current_task_get_fn}(callerComponentIdx);
+                        if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
+
+                        const task = taskMeta.task
+                        if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
+
+                        if (task.componentIdx() !== callerComponentIdx) {{
+                            throw new Error(`task component idx [${{task.componentIdx()}}] does not match stream new intrinsic component idx [${{callerComponentIdx}}]`);
+                        }}
+
+                        const cstate = {get_or_create_async_state_fn}(callerComponentIdx);
+                        if (!cstate.mayLeave) {{
+                            throw new Error('component instance is not marked as may leave during stream.new');
+                        }}
+
+                        const {{ writableIdx, readableIdx }} = cstate.createStream({{ tableIdx: streamTableIdx }});
+
+                        return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                    }}
+                "#));
+            }
+
+            Self::StreamNewFromLift => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let stream_new_fn = Self::StreamNew.name();
+                let current_task_get_fn =
+                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                output.push_str(&format!(r#"
+                    function {stream_new_fn}(args) {{
+                        {debug_log_fn}('[{stream_new_fn}()] args', args);
+                        const {{ streamTableIdx, callerComponentIdx }} = args;
+                        console.log("ARGS??", args);
+                        if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
+
                         const taskMeta = {current_task_get_fn}(callerComponentIdx);
                         if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
 

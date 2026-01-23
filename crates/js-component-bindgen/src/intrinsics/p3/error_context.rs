@@ -328,7 +328,7 @@ impl ErrCtxIntrinsic {
                         {debug_log_fn}('[{err_ctx_transfer_fn}()] args', {{ handle, srcTable, destTable }});
 
                         const componentIdx = {current_component_idx_globals}.at(-1);
-                        if (!componentIdx) {{
+                        if (componentIdx === undefined) {{
                             throw new Error("missing current component idx");
                         }}
 
