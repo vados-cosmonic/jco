@@ -1780,6 +1780,7 @@ impl AsyncTaskIntrinsic {
                         subtask.registerOnResolveHandler((res) => {{
                             {debug_log_fn}('[{lower_import_fn}()] handling subtask result', {{ res, subtaskID: subtask.id() }});
                             const {{ memory, resultPtr, realloc }} = subtask.getCallMetadata();
+                            if (resultLowerFns.length === 0) {{ return; }}
                             resultLowerFns[0]({{ componentIdx, memory, realloc, vals: [res], storagePtr: resultPtr }});
                         }});
 
