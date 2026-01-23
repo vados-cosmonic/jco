@@ -174,7 +174,7 @@ pub enum AsyncStreamIntrinsic {
     ///
     /// function streamTransfer(srcComponentIdx: u32, srcTableIdx: u32, destTableIdx: u32): bool;
     /// ```
-    StreamTransfer
+    StreamTransfer,
 }
 
 impl AsyncStreamIntrinsic {
@@ -209,37 +209,37 @@ impl AsyncStreamIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source) {
         match self {
-            // TODO: implement lone waitable usage
             Self::StreamEndClass => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_end_class = Self::StreamEndClass.name();
-                output.push_str(&format!("
+                output.push_str(&format!(
+                    r#"
                     class {stream_end_class} {{
                         #waitable = null;
-                        #elementTypeRep = null;
+                        #tableIdx = null;
                         #componentInstanceID = null;
                         #dropped = false;
 
-                        const CopyResult = {{
+                        static CopyResult = {{
                             COMPLETED: 0,
                             DROPPED: 1,
                             CANCELLED: 1,
-                        }}
+                        }};
 
                         constructor(args) {{
                             {debug_log_fn}('[{stream_end_class}#constructor()] args', args);
-                            if (!args?.elementTypeRep || typeof args.elementTypeRep !== 'number') {{
-                                throw new TypeError('missing elementTypeRep [' + args.elementTypeRep + ']');
+                            const {{ tableIdx, componentIdx }} = args;
+                            if (tableIdx === undefined || typeof tableIdx !== 'number') {{
+                                throw new TypeError(`missing element type rep [${{tableIdx}}]`);
                             }}
-                            if (args.elementTypeRep <= 0 || args.elementTypeRep > 2_147_483_647 ))  {{
-                                throw new TypeError('invalid  elementTypeRep [' + args.elementTypeRep + ']');
+                            if (tableIdx < 0 || tableIdx > 2_147_483_647) {{
+                                throw new TypeError(`invalid  tableIdx [${{tableIdx}}]`);
                             }}
-                            this.#elementTypeRep = args.elementTypeRep;
+                            this.#tableIdx = args.tableIdx;
                             this.#componentInstanceID = args.componentInstanceID ??= null;
                         }}
 
-                        elementTypeRep() {{ return this.#elementTypeRep; }}
-
+                        tableIdx() {{ return this.#tableIdx; }}
                         isHostOwned() {{ return this.#componentInstanceID === null; }}
 
                         setWaitableEvent(fn) {{
@@ -257,7 +257,8 @@ impl AsyncStreamIntrinsic {
                             this.#dropped = true;
                         }}
                     }}
-                "));
+                "#
+                ));
             }
 
             Self::StreamReadableEndClass | Self::StreamWritableEndClass => {
@@ -289,6 +290,20 @@ impl AsyncStreamIntrinsic {
                     _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
+                let type_getter_impl = match self {
+                    Self::StreamWritableEndClass => "
+                         isReadable() { return false; }
+                         isWritable() { return true; }
+                    "
+                    .to_string(),
+                    Self::StreamReadableEndClass => "
+                         isReadable() { return true; }
+                         isWritable() { return false; }
+                    "
+                    .to_string(),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
+                };
+
                 output.push_str(&format!("
                     class {class_name} extends {stream_end_class} {{
                         #copying = false;
@@ -310,6 +325,8 @@ impl AsyncStreamIntrinsic {
                             if (!this.#copying) {{ throw new Error('attempt to clear while copying not in progress'); }}
                             this.#copying = false;
                         }}
+
+                        {type_getter_impl}
 
                         isDone() {{ return this.#done; }}
                         markDone() {{
@@ -354,9 +371,6 @@ impl AsyncStreamIntrinsic {
             Self::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_new_fn = Self::StreamNew.name();
-                let stream_readable_end_class = Self::StreamReadableEndClass.name();
-                let stream_writable_end_class = Self::StreamWritableEndClass.name();
-                let global_stream_map = Self::GlobalStreamMap.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let get_or_create_async_state_fn =
@@ -366,8 +380,6 @@ impl AsyncStreamIntrinsic {
                         {debug_log_fn}('[{stream_new_fn}()] args', args);
                         const {{ streamTableIdx, callerComponentIdx }} = args;
 
-                        console.log("args", args);
-
                         if (!callerComponentIdx) {{ throw new Error("missing caller component idx"); }}
                         const taskMeta = {current_task_get_fn}(callerComponentIdx);
                         if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
@@ -375,18 +387,16 @@ impl AsyncStreamIntrinsic {
                         const task = taskMeta.task
                         if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
 
-                        const state = {get_or_create_async_state_fn}(callerComponentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave during stream.new'); }}
+                        if (task.componentIdx() !== callerComponentIdx) {{
+                            throw new Error(`task component idx [${{task.componentIdx()}}] does not match stream new intrinsic component idx [${{callerComponentIdx}}]`);
+                        }}
 
-                        let stream = new TransformStream();
-                        let writableIdx = {global_stream_map}.insert(new {stream_writable_end_class}({{
-                            writable: stream.writable,
-                            componentIdx: callerComponentIdx,
-                        }}));
-                        let readableIdx = {global_stream_map}.insert(new {stream_readable_end_class}({{
-                            readable: stream.readable,
-                            componentIdx: callerComponentIdx,
-                        }}));
+                        const cstate = {get_or_create_async_state_fn}(callerComponentIdx);
+                        if (!cstate.mayLeave) {{
+                            throw new Error('component instance is not marked as may leave during stream.new');
+                        }}
+
+                        const {{ writableIdx, readableIdx }} = cstate.createStream({{ tableIdx: streamTableIdx }});
 
                         return BigInt(writableIdx) << 32n | BigInt(readableIdx);
                     }}
@@ -570,7 +580,6 @@ impl AsyncStreamIntrinsic {
             // TODO: update after stream map is present
             Self::StreamDropReadable | Self::StreamDropWritable => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let global_stream_map = Self::GlobalStreamMap.name();
                 let stream_drop_fn = self.name();
                 let current_task_get_fn =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
@@ -582,63 +591,77 @@ impl AsyncStreamIntrinsic {
                 };
                 let get_or_create_async_state_fn =
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!("
-                    function {stream_drop_fn}(
-                        streamIdx,
-                        streamEndIdx,
-                    ) {{
-                        {debug_log_fn}('[{stream_drop_fn}()] args', {{
-                            streamIdx,
-                            streamEndIdx,
-                        }});
+                output.push_str(&format!(r#"
+                    function {stream_drop_fn}(ctx, streamIdx) {{
+                        {debug_log_fn}('[{stream_drop_fn}()] args', {{ ctx, streamIdx }});
+                        const {{ streamTableIdx, componentIdx }} = ctx;
 
-                        const stream = {global_stream_map}.get(streamIdx);
-                        if (!stream) {{ throw new Error('missing stream idx from drop stream'); }}
-
-                        const componentInstanceID = stream.componentInstanceID;
-                        if (componentInstanceID === undefined) {{
-                            throw new Error('missing/invalid component instance ID on stream');
-                        }}
-
-                        const task = {current_task_get_fn}(componentInstanceID);
+                        const task = {current_task_get_fn}(componentIdx);
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const state = {get_or_create_async_state_fn}(task.componentIdx);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`missing component state for component idx [${{componentIdx}}]`); }}
 
-                        const streamEnd = {global_stream_map}.remove(streamEndIdx);
-                        if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndIdx + ']'); }}
-
-                        if (!(streamEnd instanceof {stream_end_class})) {{
+                        const stream = cstate.removeStreamEnd({{ tableIdx: streamTableIdx, streamIdx }});
+                        if (!stream) {{
+                            throw new Error(`missing stream [${{streamIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`);
+                        }}
+                        if (!(stream instanceof {stream_end_class})) {{
                           throw new Error('invalid stream end class, expected [{stream_end_class}]');
                         }}
-
-                        if (streamEnd.elementTypeRep() !== stream.elementTypeRep()) {{
-                          throw new Error('stream type [' + stream.elementTypeRep() + '], does not match stream end type [' + streamEnd.elementTypeRep() + ']');
-                        }}
                     }}
-                "));
+                "#));
             }
 
             Self::StreamTransfer => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_drop_fn = self.name();
-                output.push_str(&format!(r#"
-                    function {stream_drop_fn}(
-                        srcComponentIdx,
-                        srcStreamTableIdx,
-                        destStreamTableIdx,
-                    ) {{
-                        {debug_log_fn}('[{stream_drop_fn}()] args', {{
-                            srcComponentIdx,
-                            srcStreamTableIdx,
-                            destStreamTableIdx,
-                        }});
-                        throw new Error('{stream_drop_fn} implemented');
-                      }}
-                "#));
-            }
+                let stream_transfer_fn = self.name();
+                let current_component_idx_globals =
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs.name();
+                let current_async_task_id_globals =
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds.name();
+                let current_task_get_fn = AsyncTaskIntrinsic::GetCurrentTask.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
 
+                output.push_str(&format!(
+                    r#"
+                    function {stream_transfer_fn}(
+                        srcStreamIdx,
+                        srcTableIdx,
+                        destTableIdx,
+                    ) {{
+                        {debug_log_fn}('[{stream_transfer_fn}()] args', {{
+                            srcStreamIdx,
+                            srcTableIdx,
+                            destTableIdx,
+                        }});
+
+                        const taskMeta = {current_task_get_fn}(
+                            {current_component_idx_globals}.at(-1),
+                            {current_async_task_id_globals}.at(-1)
+                        );
+                        if (!taskMeta) {{ throw new Error('missing current task metadata while doing stream transfer'); }}
+
+                        const task = taskMeta.task;
+                        if (!task) {{ throw new Error('missing task while doing stream transfer'); }}
+
+                        const componentIdx = task.componentIdx();
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`unexpectedly missing async state for component [${{componentIdx}}]`); }}
+
+                        const stream = cstate.removeStreamEnd({{ tableIdx: srcTableIdx, streamIdx: srcStreamIdx }});
+                        if (!stream.isReadable()) {{ throw new Error("writable stream ends cannot be moved"); }}
+                        if (stream.isDone()) {{
+                            throw new Error('readable ends cannot be moved once writable ends are dropped');
+                        }}
+
+                        const streamIdx = cstate.addStreamEnd({{ tableIdx: destTableIdx, stream }});
+                        return streamIdx;
+                      }}
+                "#
+                ));
+            }
         }
     }
 }

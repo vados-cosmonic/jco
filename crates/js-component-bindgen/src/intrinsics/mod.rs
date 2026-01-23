@@ -1045,6 +1045,14 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         ]);
     }
 
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::StreamWritableEndClass,
+    )) {
+        args.intrinsics.extend([&Intrinsic::AsyncStream(
+            AsyncStreamIntrinsic::StreamEndClass,
+        )]);
+    }
+
     for current_intrinsic in args.intrinsics.iter() {
         // Skip already rendered intrinsics (i.e. the early intrinsics)
         if rendered_intrinsics.contains(current_intrinsic.name()) {

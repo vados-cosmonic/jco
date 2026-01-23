@@ -1331,25 +1331,33 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamDropReadable { ty, .. } => {
+            Trampoline::StreamDropReadable { ty, instance } => {
                 let stream_drop_readable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropReadable,
                 ));
+                let stream_idx = ty.as_u32();
+                let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {stream_idx});\n",
-                    stream_idx = ty.as_u32(),
+                    "const trampoline{i} = {stream_drop_readable_fn}.bind(null, {{
+                        streamTableIdx: {stream_idx},
+                        componentIdx: {instance_idx},
+                    }});\n",
                 );
             }
 
-            Trampoline::StreamDropWritable { ty, .. } => {
+            Trampoline::StreamDropWritable { ty, instance } => {
                 let stream_drop_writable_fn = self.bindgen.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamDropWritable,
                 ));
+                let stream_idx = ty.as_u32();
+                let instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {stream_idx});\n",
-                    stream_idx = ty.as_u32(),
+                    "const trampoline{i} = {stream_drop_writable_fn}.bind(null, {{
+                        streamTableIdx: {stream_idx},
+                        componentIdx: {instance_idx},
+                    }});\n",
                 );
             }
 

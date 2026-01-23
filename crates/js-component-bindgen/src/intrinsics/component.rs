@@ -1,6 +1,6 @@
 //! Intrinsics that represent helpers that manage per-component state
 
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::{intrinsics::{Intrinsic, p3::async_stream::AsyncStreamIntrinsic}, source::Source};
 
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -138,8 +138,10 @@ impl ComponentIntrinsic {
             }
 
             Self::ComponentAsyncStateClass => {
-                let rep_table_class = Intrinsic::RepTableClass.name();
                 let debug_log_fn = Intrinsic::DebugLog.name();
+                let rep_table_class = Intrinsic::RepTableClass.name();
+                let stream_readable_end_class = AsyncStreamIntrinsic::StreamReadableEndClass.name();
+                let stream_writable_end_class = AsyncStreamIntrinsic::StreamWritableEndClass.name();
                 output.push_str(&format!(
                     r#"
                     class {class_name} {{
@@ -163,6 +165,8 @@ impl ComponentIntrinsic {
 
                         mayLeave = true;
 
+                        #streams;
+
                         waitableSets;
                         waitables;
                         subtasks;
@@ -172,9 +176,11 @@ impl ComponentIntrinsic {
                             this.waitableSets = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitable sets` }});
                             this.waitables = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] waitables` }});
                             this.subtasks = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] subtasks` }});
+                            this.#streams = new Map();
                         }};
 
                         componentIdx() {{ return this.#componentIdx; }}
+                        streams() {{ return this.#streams; }}
 
                         errored() {{ return this.#errored !== null; }}
                         setErrored(err) {{
@@ -402,6 +408,105 @@ impl ComponentIntrinsic {
 
                         addPendingTask(task) {{
                             this.#pendingTasks.push(task);
+                        }}
+
+                        addStreamTable(args) {{
+                            {debug_log_fn}('[{class_name}#addStreamTable()] args', args);
+                            const {{ tableIdx, table }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream table"); }}
+                            if (!table) {{ throw new Error("missing table while adding stream table"); }}
+
+                            if (this.#streams.has(tableIdx)) {{ throw new Error("stream table index already present"); }}
+
+                            this.#streams.set(tableIdx, table);
+                        }}
+
+                        removeStreamTable(args) {{
+                            {debug_log_fn}('[{class_name}#removeStreamTable()] args', args);
+                            const {{ tableIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream table"); }}
+
+                            const tbl = this.#streams.get(tableIdx);
+                            const removed = this.#streams.delete(tableIdx);
+                            if (!removed) {{
+                                 throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream table`);
+                            }}
+
+                            return tbl;
+                        }}
+
+
+                        addStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#addStreamEnd()] args', args);
+                            const {{ tableIdx, stream }} = args;
+
+                            let tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                tbl = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] streams` }});
+                                this.#streams.set(tableIdx, tbl);
+                            }}
+
+                            const streamIdx = tbl.insert(stream);
+                            return streamIdx;
+                        }}
+
+                        createStream(args) {{
+                            {debug_log_fn}('[{class_name}#createStream()] args', args);
+                            const {{ tableIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while adding stream"); }}
+
+                            let tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                tbl = new {rep_table_class}({{ target: `component [${{this.#componentIdx}}] streams` }});
+                                this.#streams.set(tableIdx, tbl);
+                            }}
+
+                            const stream = new TransformStream();
+                            const writableIdx = tbl.insert(new {stream_writable_end_class}({{
+                                tableIdx,
+                                writable: stream.writable,
+                                componentIdx: this.#componentIdx,
+                            }}));
+                            const readableIdx = tbl.insert(new {stream_readable_end_class}({{
+                                tableIdx,
+                                readable: stream.readable,
+                                componentIdx: this.#componentIdx,
+                            }}));
+
+                            return {{ stream, writableIdx, readableIdx }};
+                        }}
+
+                        getStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#getStreamEnd()] args', args);
+                            const {{ tableIdx, streamIdx }} = args;
+
+                            const tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream`);
+                            }}
+
+                            const stream = tbl.get(streamIdx);
+                            return stream;
+                        }}
+
+                        removeStreamEnd(args) {{
+                            {debug_log_fn}('[{class_name}#removeStreamEnd()] args', args);
+                            const {{ tableIdx, streamIdx }} = args;
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream"); }}
+                            if (streamIdx === undefined) {{ throw new Error("missing stream idx while removing stream"); }}
+
+                            const tbl = this.#streams.get(tableIdx);
+                            if (!tbl) {{
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream`);
+                            }}
+
+                            const stream = tbl.get(streamIdx);
+                            if (!stream) {{ throw new Error(`component [${{this.#componentIdx}}] missing stream [${{streamIdx}}]`); }}
+                            if (!tbl.remove(streamIdx)) {{
+                                 throw new Error(`missing stream [${{streamIdx}}] (table [${{tableIdx}}]) in component [${{this.#componentIdx}}] while removing stream`);
+                            }}
+
+                            return stream;
                         }}
                     }}
                     "#,

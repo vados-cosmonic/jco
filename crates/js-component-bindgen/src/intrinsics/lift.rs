@@ -1,6 +1,8 @@
 //! Intrinsics that represent helpers that enable Lift integration
 
 use crate::intrinsics::Intrinsic;
+use crate::intrinsics::component::ComponentIntrinsic;
+use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::error_context::ErrCtxIntrinsic;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::source::Source;
@@ -834,12 +836,32 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStream => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                output.push_str(&format!("
-                    function _liftFlatStream(componentTableIdx, size, memory, vals, storagePtr, storageLen) {{
-                        {debug_log_fn}('[_liftFlatStream()] args', {{ size, memory, vals, storagePtr, storageLen }});
-                        throw new Error('flat lift for streams not yet implemented!');
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+                let stream_map =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap).name();
+                output.push_str(&format!(r#"
+                    function _liftFlatStream(componentTableIdx, ctx) {{
+                        {debug_log_fn}('[_liftFlatStream()] args', {{ componentTableIdx, ctx }});
+                        const {{ memory, useDirectParams, params, componentIdx }} = ctx;
+
+                        const streamIdx = params[0];
+                        if (!streamIdx) {{ throw new Error('missing stream idx'); }}
+
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate) {{ throw new Error(`missing async state for component [${{componentIdx}}]`); }}
+
+                        const stream = cstate.getStreamEnd({{ tableIdx: componentTableIdx, streamIdx }});
+                        if (!stream) {{
+                            throw new Error(`missing stream [${{streamIdx}}] (table [${{componentTableIdx}}]) in component [${{componentIdx}}] during lift`);
+                        }}
+
+                        const rep = {stream_map}.insert(stream);
+                        const val = {{ type: 'Stream', rep }};
+
+                        return [ rep, ctx ];
                     }}
-                "));
+                "#));
             }
 
             // Since error contexts are reference counted, when one is lifted from a component to a
