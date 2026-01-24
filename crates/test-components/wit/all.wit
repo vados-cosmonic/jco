@@ -8,18 +8,11 @@ interface async-add-s32 {
     add: async func(a: s32, b: s32) -> result<s32, string>;
 }
 
-interface get-stream-async {
+interface get-stream {
     /// Get a stream that returns the exact same u32s that were passed in
     get-stream-u32: async func(vals: list<u32>) -> result<stream<u32>, string>;
     /// Get a stream that returns the exact same s32s that were passed in
     get-stream-s32: async func(vals: list<s32>) -> result<stream<s32>, string>;
-}
-
-interface get-stream {
-    /// Get a stream that returns the exact same u32s that were passed in
-    get-stream-u32: func(vals: list<u32>) -> result<stream<u32>, string>;
-    /// Get a stream that returns the exact same u32s that were passed in
-    get-stream-s32: func(vals: list<s32>) -> result<stream<s32>, string>;
 }
 
 world async-simple-import {
@@ -45,5 +38,4 @@ world async-simple-return {
 
 world async-stream-tx {
   export get-stream;
-  export get-stream-async;
 }

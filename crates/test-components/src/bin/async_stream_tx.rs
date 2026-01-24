@@ -13,7 +13,7 @@ use crate::bindings::wit_stream::StreamPayload;
 
 struct Component;
 
-fn stream_values<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {
+fn stream_values_async<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, String> {
     let (mut tx, rx) = wit_stream::new();
     wit_bindgen::spawn(async move {
         for val in vals {
@@ -23,23 +23,13 @@ fn stream_values<T: StreamPayload>(vals: Vec<T>) -> Result<StreamReader<T>, Stri
     Ok(rx)
 }
 
-impl bindings::exports::jco::test_components::get_stream_async::Guest for Component {
+impl bindings::exports::jco::test_components::get_stream::Guest for Component {
     async fn get_stream_u32(vals: Vec<u32>) -> Result<StreamReader<u32>, String> {
-        stream_values(vals)
+        stream_values_async(vals)
     }
 
     async fn get_stream_s32(vals: Vec<i32>) -> Result<StreamReader<i32>, String> {
-        stream_values(vals)
-    }
-}
-
-impl bindings::exports::jco::test_components::get_stream::Guest for Component {
-    fn get_stream_u32(vals: Vec<u32>) -> Result<StreamReader<u32>, String> {
-        stream_values(vals)
-    }
-
-    fn get_stream_s32(vals: Vec<i32>) -> Result<StreamReader<i32>, String> {
-        stream_values(vals)
+        stream_values_async(vals)
     }
 }
 

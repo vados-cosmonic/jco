@@ -3,7 +3,10 @@ use std::fmt::Write;
 use std::mem;
 
 use heck::{ToLowerCamelCase, ToUpperCamelCase};
-use wasmtime_environ::component::{CanonicalOptions, ResourceIndex, TypeResourceTableIndex};
+use wasmtime_environ::component::{
+    CanonicalOptions, ResourceIndex, TypeComponentLocalErrorContextTableIndex,
+    TypeFutureTableIndex, TypeResourceTableIndex, TypeStreamTableIndex,
+};
 use wit_bindgen_core::abi::{Bindgen, Bitcast, Instruction};
 use wit_component::StringEncoding;
 use wit_parser::abi::WasmType;
@@ -57,6 +60,23 @@ pub enum ResourceData {
     Guest {
         resource_name: String,
         prefix: Option<String>,
+        extra: Option<ResourceExtraData>,
+    },
+}
+
+/// Extra data that is kept along with Resource Data depending on which it is
+#[derive(Clone, Debug, PartialEq)]
+pub enum ResourceExtraData {
+    Stream {
+        table_idx: TypeStreamTableIndex,
+        elem_ty: Option<Type>,
+    },
+    Future {
+        table_idx: TypeFutureTableIndex,
+        elem_ty: Option<Type>,
+    },
+    ErrorContext {
+        table_idx: TypeComponentLocalErrorContextTableIndex,
     },
 }
 
@@ -98,16 +118,9 @@ pub struct ResourceTable {
 /// A mapping of type IDs to the resources that they represent
 pub type ResourceMap = BTreeMap<TypeId, ResourceTable>;
 
-/// A mapping of remote reps that represent imported resources
-pub type RemoteResourceMap = BTreeMap<u32, ResourceTable>;
-
 pub struct FunctionBindgen<'a> {
     /// Mapping of resources for types that have corresponding definitions locally
     pub resource_map: &'a ResourceMap,
-
-    /// Mapping of resources for types that are defined only in the remote component
-    /// and must be auto-vivicated locally.
-    pub remote_resource_map: &'a RemoteResourceMap,
 
     /// Whether current resource borrows need to be deactivated
     pub clear_resource_borrows: bool,
@@ -1245,6 +1258,8 @@ impl Bindgen for FunctionBindgen<'_> {
 
             Instruction::CallWasm { name, sig } => {
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
+                let has_post_return = self.post_return.is_some();
+                let is_async = self.is_async;
                 uwriteln!(
                     self.src,
                     "{debug_log_fn}('{prefix} [Instruction::CallWasm] enter', {{
@@ -1255,8 +1270,11 @@ impl Bindgen for FunctionBindgen<'_> {
                       }});",
                     param_count = sig.params.len(),
                     prefix = self.tracing_prefix,
-                    is_async = self.is_async,
-                    has_post_return = self.post_return.is_some(),
+                );
+
+                uwriteln!(
+                    self.src,
+                    r#"console.log("FN [{name}] ASYNC? [{is_async}], HAS POST RETURN? [{has_post_return}]");"#,
                 );
 
                 // Write out whether the caller was host provided
@@ -1307,7 +1325,6 @@ impl Bindgen for FunctionBindgen<'_> {
                     }
                 );
 
-                // Print post-return if tracing is enabled
                 if self.tracing_enabled {
                     let prefix = self.tracing_prefix;
                     let to_result_string =
@@ -1836,7 +1853,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Guest {
                         resource_name,
                         prefix,
+                        extra,
                     } => {
+                        assert!(
+                            extra.is_none(),
+                            "plain resource handles do not carry extra data"
+                        );
+
                         let symbol_resource_handle =
                             self.intrinsic(Intrinsic::SymbolResourceHandle);
                         let prefix = prefix.as_deref().unwrap_or("");
@@ -1987,7 +2010,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     ResourceData::Guest {
                         resource_name,
                         prefix,
+                        extra,
                     } => {
+                        assert!(
+                            extra.is_none(),
+                            "plain resource handles do not carry extra data"
+                        );
+
                         let upper_camel = resource_name.to_upper_camel_case();
                         let lower_camel = resource_name.to_lower_camel_case();
                         let prefix = prefix.as_deref().unwrap_or("");
@@ -2171,15 +2200,41 @@ impl Bindgen for FunctionBindgen<'_> {
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let stream_idx = &crate::dealias(self.resolve, *ty);
                 let component_idx = self.canon_opts.instance.as_u32();
                 let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamNewFromLift,
                 ));
 
-                let stream_table_idx = operands
+                // We must look up the type idx to find the stream
+                let type_id = &crate::dealias(self.resolve, *ty);
+                let ResourceTable {
+                    imported: true,
+                    data:
+                        ResourceData::Guest {
+                            extra:
+                                Some(ResourceExtraData::Stream {
+                                    table_idx: stream_table_idx_ty,
+                                    elem_ty: stream_element_ty,
+                                }),
+                            ..
+                        },
+                } = self
+                    .resource_map
+                    .get(type_id)
+                    .expect("missing resource mapping for stream lift")
+                else {
+                    unreachable!("invalid resource table observed during stream lift");
+                };
+
+                assert_eq!(
+                    *stream_element_ty, **payload,
+                    "stream element type mismatch"
+                );
+
+                let arg_stream_idx = operands
                     .first()
                     .expect("unexpectedly missing stream table idx arg in StreamLift");
+
                 let (payload_lift_fn, payload_lower_fn) = match payload {
                     None => ("null".into(), "null".into()),
                     Some(payload_ty) => {
@@ -2247,7 +2302,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     "null".into()
                 };
 
-                let stream_idx = stream_idx.index();
+                let stream_table_idx = stream_table_idx_ty.as_u32();
                 let is_unit_stream = payload.is_none();
 
                 let tmp = self.tmp();
@@ -2259,8 +2314,8 @@ impl Bindgen for FunctionBindgen<'_> {
                     {payload_lower_fn}
                     const {result_var} = {stream_new_from_lift_fn}({{
                         componentIdx: {component_idx},
-                        streamIdx: {stream_idx},
                         streamTableIdx: {stream_table_idx},
+                        streamIdx: {arg_stream_idx},
                         payloadLiftFn,
                         payloadTypeSize32: {payload_ty_size_js},
                         payloadLowerFn,

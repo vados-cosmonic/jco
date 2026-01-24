@@ -344,15 +344,29 @@ impl AsyncStreamIntrinsic {
                 let action_impl = match self {
                     Self::StreamWritableEndClass => format!(
                         r#"
-                         write() {{
-                             throw new Error("{class_name}#write() NOT IMPLEMENTED");
+                         async write(v) {{
+                            {debug_log_fn}('[{class_name}#write()] args', {{ v }});
+                             if (this.#writePromise === null) {{
+                                 const {{ promise, resolve, reject }} = Promise.withResolvers();
+                                 this.#writePromise = promise;
+                                 this.#writePromiseResolve = resolve;
+                                 this.#writePromiseReject = reject;
+                             }}
+                             await this.#writePromise;
                          }}
                         "#
                     ),
                     Self::StreamReadableEndClass => format!(
                         r#"
-                         read() {{
-                             throw new Error("{class_name}#read() NOT IMPLEMENTED");
+                         async read() {{
+                            {debug_log_fn}('[{class_name}#read()]');
+                             if (this.#readPromise === null) {{
+                                 const {{ promise, resolve, reject }} = Promise.withResolvers();
+                                 this.#readPromise = promise;
+                                 this.#readPromiseResolve = resolve;
+                                 this.#readPromiseReject = reject;
+                             }}
+                             await this.#readPromise;
                          }}
                         "#
                     ),
@@ -365,6 +379,14 @@ impl AsyncStreamIntrinsic {
                         #{stream_var_name} = null;
                         #dropped = false;
                         #done = false;
+
+                        #writePromise = null;
+                        #writePromiseResolve = null;
+                        #writePromiseReject = null;
+
+                        #readPromise = null;
+                        #readPromiseResolve = null;
+                        #readPromiseReject = null;
 
                         constructor(args) {{
                             {debug_log_fn}('[{class_name}#constructor()] args', args);
@@ -465,10 +487,10 @@ impl AsyncStreamIntrinsic {
                                 isWritable: streamEnd.isWritable(),
                                 hostStreamRep: this.#rep,
                                 readFn: async () => {{
-                                    return await stream.next();
+                                    return await streamEnd.read();
                                 }},
                                 writeFn: async (v) => {{
-                                    await stream.write(v);
+                                    await streamEnd.write(v);
                                 }},
                             }});
                         }}
@@ -510,14 +532,14 @@ impl AsyncStreamIntrinsic {
 
                         async next() {{
                             {debug_log_fn}('[{class_name}#next()]');
-                            if (!isReadable) {{ throw new Error("stream is not marked as readable and cannot be written from"); }}
+                            if (!this.#isReadable) {{ throw new Error("stream is not marked as readable and cannot be written from"); }}
 
                             return this.#readFn();
                         }}
 
                         async write() {{
                             {debug_log_fn}('[{class_name}#write()]');
-                            if (!isWritable) {{ throw new Error("stream is not marked as writable and cannot be written to"); }}
+                            if (!this.#isWritable) {{ throw new Error("stream is not marked as writable and cannot be written to"); }}
 
                             const objects = [...arguments];
                             if (!objects.length !== 1) {{
@@ -660,6 +682,18 @@ impl AsyncStreamIntrinsic {
                         count,
                     ) {{
                         {debug_log_fn}('[{stream_fn}()] args', {{
+                            componentInstanceID,
+                            memoryIdx,
+                            reallocIdx,
+                            stringEncoding,
+                            isAsync,
+                            streamEndIdx,
+                            typeIdx,
+                            ptr,
+                            count,
+                        }});
+
+                        console.log('DOING STREAM WRITE', {{
                             componentInstanceID,
                             memoryIdx,
                             reallocIdx,

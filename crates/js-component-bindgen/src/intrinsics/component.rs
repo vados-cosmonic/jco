@@ -483,6 +483,8 @@ impl ComponentIntrinsic {
                             const tbl = this.#streams.get(tableIdx);
                             if (!tbl) {{
                                 console.log("STREAMS?", this.#streams);
+                                console.log("REP TABLE @ 1?", this.#streams.get(1).get(1));
+                                console.log("REP TABLE @ 2?", this.#streams.get(1).get(2));
                                 throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while getting stream`);
                             }}
 
