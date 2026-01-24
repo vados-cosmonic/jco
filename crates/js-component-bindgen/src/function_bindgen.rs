@@ -2166,19 +2166,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 //
                 let stream_arg = operands
                     .first()
-                    .expect("unexpectedly missing ErrorContextLower arg");
+                    .expect("unexpectedly missing StreamLower arg");
                 results.push(stream_arg.clone());
             }
 
             Instruction::StreamLift { payload, ty } => {
-                let stream_ty = &crate::dealias(self.resolve, *ty);
+                let stream_idx = &crate::dealias(self.resolve, *ty);
                 let component_idx = self.canon_opts.instance.as_u32();
                 let stream_new_from_lift_fn = self.intrinsic(Intrinsic::AsyncStream(
                     AsyncStreamIntrinsic::StreamNewFromLift,
                 ));
 
+                let stream_table_idx = operands
+                    .first()
+                    .expect("unexpectedly missing stream table idx arg in StreamLift");
                 let (payload_lift_fn, payload_lower_fn) = match payload {
-                    None => ("".into(), "".into()),
+                    None => ("null".into(), "null".into()),
                     Some(payload_ty) => {
                         match payload_ty {
                             // TODO: reuse existing lifts
@@ -2244,6 +2247,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     "null".into()
                 };
 
+                let stream_idx = stream_idx.index();
+                let is_unit_stream = payload.is_none();
+
                 let tmp = self.tmp();
                 let result_var = format!("streamResult{tmp}");
                 uwriteln!(
@@ -2253,14 +2259,13 @@ impl Bindgen for FunctionBindgen<'_> {
                     {payload_lower_fn}
                     const {result_var} = {stream_new_from_lift_fn}({{
                         componentIdx: {component_idx},
-                        streamTypeRep: {},
+                        streamIdx: {stream_idx},
+                        streamTableIdx: {stream_table_idx},
                         payloadLiftFn,
                         payloadTypeSize32: {payload_ty_size_js},
                         payloadLowerFn,
-                        isUnitStream: {},
+                        isUnitStream: {is_unit_stream},
                     }});",
-                    stream_ty.index(),
-                    payload.is_none(),
                 );
                 results.push(result_var.clone());
             }

@@ -1038,7 +1038,6 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
     {
         args.intrinsics.extend([
-            &Intrinsic::RepTableClass,
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
             &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
@@ -1051,6 +1050,16 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
         args.intrinsics.extend([&Intrinsic::AsyncStream(
             AsyncStreamIntrinsic::StreamEndClass,
         )]);
+    }
+
+    if args.intrinsics.contains(&Intrinsic::AsyncStream(
+        AsyncStreamIntrinsic::StreamNewFromLift,
+    )) {
+        args.intrinsics.extend([
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
+            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamClass),
+        ]);
     }
 
     for current_intrinsic in args.intrinsics.iter() {

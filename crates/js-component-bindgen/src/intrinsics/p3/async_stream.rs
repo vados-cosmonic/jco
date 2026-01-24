@@ -30,6 +30,22 @@ pub enum AsyncStreamIntrinsic {
     /// The definition of the `StreamReadableEnd` JS class
     StreamReadableEndClass,
 
+    /// The definition of the `HostStream` JS class
+    ///
+    /// This class serves as an implementation for top level host-managed streams,
+    /// internal to the bindgen generated logic.
+    ///
+    /// External code is no expected to work in terms of `HostStream`, but rather deal with `Stream`s
+    ///
+    HostStreamClass,
+
+    /// The definition of the `Stream` JS class
+    ///
+    /// This class serves as an user-facign implementation of a Preview3 `stream`.
+    /// Usually this class is created via `HostStream#createStream()`.
+    ///
+    StreamClass,
+
     /// Create a new stream
     ///
     /// See: https://github.com/WebAssembly/component-model/blob/main/design/mvp/CanonicalABI.md#-canon-streamfuturenew
@@ -213,7 +229,10 @@ impl AsyncStreamIntrinsic {
             Self::StreamEndClass => "StreamEnd",
             Self::StreamWritableEndClass => "StreamWritableEnd",
             Self::StreamReadableEndClass => "StreamReadableEnd",
+            Self::HostStreamClass => "HostStream",
+            Self::StreamClass => "Stream",
             Self::StreamNew => "streamNew",
+            Self::StreamNewFromLift => "streamNewFromLift",
             Self::StreamRead => "streamRead",
             Self::StreamWrite => "streamWrite",
             Self::StreamDropReadable => "streamDropReadable",
@@ -322,6 +341,24 @@ impl AsyncStreamIntrinsic {
                     _ => unreachable!("impossible stream readable end class intrinsic"),
                 };
 
+                let action_impl = match self {
+                    Self::StreamWritableEndClass => format!(
+                        r#"
+                         write() {{
+                             throw new Error("{class_name}#write() NOT IMPLEMENTED");
+                         }}
+                        "#
+                    ),
+                    Self::StreamReadableEndClass => format!(
+                        r#"
+                         read() {{
+                             throw new Error("{class_name}#read() NOT IMPLEMENTED");
+                         }}
+                        "#
+                    ),
+                    _ => unreachable!("impossible stream readable end class intrinsic"),
+                };
+
                 output.push_str(&format!("
                     class {class_name} extends {stream_end_class} {{
                         #copying = false;
@@ -351,6 +388,7 @@ impl AsyncStreamIntrinsic {
                             this.#done = true;
                         }}
 
+                        {action_impl}
                         {copy_impl}
 
                         drop() {{
@@ -365,6 +403,133 @@ impl AsyncStreamIntrinsic {
                         }}
                     }}
                 "));
+            }
+
+            Self::HostStreamClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let class_name = self.name();
+                let stream_class = Self::StreamClass.name();
+                let get_or_create_async_state_fn =
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
+
+                output.push_str(&format!(
+                    r#"
+                    class {class_name} {{
+                        #componentIdx;
+                        #streamIdx;
+                        #streamTableIdx;
+
+                        #payloadLiftFn;
+                        #payloadLowerFn;
+                        #isUnitStream;
+
+                        #userStream;
+
+                        #rep = null;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{class_name}#constructor()] args', args);
+                            if (args.componentIdx === undefined) {{ throw new TypeError("missing component idx"); }}
+                            this.#componentIdx = args.componentIdx;
+
+                            if (!args.payloadLiftFn) {{ throw new TypeError("missing payload lift fn"); }}
+                            this.#payloadLiftFn = args.payloadLiftFn;
+
+                            if (!args.payloadLowerFn) {{ throw new TypeError("missing payload lower fn"); }}
+                            this.#payloadLowerFn = args.payloadLowerFn;
+
+                            if (args.streamIdx === undefined) {{ throw new Error("missing stream idx"); }}
+                            if (args.streamTableIdx === undefined) {{ throw new Error("missing stream table idx"); }}
+                            this.#streamIdx = args.streamIdx;
+                            this.#streamTableIdx = args.streamTableIdx;
+
+                            this.#isUnitStream = args.isUnitStream;
+                        }}
+
+                        setRep(rep) {{ this.#rep = rep; }}
+
+                        createUserStream(args) {{
+                           if (this.#userStream) {{ return this.#userStream; }}
+                           if (this.#rep === null) {{ throw new Error("unexpectedly missing rep for host stream"); }}
+
+                           const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                           if (!cstate) {{ throw new Error(`missing async state for component [${{this.#componentIdx}}]`); }}
+
+                           const streamEnd = cstate.getStreamEnd({{ tableIdx: this.#streamTableIdx, streamIdx: this.#streamIdx }});
+                           if (!streamEnd) {{
+                               throw new Error(`missing stream [${{this.#streamIdx}}] (table [${{this.#streamTableIdx}}], component [${{this.#componentIdx}}]`);
+                           }}
+
+                            return new {stream_class}({{
+                                isReadable: streamEnd.isReadable(),
+                                isWritable: streamEnd.isWritable(),
+                                hostStreamRep: this.#rep,
+                                readFn: async () => {{
+                                    return await stream.next();
+                                }},
+                                writeFn: async (v) => {{
+                                    await stream.write(v);
+                                }},
+                            }});
+                        }}
+
+                    }}
+                    "#
+                ));
+            }
+
+            Self::StreamClass => {
+                let debug_log_fn = Intrinsic::DebugLog.name();
+                let class_name = self.name();
+                output.push_str(&format!(
+                    r#"
+                    class {class_name} {{
+                        #hostStreamRep;
+                        #isReadable;
+                        #isWritable;
+                        #writeFn;
+                        #readFn;
+
+                        constructor(args) {{
+                            {debug_log_fn}('[{class_name}#constructor()] args', args);
+                            if (args.hostStreamRep === undefined) {{ throw new TypeError("missing host stream rep"); }}
+                            this.#hostStreamRep = args.hostStreamRep;
+
+                            if (args.isReadable === undefined) {{ throw new TypeError("missing readable setting"); }}
+                            this.#isReadable = args.isReadable;
+
+                            if (args.isWritable === undefined) {{ throw new TypeError("missing writable setting"); }}
+                            this.#isWritable = args.isWritable;
+
+                            if (this.#isWritable && args.writeFn === undefined) {{ throw new TypeError("missing write fn"); }}
+                            this.#writeFn = args.writeFn;
+
+                            if (this.#isReadable && args.readFn === undefined) {{ throw new TypeError("missing read fn"); }}
+                            this.#readFn = args.readFn;
+                        }}
+
+                        async next() {{
+                            {debug_log_fn}('[{class_name}#next()]');
+                            if (!isReadable) {{ throw new Error("stream is not marked as readable and cannot be written from"); }}
+
+                            return this.#readFn();
+                        }}
+
+                        async write() {{
+                            {debug_log_fn}('[{class_name}#write()]');
+                            if (!isWritable) {{ throw new Error("stream is not marked as writable and cannot be written to"); }}
+
+                            const objects = [...arguments];
+                            if (!objects.length !== 1) {{
+                                throw new Error("only single object writes are currently supported");
+                            }}
+                            const obj = objects[0];
+
+                            this.#writeFn(obj);
+                        }}
+                    }}
+                    "#
+                ));
             }
 
             Self::GlobalStreamMap => {
@@ -397,7 +562,6 @@ impl AsyncStreamIntrinsic {
                     function {stream_new_fn}(args) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', args);
                         const {{ streamTableIdx, callerComponentIdx }} = args;
-                        console.log("ARGS??", args);
                         if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
 
                         const taskMeta = {current_task_get_fn}(callerComponentIdx);
@@ -424,38 +588,41 @@ impl AsyncStreamIntrinsic {
 
             Self::StreamNewFromLift => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
-                let stream_new_fn = Self::StreamNew.name();
-                let current_task_get_fn =
-                    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-                let get_or_create_async_state_fn =
-                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState).name();
-                output.push_str(&format!(r#"
-                    function {stream_new_fn}(args) {{
-                        {debug_log_fn}('[{stream_new_fn}()] args', args);
-                        const {{ streamTableIdx, callerComponentIdx }} = args;
-                        console.log("ARGS??", args);
-                        if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
+                let stream_new_from_lift_fn = self.name();
+                let global_stream_map =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap).name();
+                let host_stream_class =
+                    Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass).name();
+                output.push_str(&format!(
+                    r#"
+                    function {stream_new_from_lift_fn}(args) {{
+                        {debug_log_fn}('[{stream_new_from_lift_fn}()] args', args);
+                        const {{
+                            componentIdx,
+                            streamIdx,
+                            streamTableIdx,
+                            payloadLiftFn,
+                            payloadTypeSize32,
+                            payloadLowerFn,
+                            isUnitStream,
+                        }} = args;
 
-                        const taskMeta = {current_task_get_fn}(callerComponentIdx);
-                        if (!taskMeta) {{ throw new Error('missing async task metadata during stream.new'); }}
+                        const stream = new {host_stream_class}({{
+                            componentIdx,
+                            streamIdx,
+                            streamTableIdx,
+                            payloadLiftFn: payloadLiftFn,
+                            payloadLowerFn: payloadLowerFn,
+                            isUnitStream,
+                        }});
 
-                        const task = taskMeta.task
-                        if (!task) {{ throw new Error('invalid/missing async task during stream.new'); }}
+                        const rep = {global_stream_map}.insert(stream);
+                        stream.setRep(rep);
 
-                        if (task.componentIdx() !== callerComponentIdx) {{
-                            throw new Error(`task component idx [${{task.componentIdx()}}] does not match stream new intrinsic component idx [${{callerComponentIdx}}]`);
-                        }}
-
-                        const cstate = {get_or_create_async_state_fn}(callerComponentIdx);
-                        if (!cstate.mayLeave) {{
-                            throw new Error('component instance is not marked as may leave during stream.new');
-                        }}
-
-                        const {{ writableIdx, readableIdx }} = cstate.createStream({{ tableIdx: streamTableIdx }});
-
-                        return BigInt(writableIdx) << 32n | BigInt(readableIdx);
+                        return stream.createUserStream();
                     }}
-                "#));
+                "#
+                ));
             }
 
             Self::StreamWrite | Self::StreamRead => {

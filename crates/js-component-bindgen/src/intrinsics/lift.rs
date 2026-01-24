@@ -857,7 +857,15 @@ impl LiftIntrinsic {
                         }}
 
                         const rep = {stream_map}.insert(stream);
-                        const val = {{ type: 'Stream', rep }};
+
+                        // TODO: This should be an internal-only stream with information that another component can use?
+                        // if we're lifting flat we're likely transferring to another component, and may soon be lowering
+                        // to the receiving component.
+                        //
+                        // Note that in the case of a fused component this value is basically unused, helpers
+                        // will likely do the heavy lifting.
+                        //
+                        const val = {{ type: stream.constructor.name, rep }};
 
                         return [ rep, ctx ];
                     }}

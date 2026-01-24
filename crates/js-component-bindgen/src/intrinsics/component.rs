@@ -482,7 +482,8 @@ impl ComponentIntrinsic {
 
                             const tbl = this.#streams.get(tableIdx);
                             if (!tbl) {{
-                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream`);
+                                console.log("STREAMS?", this.#streams);
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while getting stream`);
                             }}
 
                             const stream = tbl.get(streamIdx);
@@ -492,18 +493,18 @@ impl ComponentIntrinsic {
                         removeStreamEnd(args) {{
                             {debug_log_fn}('[{class_name}#removeStreamEnd()] args', args);
                             const {{ tableIdx, streamIdx }} = args;
-                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream"); }}
-                            if (streamIdx === undefined) {{ throw new Error("missing stream idx while removing stream"); }}
+                            if (tableIdx === undefined) {{ throw new Error("missing table idx while removing stream end"); }}
+                            if (streamIdx === undefined) {{ throw new Error("missing stream idx while removing stream end"); }}
 
                             const tbl = this.#streams.get(tableIdx);
                             if (!tbl) {{
-                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream`);
+                                throw new Error(`missing stream table [${{tableIdx}}] in component [${{this.#componentIdx}}] while removing stream end`);
                             }}
 
                             const stream = tbl.get(streamIdx);
                             if (!stream) {{ throw new Error(`component [${{this.#componentIdx}}] missing stream [${{streamIdx}}]`); }}
                             if (!tbl.remove(streamIdx)) {{
-                                 throw new Error(`missing stream [${{streamIdx}}] (table [${{tableIdx}}]) in component [${{this.#componentIdx}}] while removing stream`);
+                                 throw new Error(`missing stream [${{streamIdx}}] (table [${{tableIdx}}]) in component [${{this.#componentIdx}}] while removing stream end`);
                             }}
 
                             return stream;
