@@ -1044,6 +1044,7 @@ impl<'a> Instantiator<'a, '_> {
                 | Trampoline::WaitableJoin { .. }
                 | Trampoline::WaitableSetDrop { .. }
                 | Trampoline::WaitableSetPoll { .. }
+                | Trampoline::WaitableSetWait { .. }
                 | Trampoline::WaitableSetNew { .. }
         )
     }
@@ -1109,32 +1110,47 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::WaitableSetWait { options, .. } => {
+            Trampoline::WaitableSetWait { instance, options } => {
+                let options = self
+                    .component
+                    .options
+                    .get(*options)
+                    .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
+
                 let CanonicalOptions {
                     instance,
                     async_,
                     data_model:
                         CanonicalOptionsDataModel::LinearMemory(LinearMemoryOptions { memory, .. }),
                     ..
-                } = self
-                    .component
-                    .options
-                    .get(*options)
-                    .expect("failed to find options")
+                } = options
                 else {
                     panic!("unexpected/missing memory data model during waitable-set.wait");
                 };
 
+                let instance_idx = instance.as_u32();
+                let memory_idx = memory
+                    .expect("missing memory idx for waitable-set.wait")
+                    .as_u32();
                 let waitable_set_wait_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
+
                 uwriteln!(
                     self.src.js,
-                    "const trampoline{i} = {waitable_set_wait_fn}.bind(null, {instance_idx}, {async_}, memory{memory_idx});\n",
-                    instance_idx = instance.as_u32(),
-                    memory_idx = memory
-                        .expect("missing memory idx for waitable-set.wait")
-                        .as_u32(),
+                    r#"
+                    const trampoline{i} = {waitable_set_wait_fn}.bind(null, {{
+                        componentIdx: {instance_idx},
+                        isAsync: {async_},
+                        memoryIdx: {memory_idx},
+                        getMemoryFn: () => memory{memory_idx},
+                    }});
+                    "#,
                 );
             }
 
@@ -1217,14 +1233,22 @@ impl<'a> Instantiator<'a, '_> {
                 );
             }
 
-            Trampoline::StreamRead { ty, options, .. } => {
+            Trampoline::StreamRead {
+                instance,
+                ty,
+                options,
+            } => {
                 let options = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
 
-                let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
@@ -1236,39 +1260,53 @@ impl<'a> Instantiator<'a, '_> {
                 else {
                     unreachable!("missing/invalid data model for options during stream.read")
                 };
-                let component_instance_id = instance.as_u32();
                 let memory_idx = memory.expect("missing memory idx for stream.read").as_u32();
                 let realloc_idx = realloc
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
-                let string_encoding = string_encoding_js_literal(string_encoding);
 
+                let component_instance_id = instance.as_u32();
+                let string_encoding = string_encoding_js_literal(string_encoding);
+                let stream_table_idx = ty.as_u32();
                 let stream_read_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead));
+
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {stream_read_fn}.bind(
                          null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {stream_idx},
+                         {{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             getMemoryFn: () => memory{memory_idx},
+                             reallocIdx: {realloc_idx},
+                             getReallocFn: () => realloc{realloc_idx},
+                             stringEncoding: {string_encoding},
+                             isAsync: {async_},
+                             streamTableIdx: {stream_table_idx},
+                         }}
                      );
                     "#,
                 );
             }
 
-            Trampoline::StreamWrite { ty, options, .. } => {
+            Trampoline::StreamWrite {
+                instance,
+                ty,
+                options,
+            } => {
                 let options = self
                     .component
                     .options
                     .get(*options)
                     .expect("failed to find options");
+                assert_eq!(
+                    instance.as_u32(),
+                    options.instance.as_u32(),
+                    "options index instance must match trampoline"
+                );
 
-                let stream_idx = ty.as_u32();
                 let CanonicalOptions {
                     instance,
                     string_encoding,
@@ -1287,21 +1325,27 @@ impl<'a> Instantiator<'a, '_> {
                 let realloc_idx = realloc
                     .map(|v| v.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
-                let string_encoding = string_encoding_js_literal(string_encoding);
 
+                let string_encoding = string_encoding_js_literal(string_encoding);
+                let stream_table_idx = ty.as_u32();
                 let stream_write_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite));
+
                 uwriteln!(
                     self.src.js,
                     r#"const trampoline{i} = {stream_write_fn}.bind(
                          null,
-                         {component_instance_id},
-                         {memory_idx},
-                         {realloc_idx},
-                         {string_encoding},
-                         {async_},
-                         {stream_idx},
+                         {{
+                             componentIdx: {component_instance_id},
+                             memoryIdx: {memory_idx},
+                             getMemoryFn: () => memory{memory_idx},
+                             reallocIdx: {realloc_idx},
+                             getReallocFn: () => realloc{realloc_idx},
+                             stringEncoding: {string_encoding},
+                             isAsync: {async_},
+                             streamTableIdx: {stream_table_idx},
+                         }}
                      );
                     "#,
                 );

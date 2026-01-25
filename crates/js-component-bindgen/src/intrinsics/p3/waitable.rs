@@ -355,13 +355,26 @@ impl WaitableIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
                 let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
                 output.push_str(&format!(r#"
-                    async function {waitable_set_wait_fn}(componentInstanceID, isAsync, memory, waitableSetRep, resultPtr) {{
-                        {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ componentInstanceID, isAsync, memory, waitableSetRep, resultPtr }});
-                        const task = {current_task_get_fn}(componentInstanceID);
+                    async function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr) {{
+                        console.log("WAITING!");
+                        {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ args, waitableSetRep, resultPtr }});
+                        const {{
+                            componentIdx,
+                            isAsync,
+                            memoryIdx,
+                            getMemoryFn,
+                        }} = ctx;
+
+                        const taskMeta = {current_task_get_fn}(componentIdx);
+                        if (!taskMeta) {{ throw Error('invalid/missing async task meta'); }}
+
+                        const task = taskMeta.task;
                         if (!task) {{ throw Error('invalid/missing async task'); }}
-                        if (task.componentIdx !== componentInstanceID) {{
-                            throw Error(['task component idx [' + task.componentIdx + '] != component instance ID [' + componentInstanceID + ']');
+
+                        if (task.componentIdx() !== componentIdx) {{
+                            throw Error(`task component [${{task.componentIdx}}] !== executing component [${{componentInstanceID}}]`);
                         }}
+
                         const event = await task.waitForEvent({{ waitableSetRep, isAsync }});
                         {write_async_event_to_memory_fn}(memory, task, event, resultPtr);
                     }}

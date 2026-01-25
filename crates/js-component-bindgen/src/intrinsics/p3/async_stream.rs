@@ -650,7 +650,6 @@ impl AsyncStreamIntrinsic {
             Self::StreamWrite | Self::StreamRead => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
                 let stream_fn = self.name();
-                let global_stream_map = Self::GlobalStreamMap.name();
                 let stream_end_class = Self::StreamEndClass.name();
                 let is_write = matches!(self, Self::StreamWrite);
                 // When performing a StreamWrite, we expect to deal with a stream end that is only guest-readable,
@@ -669,61 +668,42 @@ impl AsyncStreamIntrinsic {
                 let managed_buffer_class = Intrinsic::ManagedBufferClass.name();
                 let async_blocked_const =
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant).name();
-                output.push_str(&format!("
+                output.push_str(&format!(r#"
                     async function {stream_fn}(
-                        componentInstanceID,
-                        memoryIdx,
-                        reallocIdx,
-                        stringEncoding,
-                        isAsync,
-                        streamEndIdx,
-                        typeIdx,
+                        args,
+                        streamIdx,
                         ptr,
                         count,
                     ) {{
-                        {debug_log_fn}('[{stream_fn}()] args', {{
-                            componentInstanceID,
-                            memoryIdx,
-                            reallocIdx,
-                            stringEncoding,
-                            isAsync,
-                            streamEndIdx,
-                            typeIdx,
-                            ptr,
-                            count,
-                        }});
+                        {debug_log_fn}('[{stream_fn}()] args', {{ args, streamIdx, ptr, count }});
+                         const {{
+                             componentIdx,
+                             memoryIdx,
+                             getMemoryFn,
+                             reallocIdx,
+                             getReallocFn,
+                             stringEncoding,
+                             isAsync,
+                             streamTableIdx,
+                         }} = args;
 
-                        console.log('DOING STREAM WRITE', {{
-                            componentInstanceID,
-                            memoryIdx,
-                            reallocIdx,
-                            stringEncoding,
-                            isAsync,
-                            streamEndIdx,
-                            typeIdx,
-                            ptr,
-                            count,
-                        }});
+                        console.log("DOING STREAM WRITE", args);
 
-                        const state = {get_or_create_async_state_fn}(componentInstanceID);
-                        if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
+                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        const streamEnd = {global_stream_map}.get(streamEndIdx);
-                        if (!streamEnd) {{ throw new Error('missing stream end with idx [' + streamEndIdx + ']'); }}
-
+                        const streamEnd = cstate.getStreamEnd({{ tableIdx: streamTableIdx, streamIdx: streamEndIdx }});
+                        if (!streamEnd) {{ throw new Error(`missing stream end [${{streamEndIdx}}] (table [${{streamTableIdx}}], component [${{componentIdx}}])`); }}
                         if (!(streamEnd instanceof {end_class})) {{
                             throw new Error('invalid stream type, expected readable stream');
                         }}
-                        if (streamEnd.elementTypeRep() !== typeIdx) {{
-                            throw new Error('invalid element type rep, expected [' + typeIdx + '], found [' + streamEnd.elementTypeRep() + ']');
-                        }}
                         if (streamEnd.isCopying()) {{ throw new Error('stream is currently undergoing a separate copy'); }}
 
-                        if ({is_borrowed_type_fn}(componentInstanceID, typeIdx)) {{
+                        if ({is_borrowed_type_fn}(componentIdx, typeIdx)) {{
                             throw new Error('borrowed types cannot be used as elements in a stream');
                         }}
 
-                        let bufID = {global_buffer_manager}.createBuffer({{ componentInstanceID, start, len, typeIdx, writable, readable }});
+                        let bufID = {global_buffer_manager}.createBuffer({{ componentIdx, start, len, typeIdx, writable, readable }});
 
                         const processFn = (result, reclaimBufferFn) => {{
                             if (reclaimBufferFn) {{ reclaimBufferFn(); }}
@@ -751,7 +731,7 @@ impl AsyncStreamIntrinsic {
 
                         // If sync, wait forever but allow task to do other things
                         if (!isAsync && !streamEnd.hasPendingEvent()) {{
-                          const task = {current_task_get_fn}(componentInstanceID);
+                          const task = {current_task_get_fn}(componentIdx);
                           if (!task) {{ throw new Error('invalid/missing async task'); }}
                           await task.blockOn({{ promise: streamEnd.waitable, isAsync }});
                         }}
@@ -765,7 +745,7 @@ impl AsyncStreamIntrinsic {
 
                         throw new Error('{stream_fn}() not implemented');
                     }}
-                "));
+                "#));
             }
 
             Self::StreamCancelRead | Self::StreamCancelWrite => {
