@@ -1224,6 +1224,26 @@ impl<'a> Instantiator<'a, '_> {
                     .intrinsic(Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew));
                 let instance_idx = instance.as_u32();
                 let stream_table_idx = ty.as_u32();
+
+                // TODO: look up the element type and pass it in here via stream table
+                // TODO: add stream tables lookup when generating, similar to error context
+                //
+                // let payload_ty_size_js = if let Some(payload_ty) = payload {
+                //     self.sizes.size(payload_ty).size_wasm32().to_string()
+                // } else {
+                //     "null".into()
+                // };
+
+                // TODO: also pre-compute & include whether the type is none or a number type
+                // (this gets checked with whether the pending component instance is set...
+                // If the pending inst matches and it is NOT a number type we have a problem )
+                //
+                // This means that we are preventing non-trivial types from being sent in a stream
+                // inside a component (i.e. preventing moves of non trivial types between subcomponents??H
+
+                // TODO: include whether this type is a borrow or not (probably easier to get here)
+                // TODO: include whether the type contains an async value (i.e. a stream or future)
+
                 uwriteln!(
                     self.src.js,
                     "const trampoline{i} = {stream_new_fn}.bind(null, {{

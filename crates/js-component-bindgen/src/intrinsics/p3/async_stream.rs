@@ -577,11 +577,6 @@ impl AsyncStreamIntrinsic {
             // TODO: allow customizable stream functionality (user should be able to specify a lib/import for a 'stream()' function
             // (this will enable using p3-shim explicitly or any other implementation)
             //
-            // TODO: Streams need a class
-            //
-            // NOTE: this intrinsic is also called from Instruction::StreamLift, in which case there
-            // is not an active task, but the componentIdx will be supplied proactively.
-            //
             // NOTE: Unit streams are represented with a streamTypeRep of null
             Self::StreamNew => {
                 let debug_log_fn = Intrinsic::DebugLog.name();
@@ -593,7 +588,10 @@ impl AsyncStreamIntrinsic {
                 output.push_str(&format!(r#"
                     function {stream_new_fn}(args) {{
                         {debug_log_fn}('[{stream_new_fn}()] args', args);
-                        const {{ streamTableIdx, callerComponentIdx }} = args;
+                        const {{
+                            streamTableIdx,
+                            callerComponentIdx
+                        }} = args;
                         if (callerComponentIdx === undefined) {{ throw new Error("missing caller component idx during stream.new"); }}
 
                         const taskMeta = {current_task_get_fn}(callerComponentIdx);
@@ -611,6 +609,7 @@ impl AsyncStreamIntrinsic {
                             throw new Error('component instance is not marked as may leave during stream.new');
                         }}
 
+                        // TODO: We need more information when creating streams -- element type index, size, alignment
                         const {{ writableIdx, readableIdx }} = cstate.createStream({{ tableIdx: streamTableIdx }});
 
                         return BigInt(writableIdx) << 32n | BigInt(readableIdx);
@@ -730,15 +729,18 @@ impl AsyncStreamIntrinsic {
                         try {{
                             bufID = {global_buffer_manager}.createBuffer({{
                                 componentIdx,
-                                start: ptr,
+                                memory: getMemoryFn(),
+                                start: ptr, // TODO(fix): ensure buffer checks alignment & bounds against memory for this type (use elem size)
                                 len, // TODO(?): this is the # of lowers to perform, not the len in bytes?
-                                //onCopy,
-                                //onCopyDone,
+                                isReadable: streamEnd.isReadable(),
+                                isWritable: streamEnd.isWritable(),
                             }});
                         }} catch(err) {{
                             console.log("FAILED TO CREATE BUFFER", err);
                             throw err;
                         }}
+
+                        // TODO(fix): include static event code (read/write)
 
                         console.log("CREATED BUFFER", {{ bufID }});
                         const processFn = (result, reclaimBufferFn) => {{
