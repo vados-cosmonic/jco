@@ -64,7 +64,7 @@ pub enum ResourceData {
     },
 }
 
-/// Extra data that is kept along with Resource Data depending on which it is
+/// Supplemental data kept along with [`ResourceData`]
 #[derive(Clone, Debug, PartialEq)]
 pub enum ResourceExtraData {
     Stream {

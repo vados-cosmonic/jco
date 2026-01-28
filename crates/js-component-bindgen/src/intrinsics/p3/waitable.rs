@@ -356,7 +356,6 @@ impl WaitableIntrinsic {
                 let write_async_event_to_memory_fn = Intrinsic::WriteAsyncEventToMemory.name();
                 output.push_str(&format!(r#"
                     async function {waitable_set_wait_fn}(ctx, waitableSetRep, resultPtr) {{
-                        console.log("WAITING!");
                         {debug_log_fn}('[{waitable_set_wait_fn}()] args', {{ args, waitableSetRep, resultPtr }});
                         const {{
                             componentIdx,
