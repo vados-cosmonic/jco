@@ -182,7 +182,7 @@ jobs:
           git cliff \
             --repository=${{ github.workspace }}/.git \
             --config=${{ steps.project-meta.outputs.project-dir }}/cliff.toml \
-            --unreleased \
+            --latest \
             $OPT_TAG \
             $OPT_TAG_PATTERN \
             --prepend=${{ steps.project-meta.outputs.project-dir }}/CHANGELOG.md
