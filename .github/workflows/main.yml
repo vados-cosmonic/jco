@@ -166,8 +166,14 @@ jobs:
           mv hidden.json package-lock.json
 
       - name: Install NPM packages
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
           npm install
+
+      - name: Install NPM packages
+        run: |
+          npm install puppeteer
 
       - name: Cache puppeteer install
         id: cache-puppeteer
@@ -179,6 +185,12 @@ jobs:
             /Users/runner/.cache/puppeteer
 
       - name: Install puppeteer
+        run: |
+          npx puppeteer browsers install chrome
+
+      - name: Install puppeteer
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
           npx puppeteer browsers install chrome
 
