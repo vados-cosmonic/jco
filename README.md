@@ -88,6 +88,14 @@ For a deeper guide on the intricacies of Jco, read the [Jco Book][jco-book].
 
 ## Installation quirks
 
+### Supported & tested NodeJS version
+
+Jco is developed on and tested against the current NodeJS (even-numbered) LTS release, and two releases behind.
+
+For example, if the current release is 26.x, 24.x and 22.x will be tested.
+
+This may complicate installation due to unsupported engine warnings, in general -- specific cases are described below.
+
 ### Node 18.x
 
 If installing on Node 18.x with a version of `@bytecodealliance/componentize-js` 0.18.3 or above, you may need to install `oxc-parser` manually.
@@ -102,7 +110,7 @@ npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
 It may be necessary to replace `@oxc-parser/binding-linux-x64-gnu` with whatever platform is appropriate.
 
 > [!NOTE]
-> Similar installation issues may occur if using an `npm` version older than 11.3.0, 
+> Similar installation issues may occur if using an `npm` version older than 11.3.0,
 > due to [`npm` bugs related to optional dependencies][npm-opt-deps-issues]
 
 [npm-opt-deps-issues]: https://github.com/npm/cli/issues/4828
