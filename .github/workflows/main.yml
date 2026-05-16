@@ -147,32 +147,23 @@ jobs:
           mkdir .weval-bin
           mv weval-${{ steps.weval-meta.outputs.version }}-aarch64-macos/weval .weval-bin/
 
-      # see: https://github.com/npm/cli/issues/4828
-      - name: Remove package-lock
-        run: |
-          mv package-lock.json hidden.json
-
-      - run: |
-          npm install -g patch-package
-
-      - name: Install oxc-parser
-        if: ${{ matrix.node == '18.x' && matrix.os == 'ubuntu-22.04' }}
-        run: |
-          npm install oxc-parser --ignore-engines
-          npm install @oxc-parser/binding-linux-x64-gnu --ignore-engines
-
-      - name: Restore package-lock
-        run: |
-          mv hidden.json package-lock.json
-
       - name: Install NPM packages
         env:
           PUPPETEER_SKIP_DOWNLOAD: "true"
         run: |
           npm install
 
-      - name: Install NPM packages
+      - name: Install puppeteer
+        if: ${{ !startsWith(matrix.os, 'windows') }}
         run: |
+          npm install puppeteer
+
+      - name: Install NPM packages
+        if: ${{ startsWith(matrix.os, 'windows') }}
+        env:
+          PUPPETEER_CACHE_DIR: "/c/Users/runneradmin/.cache/puppeteer"
+        run: |
+          echo $HOME
           npm install puppeteer
 
       - name: Cache puppeteer install
@@ -183,6 +174,7 @@ jobs:
           path: |
             /home/runner/.cache/puppeteer
             /Users/runner/.cache/puppeteer
+            /c/Users/runneradmin/.cache/puppeteer
 
       - name: Install puppeteer
         run: |
