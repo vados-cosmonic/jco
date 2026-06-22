@@ -1930,14 +1930,24 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             self.intrinsic(Intrinsic::GetErrorPayload)
                         };
+
                         uwriteln!(
                             self.src,
                             r#"
                             let ret;
                             try {{
-                                ret = {{ tag: 'ok', val: {call} }};
+                                ret = {call};
+                                if (typeof ret === 'object' && 'tag' in {call} && 'val' in {call}) {{
+                                    ret = {{ tag: {call}.tag, val: {call}.val }};
+                                }} else {{
+                                    ret = {{ tag: 'ok', val: {call} }};
+                                }}
                             }} catch (e) {{
-                                ret = {{ tag: 'err', val: {err_payload}(e) }};
+                                if (typeof {call} === 'object' && 'tag' in {call} && 'val' in {call}) {{
+                                    ret = {{ tag: 'err', val: {call}.val }};
+                                }} else {{
+                                    ret = {{ tag: 'err', val: {err_payload}(e) }};
+                                }}
                             }}
                             "#,
                         );
