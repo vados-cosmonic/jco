@@ -20,6 +20,62 @@ pub(crate) mod resource;
 pub(crate) mod string;
 pub(crate) mod waitable;
 
+// /// Intrinsics that should be rendered as early as possible
+// const EARLY_INTRINSICS: [Intrinsic; 43] = [
+//     Intrinsic::PromiseWithResolversPonyfill,
+//     Intrinsic::SymbolDispose,
+//     Intrinsic::SymbolAsyncIterator,
+//     Intrinsic::SymbolIterator,
+//     Intrinsic::DebugLog,
+//     Intrinsic::GlobalAsyncDeterminism,
+//     Intrinsic::GlobalComponentMemoryMap,
+//     Intrinsic::GlobalCurrentTaskMeta,
+//     Intrinsic::GetGlobalCurrentTaskMetaFn,
+//     Intrinsic::SetGlobalCurrentTaskMetaFn,
+//     Intrinsic::WithGlobalCurrentTaskMetaFn,
+//     Intrinsic::WithGlobalCurrentTaskMetaFnAsync,
+//     Intrinsic::ClearGlobalCurrentTaskMetaFn,
+//     Intrinsic::LookupMemoriesForComponent,
+//     Intrinsic::RegisterGlobalMemoryForComponent,
+//     Intrinsic::RepTableClass,
+//     Intrinsic::CoinFlip,
+//     Intrinsic::ScopeId,
+//     // Type checking helpers
+//     Intrinsic::ConstantI32Min,
+//     Intrinsic::ConstantI32Max,
+//     Intrinsic::Conversion(ConversionIntrinsic::IsValidNumericPrimitive),
+//     Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
+//     Intrinsic::TypeCheckValidI32,
+//     Intrinsic::TypeCheckAsyncFn,
+//     // Resources
+//     Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows),
+//     // Async helpers
+//     Intrinsic::AsyncFunctionCtor,
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
+//     // Host helpers
+//     Intrinsic::Host(HostIntrinsic::PrepareCall),
+//     Intrinsic::Host(HostIntrinsic::AsyncStartCall),
+//     Intrinsic::Host(HostIntrinsic::SyncStartCall),
+//     // Waitable helpers
+//     Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+//     // Error context helpers
+//     Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
+//     // Context get/set are not used via trampolines but are
+//     // `UnsafeIntrinsic`s, so they are mapped for any module that uses them
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet),
+//     // Required for context.{get,set}
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+//     Intrinsic::AsyncEventCodeEnum,
+//     Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+// ];
+
 /// Built-in (default) intrinsic renderer
 pub struct BuiltinIntrinsicRenderer;
 

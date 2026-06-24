@@ -250,61 +250,6 @@ pub trait IntrinsicRender {
     );
 }
 
-/// Intrinsics that should be rendered as early as possible
-const EARLY_INTRINSICS: [Intrinsic; 43] = [
-    Intrinsic::PromiseWithResolversPonyfill,
-    Intrinsic::SymbolDispose,
-    Intrinsic::SymbolAsyncIterator,
-    Intrinsic::SymbolIterator,
-    Intrinsic::DebugLog,
-    Intrinsic::GlobalAsyncDeterminism,
-    Intrinsic::GlobalComponentMemoryMap,
-    Intrinsic::GlobalCurrentTaskMeta,
-    Intrinsic::GetGlobalCurrentTaskMetaFn,
-    Intrinsic::SetGlobalCurrentTaskMetaFn,
-    Intrinsic::WithGlobalCurrentTaskMetaFn,
-    Intrinsic::WithGlobalCurrentTaskMetaFnAsync,
-    Intrinsic::ClearGlobalCurrentTaskMetaFn,
-    Intrinsic::LookupMemoriesForComponent,
-    Intrinsic::RegisterGlobalMemoryForComponent,
-    Intrinsic::RepTableClass,
-    Intrinsic::CoinFlip,
-    Intrinsic::ScopeId,
-    // Type checking helpers
-    Intrinsic::ConstantI32Min,
-    Intrinsic::ConstantI32Max,
-    Intrinsic::Conversion(ConversionIntrinsic::IsValidNumericPrimitive),
-    Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive),
-    Intrinsic::TypeCheckValidI32,
-    Intrinsic::TypeCheckAsyncFn,
-    // Resources
-    Intrinsic::Resource(ResourceIntrinsic::ResourceCallBorrows),
-    // Async helpers
-    Intrinsic::AsyncFunctionCtor,
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::UnpackCallbackResult),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
-    // Host helpers
-    Intrinsic::Host(HostIntrinsic::PrepareCall),
-    Intrinsic::Host(HostIntrinsic::AsyncStartCall),
-    Intrinsic::Host(HostIntrinsic::SyncStartCall),
-    // Waitable helpers
-    Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
-    // Error context helpers
-    Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalErrCtxTableMap),
-    // Context get/set are not used via trampolines but are
-    // `UnsafeIntrinsic`s, so they are mapped for any module that uses them
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextGet),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::ContextSet),
-    // Required for context.{get,set}
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-    Intrinsic::AsyncEventCodeEnum,
-    Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-];
 
 /// Arguments to `render_intrinsics`
 #[derive(bon::Builder)]
@@ -331,489 +276,499 @@ pub fn render_intrinsics(args: RenderIntrinsicsArgs) -> Source {
     // TODO: allow for building a dynamic one
     let renderer = BuiltinIntrinsicRenderer;
 
-    // Render some early intrinsics
-    for intrinsic in EARLY_INTRINSICS {
-        renderer.render(&intrinsic, &mut output, &args);
-        rendered_intrinsics.insert(intrinsic.name());
-    }
+    // TODO: this hack should go way
+    // // Render some early intrinsics
+    // for intrinsic in EARLY_INTRINSICS {
+    //     renderer.render(&intrinsic, &mut output, &args);
+    //     rendered_intrinsics.insert(intrinsic.name());
+    // }
 
-    // Add intrinsics to the list we must render
-    if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
-        || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
-    {
-        args.intrinsics.insert(Intrinsic::HasOwnProperty);
-    }
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
-    {
-        args.intrinsics.insert(Intrinsic::IsLE);
-    }
+    // TODO: last minute dep enhancements should all go away
+    // // Add intrinsics to the list we must render
+    // if args.intrinsics.contains(&Intrinsic::GetErrorPayload)
+    //     || args.intrinsics.contains(&Intrinsic::GetErrorPayloadString)
+    // {
+    //     args.intrinsics.insert(Intrinsic::HasOwnProperty);
+    // }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
+    // {
+    //     args.intrinsics.insert(Intrinsic::IsLE);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
-    {
-        output.push_str(
-            "
-            const i32ToF32I = new Int32Array(1);
-            const i32ToF32F = new Float32Array(i32ToF32I.buffer);
-        ",
-        );
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
+    // {
+    //     output.push_str(
+    //         "
+    //         const i32ToF32I = new Int32Array(1);
+    //         const i32ToF32F = new Float32Array(i32ToF32I.buffer);
+    //     ",
+    //     );
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
-    {
-        output.push_str(
-            "
-            const i64ToF64I = new BigInt64Array(1);
-            const i64ToF64F = new Float64Array(i64ToF64I.buffer);
-        ",
-        );
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
+    // {
+    //     output.push_str(
+    //         "
+    //         const i64ToF64I = new BigInt64Array(1);
+    //         const i64ToF64F = new Float64Array(i64ToF64I.buffer);
+    //     ",
+    //     );
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrow,
-    )) || args.intrinsics.contains(&Intrinsic::Resource(
-        ResourceIntrinsic::ResourceTransferBorrowValidLifting,
-    )) {
-        args.intrinsics.insert(Intrinsic::Resource(
-            ResourceIntrinsic::ResourceTableCreateBorrow,
-        ));
-    }
+    // if args.intrinsics.contains(&Intrinsic::Resource(
+    //     ResourceIntrinsic::ResourceTransferBorrow,
+    // )) || args.intrinsics.contains(&Intrinsic::Resource(
+    //     ResourceIntrinsic::ResourceTransferBorrowValidLifting,
+    // )) {
+    //     args.intrinsics.insert(Intrinsic::Resource(
+    //         ResourceIntrinsic::ResourceTableCreateBorrow,
+    //     ));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::String(StringIntrinsic::Utf8EncodeAsync))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::IsLE,
-            &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::String(StringIntrinsic::Utf8Encode))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::String(StringIntrinsic::Utf8EncodeAsync))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::IsLE,
+    //         &Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::String(StringIntrinsic::Utf16EncodeAsync))
-    {
-        args.intrinsics.extend([&Intrinsic::IsLE]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::String(StringIntrinsic::Utf16Encode))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::String(StringIntrinsic::Utf16EncodeAsync))
+    // {
+    //     args.intrinsics.extend([&Intrinsic::IsLE]);
+    // }
 
-    // Attempting to perform a debug message hoist will require string encoding to memory
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::String(StringIntrinsic::Utf8Encode),
-            &Intrinsic::String(StringIntrinsic::Utf16Encode),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
+    // // Attempting to perform a debug message hoist will require string encoding to memory
+    // if args.intrinsics.contains(&Intrinsic::ErrCtx(
+    //     ErrCtxIntrinsic::ErrorContextDebugMessage,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::String(StringIntrinsic::Utf8Encode),
+    //         &Intrinsic::String(StringIntrinsic::Utf16Encode),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::ComponentGlobalTable),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::ReserveGlobalRep),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::CreateLocalHandle),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::ErrCtx(
-        ErrCtxIntrinsic::ErrorContextDebugMessage,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
-            &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::ErrCtx(
+    //     ErrCtxIntrinsic::ErrorContextDebugMessage,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::GlobalRefCountAdd),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
+    //         &Intrinsic::ErrCtx(ErrCtxIntrinsic::GetLocalTable),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::TypeCheckValidI32,
-            &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
-            &Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::TypeCheckValidI32,
+    //         &Intrinsic::Conversion(ConversionIntrinsic::ToInt32),
+    //         &Intrinsic::Component(ComponentIntrinsic::ComponentStateSetAllError),
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([&Intrinsic::RepTableClass]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::Component(
+    //     ComponentIntrinsic::GetOrCreateAsyncState,
+    // )) {
+    //     args.intrinsics.extend([&Intrinsic::RepTableClass]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-            &Intrinsic::RepTableClass,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
-            &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+    //         &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+    //         &Intrinsic::RepTableClass,
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncSubtaskClass),
+    //         &Intrinsic::Waitable(WaitableIntrinsic::WaitableClass),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetNew))
+    // {
+    //     args.intrinsics
+    //         .extend([&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetClass)]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetPoll))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait))
+    // {
+    //     args.intrinsics
+    //         .extend([&Intrinsic::Host(HostIntrinsic::StoreEventInComponentMemory)]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Waitable(WaitableIntrinsic::RemoveWaitableSet)]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableSetDrop))
+    // {
+    //     args.intrinsics
+    //         .extend([&Intrinsic::Waitable(WaitableIntrinsic::RemoveWaitableSet)]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::GetOrCreateAsyncState,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
-            &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::Component(
+    //     ComponentIntrinsic::GetOrCreateAsyncState,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
+    //         &Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::Component(
-        ComponentIntrinsic::ComponentAsyncStateClass,
-    )) {
-        args.intrinsics.extend([&Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::GlobalStreamMap,
-        )]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::Component(
+    //     ComponentIntrinsic::ComponentAsyncStateClass,
+    // )) {
+    //     args.intrinsics.extend([&Intrinsic::AsyncStream(
+    //         AsyncStreamIntrinsic::GlobalStreamMap,
+    //     )]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
-        | args
-            .intrinsics
-            .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
-    {
-        args.intrinsics
-            .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatResult))
+    //     | args
+    //         .intrinsics
+    //         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatOption))
+    //     | args
+    //         .intrinsics
+    //         .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatEnum))
+    // {
+    //     args.intrinsics
+    //         .extend([&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant)]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatVariant))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatU8),
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatU16),
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatU32),
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatFloat64),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatResult))
-    {
-        args.intrinsics
-            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatResult))
+    // {
+    //     args.intrinsics
+    //         .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatOption))
-    {
-        args.intrinsics
-            .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatOption))
+    // {
+    //     args.intrinsics
+    //         .insert(Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatVariant))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatU8),
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatU16),
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStream))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
-            &Intrinsic::SymbolResourceRep,
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ])
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStream))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::IsStreamLowerableObject),
+    //         &Intrinsic::SymbolResourceRep,
+    //         &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenReadFnFromLowerableStream),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GenStreamHostInjectFn),
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+    //     ])
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::GenStreamHostInjectFn,
-    )) {
-        args.intrinsics.insert(Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::PendingValueQueueClass,
-        ));
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncStream(
+    //     AsyncStreamIntrinsic::GenStreamHostInjectFn,
+    // )) {
+    //     args.intrinsics.insert(Intrinsic::AsyncStream(
+    //         AsyncStreamIntrinsic::PendingValueQueueClass,
+    //     ));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
-            &Intrinsic::SymbolResourceRep,
-            &Intrinsic::GetErrorPayload,
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
-        ])
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatFuture))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::IsFutureLowerableObject),
+    //         &Intrinsic::SymbolResourceRep,
+    //         &Intrinsic::GetErrorPayload,
+    //         &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GenFutureHostInjectFn),
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatU32),
+    //     ])
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8),
-            &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringAny))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8),
+    //         &Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf8))
+    // {
+    //     args.intrinsics
+    //         .insert(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8),
-            &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8),
+    //         &Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf16),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lower(LowerIntrinsic::LowerFlatStringUtf8))
+    // {
+    //     args.intrinsics
+    //         .insert(Intrinsic::String(StringIntrinsic::GlobalTextEncoderUtf8));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
-    {
-        args.intrinsics
-            .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStringUtf16))
+    // {
+    //     args.intrinsics
+    //         .insert(Intrinsic::String(StringIntrinsic::Utf16Decoder));
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
-    {
-        args.intrinsics.insert(Intrinsic::AsyncStream(
-            AsyncStreamIntrinsic::ExternalStreamClass,
-        ));
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::Lift(LiftIntrinsic::LiftFlatStream))
+    // {
+    //     args.intrinsics.insert(Intrinsic::AsyncStream(
+    //         AsyncStreamIntrinsic::ExternalStreamClass,
+    //     ));
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::CreateNewCurrentTask,
-    )) || args
-        .intrinsics
-        .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncTask(
+    //     AsyncTaskIntrinsic::CreateNewCurrentTask,
+    // )) || args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncTaskClass),
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap),
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamNew))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWritableEndClass),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamReadableEndClass),
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamWritableEndClass,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamReadableEndClass,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncStream(
+    //     AsyncStreamIntrinsic::StreamWritableEndClass,
+    // )) || args.intrinsics.contains(&Intrinsic::AsyncStream(
+    //     AsyncStreamIntrinsic::StreamReadableEndClass,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::InternalStreamClass),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamEndClass),
+    //         &Intrinsic::AsyncEventCodeEnum,
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::StreamNewFromLift,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
-            &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
-            &Intrinsic::GlobalBufferManager,
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncStream(
+    //     AsyncStreamIntrinsic::StreamNewFromLift,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamMap),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::GlobalStreamTableMap),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::HostStreamClass),
+    //         &Intrinsic::AsyncStream(AsyncStreamIntrinsic::ExternalStreamClass),
+    //         &Intrinsic::GlobalBufferManager,
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncStream(
-        AsyncStreamIntrinsic::ExternalStreamClass,
-    )) {
-        args.intrinsics.insert(Intrinsic::SymbolResourceRep);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncStream(
+    //     AsyncStreamIntrinsic::ExternalStreamClass,
+    // )) {
+    //     args.intrinsics.insert(Intrinsic::SymbolResourceRep);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::GlobalBufferManager,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamWrite))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::AsyncStream(AsyncStreamIntrinsic::StreamRead))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWrite))
+    //     || args
+    //         .intrinsics
+    //         .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureRead))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::GlobalBufferManager,
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::AsyncBlockedConstant),
+    //         &Intrinsic::AsyncEventCodeEnum,
+    //     ]);
+    // }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew))
-    {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
-        ]);
-    }
+    // if args
+    //     .intrinsics
+    //     .contains(&Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureNew))
+    // {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureTableMap),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureWritableEndClass),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureReadableEndClass),
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureNewFromLift,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
-            &Intrinsic::GlobalBufferManager,
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncFuture(
+    //     AsyncFutureIntrinsic::FutureNewFromLift,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::GlobalFutureMap),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::HostFutureClass),
+    //         &Intrinsic::GlobalBufferManager,
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureWritableEndClass,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncFuture(
-        AsyncFutureIntrinsic::FutureReadableEndClass,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
-            &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
-            &Intrinsic::AsyncEventCodeEnum,
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncFuture(
+    //     AsyncFutureIntrinsic::FutureWritableEndClass,
+    // )) || args.intrinsics.contains(&Intrinsic::AsyncFuture(
+    //     AsyncFutureIntrinsic::FutureReadableEndClass,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::NestedFutureSymbol),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::InternalFutureClass),
+    //         &Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureEndClass),
+    //         &Intrinsic::AsyncEventCodeEnum,
+    //     ]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
-        args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::GlobalBufferManager) {
+    //     args.intrinsics.extend([&Intrinsic::BufferManagerClass]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::BufferManagerClass) {
-        args.intrinsics.extend([&Intrinsic::ManagedBufferClass]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::BufferManagerClass) {
+    //     args.intrinsics.extend([&Intrinsic::ManagedBufferClass]);
+    // }
 
-    if args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
-    )) || args.intrinsics.contains(&Intrinsic::AsyncTask(
-        AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
-    )) {
-        args.intrinsics.extend([
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
-            &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
-            &Intrinsic::ClearGlobalCurrentTaskMetaFn,
-            &Intrinsic::AsyncTask(AsyncTaskIntrinsic::SymmetricSyncGuestCallStack),
-        ]);
-    }
+    // if args.intrinsics.contains(&Intrinsic::AsyncTask(
+    //     AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall,
+    // )) || args.intrinsics.contains(&Intrinsic::AsyncTask(
+    //     AsyncTaskIntrinsic::ExitSymmetricSyncGuestCall,
+    // )) {
+    //     args.intrinsics.extend([
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs),
+    //         &Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskIds),
+    //         &Intrinsic::ClearGlobalCurrentTaskMetaFn,
+    //         &Intrinsic::AsyncTask(AsyncTaskIntrinsic::SymmetricSyncGuestCallStack),
+    //     ]);
+    // }
 
-    for current_intrinsic in args.intrinsics.iter() {
-        // Skip already rendered intrinsics (i.e. the early intrinsics)
-        if rendered_intrinsics.contains(current_intrinsic.name()) {
-            continue;
-        }
+    // TODO: for every intrinsic that will get used, add to the list of intrinsics that we must output
+    // w/ number of deps that it takes
+    //
+    // TODO: use indextree here? Just want to build the tree
 
-        renderer.render(current_intrinsic, &mut output, &args);
-    }
+    // TODO: walk the tree and render all intrinsics
+
+
+    // for current_intrinsic in args.intrinsics.iter() {
+    //     // Skip already rendered intrinsics (i.e. the early intrinsics)
+    //     if rendered_intrinsics.contains(current_intrinsic.name()) {
+    //         continue;
+    //     }
+
+    //     renderer.render(current_intrinsic, &mut output, &args);
+    // }
 
     output
 }
