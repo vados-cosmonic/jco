@@ -1,0 +1,49 @@
+{
+  "name": "@bytecodealliance/jco-runtime",
+  "version": "0.2.0",
+  "description": "Library of functionality that enables JS host bindings for Jco",
+  "keywords": [
+    "Component",
+    "Wasm",
+    "WebAssembly"
+  ],
+  "homepage": "https://github.com/bytecodealliance/jco#readme",
+  "bugs": {
+    "url": "https://github.com/bytecodealliance/jco/issues"
+  },
+  "license": "(Apache-2.0 WITH LLVM-exception)",
+  "contributors": [
+    {
+      "name": "Victor Adossi",
+      "email": "vadossi@cosmonic.com"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytecodealliance/jco.git"
+  },
+  "files": [
+    "dist"
+  ],
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "browser": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "fmt": "oxfmt",
+    "fmt:check": "oxfmt --check",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "build:ts": "tsc",
+    "build": "pnpm run build:ts",
+    "test": "vitest run -c test/vitest.ts",
+    "prepack": "pnpm run build"
+  },
+  "devDependencies": {
+    "vitest": "^4.0.8"
+  }
+}

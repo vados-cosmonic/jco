@@ -1,9 +1,6 @@
 //! Intrinsics that represent helpers that manipulate strings
-use std::fmt::Write;
 
-use crate::intrinsics::RenderIntrinsicsArgs;
-use crate::uwriteln;
-use crate::{intrinsics::Intrinsic, source::Source};
+use crate::intrinsics::Intrinsic;
 
 /// This enum contains intrinsics for manipulating strings
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -63,92 +60,6 @@ impl StringIntrinsic {
             Self::Utf8EncodeAsync => "_utf8AllocateAndEncodeAsync",
             Self::ValidateGuestChar => "validateGuestChar",
             Self::ValidateHostChar => "validateHostChar",
-        }
-    }
-
-    /// Render an intrinsic to a string
-    pub fn render(&self, output: &mut Source, _render_args: &RenderIntrinsicsArgs<'_>) {
-        let name = self.name();
-        match self {
-            Self::Utf16Decoder => uwriteln!(output, "const {name} = new TextDecoder('utf-16');"),
-
-            Self::Utf16Encode | Self::Utf16EncodeAsync => {
-                let is_le = Intrinsic::IsLE.name();
-
-                let (fn_preamble, realloc_call) = match self {
-                    Self::Utf16Encode => ("", "realloc"),
-                    Self::Utf16EncodeAsync => ("async ", "await realloc"),
-                    _ => unreachable!("unexpected intrinsic"),
-                };
-                uwriteln!(
-                    output,
-                    r#"
-                      {fn_preamble}function {name}(str, realloc, memory) {{
-                          const len = str.length;
-                          const ptr = {realloc_call}(0, 0, 2, len * 2);
-                          const out = new Uint16Array(memory.buffer, ptr, len);
-                          let i = 0;
-                          if ({is_le}) {{
-                              while (i < len) {{ out[i] = str.charCodeAt(i++); }}
-                          }} else {{
-                              while (i < len) {{
-                                  const ch = str.charCodeAt(i);
-                                  out[i++] = (ch & 0xff) << 8 | ch >>> 8;
-                              }}
-                          }}
-                          return {{ ptr, len, codepoints: [...str].length }};
-                      }}
-                    "#
-                );
-            }
-
-            Self::GlobalTextDecoderUtf8 => uwriteln!(output, "const {name} = new TextDecoder();"),
-            Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),
-
-            Self::Utf8Encode | Self::Utf8EncodeAsync => {
-                let encoder = Self::GlobalTextEncoderUtf8.name();
-                let (fn_preamble, realloc_call) = match self {
-                    Self::Utf8Encode => ("", "realloc"),
-                    Self::Utf8EncodeAsync => ("async ", "await realloc"),
-                    _ => unreachable!("unexpected intrinsic"),
-                };
-                uwriteln!(
-                    output,
-                    r#"
-                      {fn_preamble}function {name}(s, realloc, memory) {{
-                          if (typeof s !== 'string') {{
-                              throw new TypeError('expected a string, received [' + typeof s + ']');
-                          }}
-                          if (s.length === 0) {{ return {{ ptr: 1, len: 0 }}; }}
-                          let buf = {encoder}.encode(s);
-                          let ptr = {realloc_call}(0, 0, 1, buf.length);
-                          new Uint8Array(memory.buffer).set(buf, ptr);
-                          const res = {{ ptr, len: buf.length, codepoints: [...s].length }};
-                          return res;
-                      }}
-                    "#
-                );
-            }
-
-            Self::ValidateGuestChar => uwriteln!(
-                output,
-                r#"
-                  function {name}(i) {{
-                      if ((i > 0x10ffff) || (i >= 0xd800 && i <= 0xdfff)) {{ throw new TypeError(`not a valid char`); }}
-                      return String.fromCodePoint(i);
-                  }}
-                "#,
-            ),
-
-            Self::ValidateHostChar => uwriteln!(
-                output,
-                r#"
-                  function {name}(s) {{
-                      if (typeof s !== 'string') {{ throw new TypeError(`must be a string`); }}
-                      return s.codePointAt(0);
-                  }}
-                "#
-            ),
         }
     }
 }
