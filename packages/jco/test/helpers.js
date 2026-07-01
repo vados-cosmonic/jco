@@ -2,14 +2,13 @@ import { version, env, argv, execArgv, platform } from "node:process";
 import { createServer as createNetServer } from "node:net";
 import { createServer as createHttpServer } from "node:http";
 import { relative, basename, join, isAbsolute, resolve, normalize, sep, dirname, extname } from "node:path";
-import { cp, mkdtemp, writeFile, stat, mkdir, readFile } from "node:fs/promises";
+import { cp, mkdtemp, writeFile, stat, mkdir, readFile, rm, symlink } from "node:fs/promises";
 import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
 import { URL, fileURLToPath, pathToFileURL } from "node:url";
 
 import mime from "mime";
 import { parse } from "smol-toml";
-import ts from "typescript";
 
 import { transpile } from "../src/api.js";
 import { componentize } from "../src/cmd/componentize.js";
@@ -576,77 +575,6 @@ export async function readComponentBytes(componentPath) {
     return componentBytes;
 }
 
-function tsCodegen(args) {
-    if (!args) {
-        throw new Error("missing ts codegen args");
-    }
-    const cwd = args?.cwd ?? process.cwd();
-    if (!args.tsConfigPath) {
-        throw new Error("missing/invalid tsconfig path");
-    }
-    const configPath = args.tsConfigPath;
-
-    const { config, error } = ts.readConfigFile(configPath, ts.sys.readFile);
-    if (error) {
-        throw new Error(
-            ts.formatDiagnosticsWithColorAndContext([error], {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
-
-    // Apply overrides
-    if (args.configOverrides) {
-        if (args.configOverrides.include) {
-            config.include = args.configOverrides.include;
-        }
-        if (args.configOverrides.compilerOptions?.outDir) {
-            config.compilerOptions.outDir = args.configOverrides.compilerOptions.outDir;
-        }
-    }
-
-    const parsed = ts.parseJsonConfigFileContent(config, ts.sys, cwd);
-
-    const program = ts.createProgram({
-        rootNames: parsed.fileNames,
-        options: parsed.options,
-    });
-
-    const emitResult = program.emit();
-
-    const diagnostics = ts.getPreEmitDiagnostics(program).concat(emitResult.diagnostics);
-
-    if (diagnostics.length > 0) {
-        console.error(
-            ts.formatDiagnosticsWithColorAndContext(diagnostics, {
-                getCanonicalFileName: (f) => f,
-                getCurrentDirectory: ts.sys.getCurrentDirectory,
-                getNewLine: () => ts.sys.newLine,
-            }),
-        );
-    }
-
-    if (emitResult.emitSkipped) {
-        throw new Error("TypeScript emit skipped, no files were emitted");
-    }
-}
-
-let TS_CODEGEN_PROMISE;
-export function runTSCodegen(args) {
-    if (!args) {
-        throw new Error("missing tscodegen args");
-    }
-
-    if (TS_CODEGEN_PROMISE) {
-        return TS_CODEGEN_PROMISE;
-    }
-    tsCodegen(args);
-    TS_CODEGEN_PROMISE = Promise.resolve();
-    return TS_CODEGEN_PROMISE;
-}
-
 /** Get the current version of `wit-component` which is reflected in WAT output and used for tests */
 let CURRENT_WIT_COMPONENT_VERSION;
 export async function getCurrentWitComponentVersion() {
@@ -667,4 +595,25 @@ export async function fileExists(p) {
     return stat(p)
         .then((f) => f.isFile())
         .catch(() => false);
+}
+
+// NOTE: we can only use asyncDispose once Node24 becomes the oldest supported version under test
+export async function setupTestWithLocalShims() {
+    const tmpDir = await getTmpDir();
+    const outDir = resolve(tmpDir, "out-component-dir");
+    const outFile = resolve(tmpDir, "out-component-file");
+
+    const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
+    await mkdir(modulesDir, { recursive: true });
+    await symlink(
+        fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
+        resolve(modulesDir, "preview2-shim"),
+        "dir",
+    );
+
+    const cleanup = async () => {
+        await rm(tmpDir, { recursive: true }).catch(() => {});
+    };
+
+    return { outDir, outFile, cleanup };
 }
