@@ -1,52 +1,19 @@
-import { resolve } from "node:path";
+import { exec, jcoPath } from "./helpers.js";
 import { execArgv } from "node:process";
-import { mkdir, rm, symlink, writeFile } from "node:fs/promises";
-
-import { fileURLToPath, pathToFileURL } from "node:url";
-
-import { exec, jcoPath, getTmpDir } from "./helpers.js";
-
-import { suite, test, beforeAll, afterAll, afterEach, assert } from "vitest";
+import { pathToFileURL } from "node:url";
+import { setupTestWithLocalShims } from "./helpers.js";
+import { suite, test, assert } from "vitest";
+import { writeFile } from "node:fs/promises";
 
 const multiMemory = execArgv.includes("--experimental-wasm-multi-memory") ? ["--multi-memory"] : [];
 
 suite("CLI", () => {
-    var tmpDir;
-    var outDir;
-    var outFile;
-
-    beforeAll(async function () {
-        tmpDir = await getTmpDir();
-        outDir = resolve(tmpDir, "out-component-dir");
-        outFile = resolve(tmpDir, "out-component-file");
-
-        const modulesDir = resolve(tmpDir, "node_modules", "@bytecodealliance");
-        await mkdir(modulesDir, { recursive: true });
-        await symlink(
-            fileURLToPath(new URL("../packages/preview2-shim", import.meta.url)),
-            resolve(modulesDir, "preview2-shim"),
-            "dir",
-        );
-    });
-
-    afterAll(async function () {
-        try {
-            await rm(tmpDir, { recursive: true });
-        } catch {}
-    });
-
-    afterEach(async function () {
-        try {
-            await rm(outDir, { recursive: true });
-            await rm(outFile);
-        } catch {}
-    });
-
-    test("Transcoding", async () => {
+    test.concurrent("Transcoding", async () => {
+        const { outDir, cleanup } = await setupTestWithLocalShims();
         const { stderr } = await exec(
             jcoPath,
             "transpile",
-            `test/fixtures/env-allow.composed.wasm`,
+            `test/fixtures/components/env-allow.composed.wasm`,
             ...multiMemory,
             "-o",
             outDir,
@@ -55,13 +22,15 @@ suite("CLI", () => {
         await writeFile(`${outDir}/package.json`, JSON.stringify({ type: "module" }));
         const m = await import(`${pathToFileURL(outDir)}/env-allow.composed.js`);
         assert.deepStrictEqual(m.testGetEnv(), [["CUSTOM", "VAL"]]);
+
+        await cleanup();
     });
 
-    test("Transcoding UTF8 <-> UTF16", async () => {
+    test.concurrent("Transcoding UTF8 <-> UTF16", async () => {
         const { stdout, stderr } = await exec(
             jcoPath,
             "run",
-            `test/fixtures/utf8-utf16.composed.wasm`,
+            `test/fixtures/components/utf8-utf16.composed.wasm`,
             ...multiMemory,
             "--",
             "asdf中文🀄️⏰",
