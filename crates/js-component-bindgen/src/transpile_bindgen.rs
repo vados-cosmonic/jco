@@ -1165,8 +1165,7 @@ impl<'a> Instantiator<'a, '_> {
             let i = used.as_u32();
             uwriteln!(
                 &mut instance_flag_defs,
-                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, {});",
-                wasmtime_environ::component::FLAG_MAY_LEAVE
+                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
             );
         }
         self.src.js_init.prepend_str(&instance_flag_defs);
