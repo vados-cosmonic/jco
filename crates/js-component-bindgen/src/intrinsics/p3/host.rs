@@ -607,12 +607,11 @@ impl HostIntrinsic {
                                 }});
                             }} catch (err) {{
                                 handleCalleeError(err);
+                                return;
                             }}
-                            if (callbackResult !== undefined) {{
-                                driveCallback(callbackResult)?.catch(err => {{
-                                    {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
-                                }});
-                            }}
+                            driveCallback(callbackResult)?.catch(err => {{
+                                {debug_log_fn}("[AsyncStartCall] drive loop call failure", {{ err }});
+                            }});
                         }};
 
                         // A non-suspending initial slice can run before the lower returns,
