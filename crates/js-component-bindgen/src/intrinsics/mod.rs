@@ -1158,6 +1158,8 @@ impl Intrinsic {
                 let check_may_leave_fn = args.require_intrinsic(ComponentIntrinsic::CheckMayLeave);
                 let current_task_may_block =
                     args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::CurrentTaskMayBlock);
+                let get_current_task =
+                    args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::GetCurrentTask);
                 let runtime_error_class =
                     args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
 
@@ -1167,7 +1169,9 @@ impl Intrinsic {
                           return function (...args) {{
                               {check_may_leave_fn}(componentIdx);
                               const saved = {global_current_task_meta_obj}[componentIdx] ?? null;
-                              if (!saved && {current_task_may_block}.value === 0) {{
+                              const savedTask = saved ? {get_current_task}(componentIdx, saved.taskID)?.task : undefined;
+                              const mayBlock = savedTask ? savedTask.mayBlock() : {current_task_may_block}.value !== 0;
+                              if (!saved && !mayBlock) {{
                                   throw new {runtime_error_class}('cannot block a synchronous task before returning');
                               }}
 
@@ -1186,7 +1190,7 @@ impl Intrinsic {
                                   return result;
                               }}
 
-                              if ({current_task_may_block}.value === 0) {{
+                              if (!mayBlock) {{
                                   // The helper may already have returned a rejected promise.
                                   // Mark it handled before replacing it with the canonical
                                   // synchronous-task trap.
@@ -1406,10 +1410,17 @@ mod tests {
 
         assert!(source.contains("return function (...args) {"));
         assert!(!source.contains("return async function (...args) {"));
-        assert!(source.contains("if (!saved && CURRENT_TASK_MAY_BLOCK.value === 0) {"));
+        assert!(source.contains(
+            "const savedTask = saved ? getCurrentTask(componentIdx, saved.taskID)?.task : undefined;"
+        ));
+        assert!(source.contains(
+            "const mayBlock = savedTask ? savedTask.mayBlock() : CURRENT_TASK_MAY_BLOCK.value !== 0;"
+        ));
+        assert!(source.contains("if (!saved && !mayBlock) {"));
         assert!(source.contains("result = fn.apply(null, args);"));
         assert!(source.contains("typeof result.then !== 'function'"));
         assert!(source.contains("Promise.resolve(result).catch(() => {});"));
+        assert!(source.contains("if (!mayBlock) {"));
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
