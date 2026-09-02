@@ -7,7 +7,10 @@ use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
 use crate::source::Source;
 use crate::uwriteln;
 
-use super::{CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, async_task::AsyncTaskIntrinsic};
+use super::{
+    CANNOT_LIFT_FUTURE_IN_WAITABLE_SET, CANNOT_START_CONCURRENT_OPERATION,
+    async_task::AsyncTaskIntrinsic,
+};
 
 /// This enum contains intrinsics that enable Futures
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -1559,7 +1562,7 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
                         if (!futureEnd.isIdleState()) {{
-                            throw new Error('future state must be idle before {future_op_fn}');
+                            throw new {runtime_error_class}({CANNOT_START_CONCURRENT_OPERATION:?});
                         }}
 
                         futureEnd.{guest_op_fn}({{
@@ -1605,8 +1608,6 @@ impl AsyncFutureIntrinsic {
             Self::FutureCancelRead | Self::FutureCancelWrite => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let get_future_end_fn = render_args.require_intrinsic(Self::GetFutureEnd);
-                let remove_future_end_from_table_fn =
-                    render_args.require_intrinsic(Self::RemoveFutureEndFromTable);
                 let is_cancel_write = matches!(self, Self::FutureCancelWrite);
                 let future_end_class = if is_cancel_write {
                     render_args.require_intrinsic(Self::FutureWritableEndClass)
@@ -1620,13 +1621,16 @@ impl AsyncFutureIntrinsic {
                 let async_blocked_const = render_args.require_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::AsyncBlockedConstant,
                 ));
-                let async_event_code_enum =
-                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
+                let event_code = format!(
+                    "{}.FUTURE_{}",
+                    render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum),
+                    if is_cancel_write { "WRITE" } else { "READ" }
+                );
 
                 output.push_str(&format!(r#"
-                    async function {future_cancel_fn}(
+                    function {future_cancel_fn}(
                         ctx,
-                        futureEndIdx,
+                        futureEndWaitableIdx,
                     ) {{
                         {debug_log_fn}('[{future_cancel_fn}()] args', {{
                             ctx,
@@ -1637,37 +1641,26 @@ impl AsyncFutureIntrinsic {
                         const cstate = {get_or_create_async_state_fn}(componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component instance is not marked as may leave'); }}
 
-                        let futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
+                        const futureEnd = {get_future_end_fn}({{ tableIdx: futureTableIdx, futureEndWaitableIdx }});
                         if (!futureEnd) {{ throw new Error(`missing future end with idx [${{futureEndWaitableIdx}}]`); }}
                         if (!(futureEnd instanceof {future_end_class})) {{
                             throw new Error('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
-                        futureEnd = {remove_future_end_from_table_fn}({{
-                            tableIdx: futureTableIdx,
-                            futureWaitableIdx: futureEndWaitableIdx,
-                        }});
-                        if (!futureEnd) {{ throw new Error(`missing future with idx [${{futureEndWaitableIdx}}]`); }}
-
                         if (!futureEnd.isCopying()) {{ throw new Error('future end is not copying, cannot cancel'); }}
 
                         if (!futureEnd.hasPendingEvent()) {{
-                          // TODO: cancel the shared thing (waitable?)
-                          if (!futureEnd.hasPendingEvent()) {{
-                            if (!isAsync) {{
-                              // TODO: repalce with what task.blockOn used to do
-                              // await task.blockOn({{ promise: futureEnd.waitable, isAsync: false }});
-                              throw new Error('not implemented');
-                            }} else {{
-                              return {async_blocked_const};
+                            futureEnd.cancel();
+                            if (!futureEnd.hasPendingEvent()) {{
+                                if (isAsync) {{ return {async_blocked_const}; }}
+                                throw new Error('future cancellation did not produce an event');
                             }}
-                          }}
                         }}
 
                         const {{ code, payload0: index, payload1: payload }} = futureEnd.getPendingEvent();
                         if (futureEnd.isCopying()) {{ throw new Error('future end is still in copying state'); }}
-                        if (code !== {async_event_code_enum}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {async_event_code_enum} + ']'); }}
-                        if (index !== futureEndIdx) {{ throw new Error('index does not match future end'); }}
+                        if (code !== {event_code}) {{ throw new Error('unexpected event code [' + code + '], expected [' + {event_code} + ']'); }}
+                        if (index !== futureEndWaitableIdx) {{ throw new Error('index does not match future end'); }}
 
                         return payload;
                     }}
