@@ -16,6 +16,10 @@
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
         {
+            "name": "cancel-and-exclusive-lock.wast",
+            "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
+        },
+        {
             "name": "cancel-stream.wast",
             "revision": "7c676115e93cd7d54c1732d95c54c6a3de7c5ae0"
         },
