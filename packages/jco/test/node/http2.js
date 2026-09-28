@@ -189,12 +189,14 @@ export async function instantiate() {
 }, 10_000);
 
 describe.skipIf(!hasJspi)("node:http2 in a fully formed component", () => {
+    const t = test.skipIf(process.platform === "win32");
     const expectedLocalReport = {
         local: { status: 201, contentType: "text/plain", body: "large:POST:/large:131072:x:x" },
         guest: { length: 131072, first: "s", last: "s" },
     };
 
-    test("runs a fully formed wasi:sockets component against local HTTP/2 clients and servers", async () => {
+    // TODO(unskip): Restore on Windows after jco uses a published preview2-shim with the blocking write fix.
+    t("runs a fully formed wasi:sockets component against local HTTP/2 clients and servers", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,
@@ -215,7 +217,8 @@ describe.skipIf(!hasJspi)("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    test("runs the same wasi:sockets component under StarlingMonkey", async () => {
+    // TODO(unskip): Restore on Windows after jco uses a published preview2-shim with the blocking write fix.
+    t("runs the same wasi:sockets component under StarlingMonkey", async () => {
         const { componentPath, stderr } = await componentizeFixture({
             fixture: "node-http2",
             wit: "wit-starling",
@@ -237,7 +240,8 @@ describe.skipIf(!hasJspi)("node:http2 in a fully formed component", () => {
         }
     }, 600_000);
 
-    test("posts to a local Node h2c server with an explicit request authority", async () => {
+    // TODO(unskip): Restore on Windows after jco uses a published preview2-shim with the blocking write fix.
+    t("posts to a local Node h2c server with an explicit request authority", async () => {
         const { componentPath } = await componentizeFixture({
             fixture: "node-http2",
             bundle: true,

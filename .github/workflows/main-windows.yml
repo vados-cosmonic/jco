@@ -226,6 +226,9 @@ jobs:
       - name: Build workspace jco-std
         run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
 
+      - name: Test preview2-shim blocking IO
+        run: pnpm --filter '@bytecodealliance/preview2-shim' exec vitest run -c test/vitest.ts test/io-worker.ts
+
       - name: Test LTS Node.js
         if: matrix.node != 'latest'
         working-directory: packages/jco
