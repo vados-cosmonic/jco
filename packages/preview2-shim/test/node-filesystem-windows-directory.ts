@@ -6,18 +6,26 @@ import { expect, test } from "vitest";
 
 import { _createPreopenDescriptor } from "../src/nodejs/filesystem.js";
 
-test.skipIf(process.platform !== "win32")("opens a real Windows WIT directory for reading", async () => {
-    const dir = await mkdtemp(join(tmpdir(), "jco-wit-"));
-    try {
-        await writeFile(join(dir, "component.wit"), "package test:component;\n");
-        const root = _createPreopenDescriptor("/");
-        const wit = root.openAt({ symlinkFollow: true }, dir, { directory: true }, { read: true });
-        expect(wit.stat().type).toBe("directory");
-        const entries = wit.readDirectory();
-        expect(entries.readDirectoryEntry()?.name).toBe("component.wit");
-        entries[Symbol.dispose]();
-        wit[Symbol.dispose]();
-    } finally {
-        await rm(dir, { recursive: true, force: true });
-    }
-});
+test.skipIf(process.platform !== "win32")(
+    "opens a real Windows WIT directory for reading",
+    async () => {
+        const dir = await mkdtemp(join(tmpdir(), "jco-wit-"));
+        try {
+            await writeFile(join(dir, "component.wit"), "package test:component;\n");
+            const root = _createPreopenDescriptor("/");
+            const wit = root.openAt(
+                { symlinkFollow: true },
+                dir,
+                { directory: true },
+                { read: true },
+            );
+            expect(wit.stat().type).toBe("directory");
+            const entries = wit.readDirectory();
+            expect(entries.readDirectoryEntry()?.name).toBe("component.wit");
+            entries[Symbol.dispose]();
+            wit[Symbol.dispose]();
+        } finally {
+            await rm(dir, { recursive: true, force: true });
+        }
+    },
+);

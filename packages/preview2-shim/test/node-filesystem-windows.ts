@@ -70,7 +70,9 @@ test("Windows readlink targets use WASI path separators", () => {
 
 for (const read of [false, true]) {
     test(`rejects a writable Windows directory without opening it (read=${read})`, () => {
-        vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<typeof statSync>);
+        vi.mocked(statSync).mockReturnValue({ isDirectory: () => true } as ReturnType<
+            typeof statSync
+        >);
         const root = _createPreopenDescriptor("C:/sandbox");
         expect(() => root.openAt({}, ".", { directory: true }, { read, write: true })).toThrow(
             "is-directory",
