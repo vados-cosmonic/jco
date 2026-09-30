@@ -270,7 +270,9 @@ class Descriptor implements IDescriptor {
     }
 
     read(length, offset): [Uint8Array, boolean] {
-        if (this.#virtualDirectory) throw "is-directory";
+        if (this.#virtualDirectory) {
+            throw "is-directory";
+        }
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
@@ -282,7 +284,9 @@ class Descriptor implements IDescriptor {
     }
 
     write(buffer, offset) {
-        if (this.#virtualDirectory) throw "is-directory";
+        if (this.#virtualDirectory) {
+            throw "is-directory";
+        }
         if (!this.#fullPath) {
             throw "bad-descriptor";
         }
@@ -487,8 +491,12 @@ class Descriptor implements IDescriptor {
                     return Descriptor._createVirtualDirectory(descriptorFlags, fullPath);
                 }
             } catch (e: any) {
-                if (e === "is-directory") throw e;
-                if (e.code !== "ENOENT") throw convertFsError(e);
+                if (e === "is-directory") {
+                    throw e;
+                }
+                if (e.code !== "ENOENT") {
+                    throw convertFsError(e);
+                }
             }
         }
         try {
