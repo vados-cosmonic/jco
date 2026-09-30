@@ -979,5 +979,8 @@ jobs:
 
       - name: Run extended component tests
         run: |
+          pnpm --filter '@bytecodealliance/jco-transpile' run build:ts
+          # The CLI must exercise the bindgen built in this checkout, not the last published transpile package.
+          ln -sfn "$GITHUB_WORKSPACE/packages/jco-transpile" packages/jco/node_modules/@bytecodealliance/jco-transpile
           pnpm --filter '@bytecodealliance/jco' run test:extended
           pnpm --filter '@bytecodealliance/jco-transpile' run test:extended
