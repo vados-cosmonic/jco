@@ -119,6 +119,10 @@ describe.skipIf(!hasJspi)("node:net in a component", () => {
     test.each(["quickjs", "starlingmonkey"])(
         "runs TCP clients and servers using %s",
         async (backend) => {
+            // TEMP(debug): phase timings to locate the nondeterministic hang
+            const startedAt = Date.now();
+            const phase = (name) => console.error(`[debug:net:${backend}] +${Date.now() - startedAt}ms ${name}`);
+            phase("start");
             const root = await getTmpDir();
             const fixture = fileURLToPath(new URL("../fixtures/componentize/node-net/", import.meta.url));
             const wit = join(root, "wit");
@@ -140,13 +144,17 @@ describe.skipIf(!hasJspi)("node:net in a component", () => {
             await writeFile(entry, source);
             await injectNodeWitImports(wit, undefined, requirements);
             const componentPath = join(root, "component.wasm");
+            phase("bundled; componentizing");
             await exec(jcoPath, "componentize", entry, "-w", wit, "-o", componentPath, "--backend", backend);
+            phase("componentized; transpiling");
             const { esModuleOutputPath, cleanup } = await setupAsyncTest({
                 component: { name: `node-net-${backend}`, path: componentPath, skipInstantiation: true },
                 jco: { transpile: { extraArgs: { asyncExports: ["*"] } } },
             });
             try {
+                phase("transpiled; executing run.js");
                 const output = await exec(join(fixture, "run.js"), esModuleOutputPath);
+                phase("run.js exited");
                 expect(JSON.parse(output.stdout)).toEqual({
                     surface: { exports: NET_EXPORTS, aliases: true, ipv6: 6, blocked: true },
                     client: "host:client",
@@ -156,6 +164,6 @@ describe.skipIf(!hasJspi)("node:net in a component", () => {
                 await cleanup();
             }
         },
-        600_000,
+        180_000, // TEMP(debug): fail hangs faster (was 600_000)
     );
 });

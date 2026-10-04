@@ -63,13 +63,15 @@ export async function exec(cmd, ...args) {
         }
         cp.stdout.on("data", (chunk) => {
             stdout += chunk;
-            if (env.JCO_DEBUG) {
+            // TEMP(debug): JCO_TEST_STREAM_EXEC streams child output without JCO_DEBUG's tracing
+            if (env.JCO_DEBUG || env.JCO_TEST_STREAM_EXEC) {
                 console.error(`[exec] [cmd=${cmd}] [stdout] ${chunk}`);
             }
         });
         cp.stderr.on("data", (chunk) => {
             stderr += chunk;
-            if (env.JCO_DEBUG) {
+            // TEMP(debug): JCO_TEST_STREAM_EXEC streams child output without JCO_DEBUG's tracing
+            if (env.JCO_DEBUG || env.JCO_TEST_STREAM_EXEC) {
                 console.error(`[exec] [cmd=${cmd}] [stderr] ${chunk}`);
             }
         });
