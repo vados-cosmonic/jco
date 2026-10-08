@@ -2,9 +2,7 @@ name: lint
 
 on:
   merge_group:
-    if: false # Fork-only focused reproduction
   pull_request:
-    if: false # Fork-only focused reproduction
     branches:
       - main
 
@@ -17,7 +15,6 @@ permissions:
 
 jobs:
   cc-commits:
-    if: false # Fork-only focused reproduction
     runs-on: ubuntu-22.04
     permissions:
       contents: read
@@ -57,7 +54,6 @@ jobs:
       - uses: wagoid/commitlint-github-action@b948419dd99f3fd78a6548d48f94e3df7f6bf3ed # v6.2.1
 
   gha-workflows:
-    if: false # Fork-only focused reproduction
     runs-on: ubuntu-22.04
     permissions:
       contents: read

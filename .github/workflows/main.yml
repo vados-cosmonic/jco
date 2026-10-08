@@ -1,11 +1,14 @@
-name: targeted-tty-repro
+name: test
 
 on:
-  pull_request:
-    branches: [main]
+  merge_group:
+  push:
+    branches:
+      - main
 
-permissions:
-  contents: read
+  pull_request:
+    branches:
+      - main
 
 defaults:
   run:
@@ -15,42 +18,971 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+permissions: {}
+
 jobs:
-  tty:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "latest"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      - name: Enable sccache
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
+
+      - name: Setup sccache
+        run: |
+          echo "SCCACHE_GHA_ENABLED=true" >> "$GITHUB_ENV"
+          echo "RUSTC_WRAPPER=sccache" >> "$GITHUB_ENV"
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Build jco for test
+        working-directory: packages/jco
+        run: |
+          pnpm --filter '@bytecodealliance/jco' run build
+          pnpm --filter '@bytecodealliance/jco' run build:test:components
+
+      - name: Upload jco build transpiled output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Upload jco build TS output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Upload artifacts for js tests
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: js-generated-tests
+          path: packages/jco-transpile/test/fixtures/generated
+
+      - name: Build jco-transpile
+        run: pnpm --filter '@bytecodealliance/jco-transpile' run build
+
+      - name: Upload jco-transpile vendor
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: jco-transpile-vendor
+          path: |
+            packages/jco-transpile/vendor
+
+      - name: Build preview2-shim
+        run: pnpm --filter '@bytecodealliance/preview2-shim' run build
+
+      - name: Upload preview2-shim build output
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: build-preview2-shim
+          path: packages/preview2-shim/dist
+
+  test-jco:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - build
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        node:
+          - 22.x
+          - 24.x
+          - latest # 26.x
+        include:
+          - os: ubuntu-latest
+            weval-bin-path: .weval-bin/weval
+          - os: macos-latest
+            weval-bin-path: .weval-bin/weval
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wasm-tools@1.244.0
+
+      # Determine weval version
+      - name: Determine weval version
+        id: weval-meta
+        run: |
+          WEVAL_LATEST_URL="$(curl -Ls -o /dev/null -w '%{url_effective}' https://github.com/bytecodealliance/weval/releases/latest)";
+          export WEVAL_LATEST_URL;
+          export WEVAL_VERSION=${WEVAL_LATEST_URL#https://github.com/bytecodealliance/weval/releases/tag/}
+          echo -e "version=$WEVAL_VERSION" >> "$GITHUB_OUTPUT"
+
+      # Use cached weval bin if present
+      - name: Cache weval bin
+        id: cache-weval-bin
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .weval-bin
+          key: weval-bin-${{ steps.weval-meta.outputs.version }}-${{ matrix.os }}
+
+      # (no cached weval bin) download weval release
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'ubuntu') }}
+        env:
+          WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
+        run: |
+          curl -LO "https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-x86_64-linux.tar.xz"
+          tar -xvJf "weval-$WEVAL_VERSION-x86_64-linux.tar.xz"
+          mv "weval-$WEVAL_VERSION-x86_64-linux/weval" .weval-bin
+
+      - if: ${{ steps.cache-weval-bin.outputs.cache-hit != 'true' && startsWith(matrix.os, 'macos') }}
+        env:
+          WEVAL_VERSION: ${{ steps.weval-meta.outputs.version }}
+        run: |
+          curl -LO "https://github.com/bytecodealliance/weval/releases/download/$WEVAL_VERSION/weval-$WEVAL_VERSION-aarch64-macos.tar.xz"
+          tar -xvJf "weval-$WEVAL_VERSION-aarch64-macos.tar.xz"
+          mkdir .weval-bin
+          mv "weval-$WEVAL_VERSION-aarch64-macos/weval" .weval-bin/
+
+      - name: Install NPM packages
+        run: pnpm install
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore preview2-shim build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-preview2-shim
+          path: packages/preview2-shim/dist
+
+      # Temporarily exercise unpublished jco-std fixes through the workspace dependency.
+      - name: Build workspace jco-std
+        run: pnpm --filter '@bytecodealliance/jco-std' run build:ts
+
+      - name: Test jco (node@lts)
+        if: matrix.node != 'latest'
+        working-directory: packages/jco
+        run: |
+          pnpm --filter '@bytecodealliance/jco' run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+
+      - name: Test jco (node@latest)
+        if: matrix.node == 'latest'
+        working-directory: packages/jco
+        env:
+          WEVAL_BIN_PATH: ${{ matrix.weval-bin-path }}
+        run: |
+          pnpm --filter '@bytecodealliance/jco' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+
+  test-jco-transpile:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - build
+    strategy:
+      matrix:
+        os:
+          - ubuntu-22.04 # https://github.com/puppeteer/puppeteer/issues/12818#issuecomment-2593659514
+          - macos-latest
+        node:
+          - 22.x
+          - 24.x
+          - latest # 26.x
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wasm-tools@1.244.0
+
+      - name: Install NPM packages
+        run: pnpm install
+
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'ubuntu') }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            /home/runner/.cache/puppeteer
+
+      - name: Cache puppeteer install
+        if: ${{ startsWith(matrix.os, 'macos') }}
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            /Users/runner/.cache/puppeteer
+
+      # NOTE: We can stop pinning the version of puppeteer when the version that the mac atttempts to use
+      # syncs up (right now newest is 148.0.7778.178, but puppeteer will attempt to use 148.0.7778.97)
+      - name: Install puppeteer (pinned)
+        if: ${{ matrix.node == 'latest' }}
+        run: |
+          export PUPPETEER_VERSION=148.0.7778.97
+          pnpm run test:setup:puppeteer
+
+      - name: Install puppeteer
+        if: ${{ matrix.node != 'latest' }}
+        run: |
+          pnpm run test:setup:puppeteer
+
+      - name: Restore jco-transpile build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-transpile-vendor
+          path: packages/jco-transpile/vendor
+
+      - name: Restore artifacts for JS tests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-generated-tests
+          path: packages/jco-transpile/test/fixtures/generated
+
+      - name: Restore preview2-shim build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-preview2-shim
+          path: packages/preview2-shim/dist
+
+      - name: Test jco-transpile (node@lts)
+        if: matrix.node != 'latest'
+        working-directory: packages/jco-transpile
+        run: |
+          pnpm --filter '@bytecodealliance/jco-transpile' run test:lts -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+
+      - name: Test jco-transpile (node@latest)
+        if: matrix.node == 'latest'
+        working-directory: packages/jco-transpile
+        run: |
+          pnpm --filter '@bytecodealliance/jco-transpile' run test -- --maxWorkers 4 --minWorkers 2 --maxConcurrency 2
+
+  test-wasi-deno:
+    runs-on: "ubuntu-latest"
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Rust deps
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32-wasip1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "latest"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v1.x
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore artifacts for JS tests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-generated-tests
+          path: packages/jco-transpile/test/fixtures/generated
+
+      - name: Restore preview2-shim build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-preview2-shim
+          path: packages/preview2-shim/dist
+
+      - name: Generate tests
+        run: |
+          cargo xtask generate tests preview2
+
+      - name: Preview 2 Deno worker resources
+        timeout-minutes: 10
+        run: pnpm --filter @bytecodealliance/preview2-shim run test:deno
+
+      - name: WASI Preview 2 Conformance
+        timeout-minutes: 10
+        run: cargo test deno_
+
+  test-wasi-node:
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+        node:
+          - 22.x
+          - 24.x
+          - latest
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          submodules: recursive
+
+      - name: Install Rust deps
+        run: |
+          rustup update stable --no-self-update && rustup default stable
+          rustup target add wasm32-unknown-unknown
+          rustup target add wasm32-wasip1
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore artifacts for JS tests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-generated-tests
+          path: packages/jco-transpile/test/fixtures/generated
+
+      - name: Restore preview2-shim build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: build-preview2-shim
+          path: packages/preview2-shim/dist
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Generate tests
+        run: |
+          cargo xtask generate tests preview2
+
+      - name: WASI Preview 2 Conformance
+        run: |
+          cargo test node_
+
+  test-shims:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace:
+          - preview2-shim
+          - preview3-shim
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Cache puppeteer install
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: puppeteer-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            /home/runner/.cache/puppeteer
+
+      - name: Install puppeteer
+        run: |
+          pnpm run test:setup:puppeteer
+
+      - name: Build jco
+        run: pnpm run build
+
+      - name: Test Workspaces
+        env:
+          TEST_PUPPETEER_LAUNCH_ARGS: |
+            --no-sandbox
+        run: pnpm --filter 'packages/${{ matrix.workspace }}' run test
+
+  test-jco-node-fs:
+    name: Test jco-node-fs (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu-22.04
-            node: 22.x
-          - os: windows-2025
-            node: 22.x
-          - os: windows-latest
-            node: 24.x
-    runs-on: ${{ matrix.os }}
-    timeout-minutes: 15
+        os:
+          - ubuntu-latest
+          - macos-latest
+          - windows-latest
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: ${{ matrix.node }}
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413
+          node-version: 24
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 11
-      - run: pnpm install --frozen-lockfile
-      - name: Build TypeScript
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: jco-node-fs-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install node modules
+        run: pnpm install --frozen-lockfile
+
+      - name: Test native filesystem helpers
+        run: pnpm --filter '@bytecodealliance/jco-node-fs' run test
+
+  # Release gate: prove @bytecodealliance/jco's browser entry can be resolved
+  # and bundled by a browser-targeted bundler against the actual packed tarballs.
+  # Catches regressions like a `files` omission or an import path that only breaks
+  # when the package is consumed via npm (not the local workspace).
+  browser-bundle-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "latest"
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore jco-transpile vendor
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-transpile-vendor
+          path: packages/jco-transpile/vendor
+
+      - name: Bundle browser entry against packed tarballs
+        run: node scripts/build-browser-bundle.mjs
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Lint
+        run: pnpm run lint
+
+  fmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - name: Install node modules
+        run: pnpm install
+
+      - name: Format
+        run: pnpm run fmt:check
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup update stable && rustup default stable && rustup component add rustfmt
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Format source code
+        run: cargo fmt -- --check
+
+  clippy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup update stable && rustup default stable
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+
+      - name: Run clippy
+        run: cargo clippy --workspace --all-features --all-targets --keep-going -- -D warnings
+
+  test-js-workspace-packages:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        workspace:
+          - jco-std
+          - rolldown-plugin-jco
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install Rust
+        run: rustup update stable --no-self-update
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          shared-key: jco-${{ hashFiles('Cargo.lock') }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wasmtime-cli@40.0.2
+
+      - name: Install node modules
+        working-directory: packages/${{ matrix.workspace }}
         run: |
-          pnpm --filter '@bytecodealliance/jco-std' run build:ts
-          pnpm --filter '@bytecodealliance/jco' run build:ts
-      - name: Report Python runtime
-        if: runner.os == 'Linux'
-        run: python3 -c 'import os, sys; print(sys.version); print("os.login_tty available:", hasattr(os, "login_tty"))'
-      - name: Test only node:tty
-        working-directory: packages/jco
-        run: pnpm exec vitest run -c test/vitest.lts.ts test/node/tty.js --maxWorkers 1 --maxConcurrency 1
-      - name: Test jco-std's PTY helper
-        if: runner.os == 'Linux'
-        working-directory: packages/jco-std
-        run: pnpm exec vitest run -c test/vitest.ts test/wasi/0.2.x/node/24.x.x/tty/pty.ts --maxWorkers 1
+          pnpm install
+
+      - name: Build workspace dependencies and package
+        run: |
+          if [ "${{ matrix.workspace }}" = "jco-std" ]; then
+            pnpm --filter "packages/jco-transpile" run build
+            pnpm --filter "packages/${{ matrix.workspace }}" run build
+          else
+            pnpm --filter "packages/${{ matrix.workspace }}" run build
+          fi
+
+      - name: run test on workspace
+        run: |
+          pnpm --filter "packages/${{ matrix.workspace }}" run test
+
+  examples:
+    needs:
+      - build
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        wac:
+          - version: 0.6.0
+        node:
+          - version: 24.x
+        project:
+          - name: add
+            workspace: examples/components/add
+          - name: adder
+            workspace: examples/components/adder
+          - name: string-reverse
+            workspace: examples/components/string-reverse
+          - name: string-reverse-upper
+            workspace: examples/components/string-reverse-upper
+            is-composed: true
+          - name: webidl-book-library
+            workspace: examples/components/webidl-book-library
+            uses-webidl2wit: true
+          - name: node-fetch
+            workspace: examples/components/node-fetch
+          - name: http-hello-world
+            workspace: examples/components/http-hello-world
+          - name: http-server-fetch-handler
+            workspace: examples/components/http-server-fetch-handler
+          - name: http-server-hono
+            workspace: examples/components/http-server-hono
+            setup-transpile: true
+            setup-std: true
+          - name: host-logging
+            workspace: examples/components/host-logging
+          - name: ts-resource-import
+            workspace: examples/components/ts-resource-import
+          - name: ts-resource-export
+            workspace: examples/components/ts-resource-export
+          - name: typegen-async-export
+            workspace: examples/components/typegen-async-export
+          - name: node-compat
+            workspace: examples/components/node-compat
+          - name: node-mcp-server
+            workspace: examples/components/node-mcp-server
+            setup-p2-shim: true
+            setup-std: true
+          - name: node-grpc-server
+            workspace: examples/components/node-grpc-server
+            setup-p2-shim: true
+            setup-std: true
+          - name: node-sveltekit-server
+            workspace: examples/components/node-sveltekit-server
+            setup-p2-shim: true
+            setup-std: true
+          - name: fs-write-file
+            workspace: examples/components/fs-write-file
+          - name: browser-p2-shims
+            workspace: examples/components/browser-p2-shims
+            setup-p2-shim: true
+          - name: native-messaging
+            workspace: examples/components/native-messaging
+            setup-p2-shim: true
+          - name: wintertc
+            workspace: examples/components/wintertc
+          - name: p3-stream-echo-qjs
+            workspace: examples/components/p3-stream-echo-qjs
+          - name: p3-stream-chat
+            workspace: examples/transpile/p3-stream-chat
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node.version }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        if: ${{ matrix.project.name == 'wintertc' }}
+        with:
+          deno-version: v2.x
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore artifacts for JS tests
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: js-generated-tests
+          path: packages/jco-transpile/test/fixtures/generated
+
+      - name: Restore jco-transpile vendor
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-transpile-vendor
+          path: |
+            packages/jco-transpile/vendor
+
+      - name: Install Rust
+        if: ${{ matrix.project.uses-webidl2wit }}
+        run: rustup update stable --no-self-update && rustup default stable
+
+      - name: install webidl2wit-cli
+        if: ${{ matrix.project.uses-webidl2wit }}
+        uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: webidl2wit-cli
+
+      - name: Install wac
+        if: ${{ matrix.project.is-composed }}
+        uses: jaxxstorm/action-install-gh-release@25e24d2d23ae098373794ef1d6faecb48ee52da8 # v3.0.0
+        with:
+          repo: bytecodealliance/wac
+          tag: v${{ matrix.wac.version }}
+          extension-matching: disable
+          rename-to: wac
+          chmod: 0755
+
+      - uses: bytecodealliance/actions/wasmtime/setup@9152e710e9f7182e4c29ad218e4f335a7b203613 # v1.1.3
+
+      - name: Cache node modules
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: node-modules-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+          path: |
+            node_modules
+
+      - run: pnpm install
+
+      - name: Install Puppeteer browser
+        if: ${{ matrix.project.name == 'browser-p2-shims' || matrix.project.name == 'native-messaging' }}
+        run: pnpm run test:setup:puppeteer
+
+      - name: Install SvelteKit example browser
+        if: ${{ matrix.project.name == 'node-sveltekit-server' }}
+        working-directory: ${{ matrix.project.workspace }}
+        run: pnpm run setup:browser
+
+      - name: Install Firefox
+        if: ${{ matrix.project.name == 'native-messaging' }}
+        run: pnpm run test:setup:firefox
+
+      - name: Build required deps
+        env:
+          SETUP_P2_SHIM: ${{ matrix.project.setup-p2-shim }}
+          SETUP_TRANSPILE: ${{ matrix.project.setup-transpile }}
+          SETUP_STD: ${{ matrix.project.setup-std }}
+        run: |
+          if [ "true" == "$SETUP_P2_SHIM" ]; then
+              pnpm run --filter '@bytecodealliance/preview2-shim' build
+          fi
+          if [ "true" == "$SETUP_TRANSPILE" ]; then
+              pnpm run --filter '@bytecodealliance/jco-transpile' build
+          fi
+          if [ "true" == "$SETUP_STD" ]; then
+              pnpm run --filter '@bytecodealliance/jco-std' build
+          fi
+
+      - name: Run all script for (${{ matrix.project.name }})
+        env:
+          TEST_PUPPETEER_LAUNCH_ARGS: --no-sandbox
+        run: |
+          pnpm --filter '${{ matrix.project.workspace }}' run all
+
+  test-extended:
+    runs-on: ${{ matrix.os }}
+    needs:
+      - build
+    permissions:
+      contents: read
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+        node:
+          - latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 11
+
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wasm-tools
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wit-bindgen-cli
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wac-cli
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: just
+      - uses: taiki-e/cache-cargo-install-action@9ee83daaa7b96a6fab930949ecf1122bba04a389 # v3.0.8
+        with:
+          tool: wkg
+
+      - id: wasi-sdk
+        uses: bytecodealliance/setup-wasi-sdk-action@77d09f3df1e8da344d8403cf8631af8977938b4c # v1.0.0
+        with:
+          version: "34.0"
+
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
+
+      - name: Install the Rust WASI P2 target
+        run: rustup target add wasm32-wasip2
+
+      - name: Install MoonBit
+        run: |
+          curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+          echo "$HOME/.moon/bin" >> "$GITHUB_PATH"
+
+      - run: pnpm install
+
+      - name: Restore jco build transpilation output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-transpiled
+          path: packages/jco/obj
+
+      - name: Restore jco TS build output
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-build-ts
+          path: packages/jco/dist
+
+      - name: Restore jco-transpile vendor
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: jco-transpile-vendor
+          path: packages/jco-transpile/vendor
+
+      - name: Build extended component tree
+        working-directory: test/components
+        env:
+          WASI_SDK: ${{ steps.wasi-sdk.outputs.wasi-sdk-path }}
+        run: just build
+
+      - name: Run extended component tests
+        run: |
+          pnpm --filter '@bytecodealliance/jco' run test:extended
+          pnpm --filter '@bytecodealliance/jco-transpile' run test:extended
