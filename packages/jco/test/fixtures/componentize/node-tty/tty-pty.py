@@ -1,5 +1,11 @@
 """Run a command on a pseudo-terminal of a fixed size with scripted interaction.
 
+The TTY tests need a real terminal for isatty(), window sizing, raw mode, and
+readline. Node's standard library cannot allocate a pseudo-terminal; Python's
+pty, fcntl, and termios modules provide the required Unix APIs without any
+third-party dependencies. The caller skips this helper on Windows or when
+python3 is unavailable.
+
 usage: tty-pty.py ROWS COLS STEPS COMMAND...
 
 STEPS is a JSON list of {"expect": text} (wait until the output so far contains text) and
@@ -7,26 +13,24 @@ STEPS is a JSON list of {"expect": text} (wait until the output so far contains 
 terminal output and the command's exit status.
 """
 import json
+import fcntl
 import os
 import pty
+import struct
 import sys
+import termios
 
 rows, cols = int(sys.argv[1]), int(sys.argv[2])
 steps = json.loads(sys.argv[3])
 command = sys.argv[4:]
 
-master, slave = pty.openpty()
-import fcntl, struct, termios  # noqa: E401
-
-fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
-
-pid = os.fork()
+# pty.fork() attaches the child's standard streams and controlling terminal,
+# including on Python 3.10 where os.login_tty() is unavailable.
+pid, master = pty.fork()
 if pid == 0:
-    os.close(master)
-    os.login_tty(slave)
+    fcntl.ioctl(0, termios.TIOCSWINSZ, struct.pack("HHHH", rows, cols, 0, 0))
     os.execvp(command[0], command)
 
-os.close(slave)
 output = b""
 
 
