@@ -50,3 +50,7 @@ jobs:
       - name: Test only node:tty
         working-directory: packages/jco
         run: pnpm exec vitest run -c test/vitest.lts.ts test/node/tty.js --maxWorkers 1 --maxConcurrency 1
+      - name: Test jco-std's PTY helper
+        if: runner.os == 'Linux'
+        working-directory: packages/jco-std
+        run: pnpm exec vitest run -c test/vitest.ts test/wasi/0.2.x/node/24.x.x/tty/pty.ts --maxWorkers 1
