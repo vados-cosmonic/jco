@@ -339,6 +339,21 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a callback can make a sync-lowered call into an async-lifted export', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'callback-sync-call',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'callback-sync-call.wat'),
+            },
+        });
+        try {
+            assert.strictEqual(await instance.run(), 42);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
