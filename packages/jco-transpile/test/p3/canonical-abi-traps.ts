@@ -106,6 +106,39 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a stackful lift delivers its result through task.return', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'stackful-lift-task-return',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'stackful-lift.wat'),
+            },
+        });
+        try {
+            assert.strictEqual(await instance.withTaskReturn(), 42);
+            assert.strictEqual(await instance.withTaskReturn(), 42);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('a stackful lift that returns without task.return traps', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'stackful-lift-no-task-return',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'stackful-lift.wat'),
+            },
+        });
+        try {
+            const err = await rejection(instance.withoutTaskReturn());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /without resolution/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
