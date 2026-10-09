@@ -419,6 +419,28 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent.each([
+        'waitUnknown',
+        'dropSetUnknown',
+        'streamReadUnknown',
+        'futureReadUnknown',
+        'badCallbackCode',
+    ])('an invalid handle index or callback code traps rather than failing internally (%s)', async (fn: string) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: `invalid-handle-traps-${fn}`,
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'invalid-handle-traps.wat'),
+            },
+        });
+        try {
+            const err = await rejection(instance[fn]());
+            assert.instanceOf(err, WebAssembly.RuntimeError, `unexpected error: ${(err as Error).stack}`);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
