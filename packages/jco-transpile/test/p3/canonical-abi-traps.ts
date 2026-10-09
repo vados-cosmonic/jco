@@ -154,6 +154,45 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('backpressure keeps a second call out until it is cleared', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'backpressure-admission',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'backpressure-admission.wat'),
+            },
+        });
+        try {
+            // Back to back, before either is awaited.
+            const first = instance.run();
+            const second = instance.run();
+            assert.strictEqual(await first, 100);
+            // The second call only entered once the first task's callback
+            // had cleared the backpressure.
+            assert.strictEqual(await second, 1);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('backpressure left set by an exited task keeps later calls out', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'backpressure-admission-blocked',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'backpressure-admission.wat'),
+            },
+        });
+        try {
+            assert.strictEqual(await instance.block(), 0);
+            const err = await rejection(instance.run());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /deadlock/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
