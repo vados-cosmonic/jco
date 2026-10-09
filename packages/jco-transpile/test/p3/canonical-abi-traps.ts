@@ -374,6 +374,27 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a deadlocked wait is not resumed with a fabricated cancellation', async () => {
+        const steps: number[] = [];
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'deadlock-no-resume',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'deadlock-no-resume.wat'),
+                imports: { progress: { default: (step: number) => steps.push(step) } },
+            },
+        });
+        try {
+            const err = await rejection(instance.run());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /deadlock/);
+            // Guest code after the blocked wait never ran.
+            assert.deepStrictEqual(steps, [1]);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
