@@ -74,4 +74,36 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('waitable-set.poll of a waitable that is not a set traps', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'waitable-set-poll-non-set',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'waitable-set-poll-non-set.wat'),
+            },
+        });
+        try {
+            const err = await rejection(instance.pollFutureEnd());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /unknown handle index/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('waitable-set.poll of an empty set returns EVENT_NONE', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'waitable-set-poll-empty-set',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'waitable-set-poll-non-set.wat'),
+            },
+        });
+        try {
+            assert.strictEqual(await instance.pollEmptySet(), 0);
+        } finally {
+            await cleanup();
+        }
+    });
+
 });
