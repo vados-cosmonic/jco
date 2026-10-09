@@ -51,4 +51,27 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    // A trap poisons the instance, so each trapping call gets its own.
+    test.concurrent.each([
+        { name: 'resource.drop', fn: 'dropMissing', roundtrip: false },
+        { name: 'resource.rep', fn: 'repMissing', roundtrip: false },
+        { name: 'resource.drop', fn: 'dropMissing', roundtrip: true },
+    ])('$name of an out-of-range handle traps (after a roundtrip: $roundtrip)', async ({ fn, roundtrip }) => {
+        const { instance, cleanup } = await setupAsyncTest({
+            component: {
+                name: `resource-handle-out-of-range-${fn}-${roundtrip}`,
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'resource-handle-out-of-range.wat'),
+            },
+        });
+        try {
+            if (roundtrip) {
+                // Handle 1 is allocated and freed again: the slot exists but is empty.
+                assert.strictEqual(instance.roundtrip(), 7);
+            }
+            assert.throws(() => instance[fn](), WebAssembly.RuntimeError, /unknown handle index/);
+        } finally {
+            await cleanup();
+        }
+    });
+
 });
