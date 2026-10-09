@@ -395,6 +395,30 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a call queued behind a task blocked in a synchronous wait does not livelock', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'blocked-holder-livelock',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'blocked-holder-livelock.wat'),
+            },
+        });
+        try {
+            // Back to back: the second call queues behind the first task's slice.
+            const settled = Promise.allSettled([instance.run(), instance.run()]);
+            const outcomes = await Promise.race([
+                settled,
+                new Promise<never>((_, reject) => setTimeout(() => reject(new Error('the calls never settled')), 10_000)),
+            ]);
+            for (const outcome of outcomes) {
+                assert.strictEqual(outcome.status, 'rejected');
+                assert.instanceOf((outcome as PromiseRejectedResult).reason, WebAssembly.RuntimeError);
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
