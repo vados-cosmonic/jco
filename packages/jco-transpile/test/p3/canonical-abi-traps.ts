@@ -238,6 +238,50 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a synchronous stream.read that cannot complete blocks instead of reporting BLOCKED', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'sync-copy-blocks-stream',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'sync-copy-blocks.wat'),
+            },
+        });
+        try {
+            // Nobody writes, so the blocked task is reported as a deadlock.
+            const err = await rejection(instance.streamRead());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /deadlock/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('a synchronous future.read that cannot complete blocks, also with concurrent calls', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'sync-copy-blocks-future',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'sync-copy-blocks.wat'),
+            },
+        });
+        try {
+            // All three fail together once the deadlock is detected, so take
+            // their outcomes at once rather than one rejection at a time.
+            const outcomes = await Promise.allSettled([
+                instance.futureRead(),
+                instance.futureRead(),
+                instance.futureRead(),
+            ]);
+            for (const outcome of outcomes) {
+                assert.strictEqual(outcome.status, 'rejected');
+                const err = (outcome as PromiseRejectedResult).reason;
+                assert.instanceOf(err, WebAssembly.RuntimeError, `unexpected error: ${(err as Error).stack}`);
+            }
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
