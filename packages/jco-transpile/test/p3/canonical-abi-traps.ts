@@ -282,6 +282,31 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a callee that exits without task.return traps its async-lowered caller', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'callee-exit-without-return',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'callee-exit-without-return.wat'),
+            },
+        });
+        try {
+            // The caller is sync-lifted: the trap surfaces from its call rather
+            // than a RETURN_CANCELLED subtask state the caller would carry on with.
+            let err: unknown;
+            try {
+                const result = instance.run();
+                err = await rejection(Promise.resolve(result));
+            } catch (thrown) {
+                err = thrown;
+            }
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /without resolution/);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
