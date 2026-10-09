@@ -307,6 +307,38 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('task.return with a result type other than the function type traps', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'task-return-type-mismatch',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'task-return-type-mismatch.wat'),
+            },
+        });
+        try {
+            const err = await rejection(instance.wrongType());
+            assert.instanceOf(err, WebAssembly.RuntimeError);
+            assert.match((err as Error).message, /result type/);
+        } finally {
+            await cleanup();
+        }
+    });
+
+    test.concurrent('task.return with the function type result type succeeds', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'task-return-type-match',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'task-return-type-mismatch.wat'),
+            },
+        });
+        try {
+            assert.isUndefined(await instance.rightType());
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
