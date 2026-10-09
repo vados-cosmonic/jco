@@ -193,6 +193,26 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent.each(['waitUnknown', 'waitZero'])(
+        'a callback that returns WAIT on an invalid waitable set traps (%s)',
+        async (fn: string) => {
+            const { instance, cleanup } = await setupAsyncTest({
+                asyncMode: 'jspi',
+                component: {
+                    name: `callback-wait-invalid-set-${fn}`,
+                    path: join(P3_COMPONENT_FIXTURES_DIR, 'callback-wait-invalid-set.wat'),
+                },
+            });
+            try {
+                const err = await rejection(instance[fn]());
+                assert.instanceOf(err, WebAssembly.RuntimeError);
+                assert.match((err as Error).message, /unknown handle index/);
+            } finally {
+                await cleanup();
+            }
+        },
+    );
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
