@@ -106,4 +106,21 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'zero-length-same-component-stream',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'zero-length-same-component-stream.wat'),
+            },
+        });
+        try {
+            // The read blocks (0xffffffff); the zero-length write completes with 0 elements.
+            const packed = await instance.zeroLengthWrite();
+            assert.strictEqual(packed >>> 16, 0xffff, 'the read is BLOCKED');
+            assert.strictEqual(packed & 0xffff, 0, 'the write completed with 0 elements');
+        } finally {
+            await cleanup();
+        }
+    });
 });
