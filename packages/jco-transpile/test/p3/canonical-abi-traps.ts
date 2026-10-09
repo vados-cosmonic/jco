@@ -354,6 +354,26 @@ suite.skipIf(typeof WebAssembly.Suspending !== 'function')('Canonical ABI traps'
         }
     });
 
+    test.concurrent('task.return delivers the result while the task stays blocked', async () => {
+        const { instance, cleanup } = await setupAsyncTest({
+            asyncMode: 'jspi',
+            component: {
+                name: 'task-return-then-wait',
+                path: join(P3_COMPONENT_FIXTURES_DIR, 'task-return-then-wait.wat'),
+            },
+        });
+        try {
+            // The task blocks forever after returning; the caller is not kept waiting.
+            const result = await Promise.race([
+                instance.run(),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('the call did not settle')), 5_000)),
+            ]);
+            assert.strictEqual(result, 2);
+        } finally {
+            await cleanup();
+        }
+    });
+
     test.concurrent('a zero-length same-component copy of non-numeric elements does not trap', async () => {
         const { instance, cleanup } = await setupAsyncTest({
             asyncMode: 'jspi',
