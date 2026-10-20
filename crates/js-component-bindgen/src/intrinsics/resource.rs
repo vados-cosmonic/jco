@@ -3,7 +3,7 @@
 use std::fmt::Write;
 
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
-use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -78,6 +78,63 @@ pub enum ResourceIntrinsic {
 }
 
 impl ResourceIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::ResourceTableFlag => "resource.tableFlag",
+            Self::HandleIndexSpaces => "resource.state.handleIndexSpaces",
+            Self::GetHandleIndexSpace => "resource.getHandleIndexSpace",
+            Self::ResourceTableCreateBorrow => "resource.tableCreateBorrow",
+            Self::ResourceTableCreateOwn => "resource.tableCreateOwn",
+            Self::ResourceTableGet => "resource.tableGet",
+            Self::ResourceTableEnsureBorrowDrop => "resource.tableEnsureBorrowDrop",
+            Self::ResourceTableRemove => "resource.tableRemove",
+            Self::ResourceCallBorrows => "resource.state.callBorrows",
+            Self::ResourceScopeCounter => "resource.state.scopeCounter",
+            Self::ResourceScopeTasks => "resource.state.scopeTasks",
+            Self::ResourceTransferBorrow => "resource.transferBorrow",
+            Self::ResourceTransferBorrowValidLifting => "resource.transferBorrowValidLifting",
+            Self::ResourceTransferOwn => "resource.transferOwn",
+            Self::CurResourceBorrows => "resource.state.currentBorrows",
+            Self::ResourceDestructorCall => "resource.callDestructor",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        let (expression, value_type) = match self {
+            Self::HandleIndexSpaces => {
+                ("_jcoIntrinsics.resource.state.handleIndexSpaces", "object")
+            }
+            Self::ResourceCallBorrows => ("_jcoIntrinsics.resource.state.callBorrows", "object"),
+            Self::ResourceScopeCounter => ("_jcoIntrinsics.resource.state.scopeCounter", "number"),
+            Self::ResourceScopeTasks => ("_jcoIntrinsics.resource.state.scopeTasks", "object"),
+            Self::CurResourceBorrows => ("_jcoIntrinsics.resource.state.currentBorrows", "object"),
+            Self::ResourceTableFlag => {
+                return RuntimeIntrinsicKind::Value {
+                    value_type: "number",
+                };
+            }
+            _ => return RuntimeIntrinsicKind::Method,
+        };
+        RuntimeIntrinsicKind::Reference {
+            expression,
+            value_type,
+        }
+    }
+
+    pub(crate) fn require_runtime_dependencies(&self, args: &RenderIntrinsicsArgs<'_>) {
+        match self {
+            Self::ResourceTransferBorrow | Self::ResourceTransferBorrowValidLifting => {
+                args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentTask);
+            }
+            Self::ResourceDestructorCall => {
+                args.require_intrinsic(AsyncTaskIntrinsic::CreateNewCurrentTask);
+                args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+            }
+            _ => {}
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [

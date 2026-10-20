@@ -830,7 +830,10 @@ impl JsBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.all_intrinsics.insert(intrinsic);
-        intrinsic.name().to_string()
+        intrinsic
+            .binding(self.opts.cm_runtime_es_module.is_some())
+            .reference()
+            .to_string()
     }
 
     /// Write out utility helpers/objects (available via esModule._util)
@@ -5293,6 +5296,7 @@ impl<'a> Instantiator<'a, '_> {
             skip_fn_call_task_management: false,
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
+            external_runtime: self.bindgen.opts.cm_runtime_es_module.is_some(),
             valid_lifting_optimization: self.bindgen.opts.valid_lifting_optimization,
             flags_as_bigint: self.bindgen.opts.flags_as_bigint,
             enum_values_screaming_snake_case: self.bindgen.opts.enum_values_screaming_snake_case,

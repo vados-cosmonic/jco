@@ -30,6 +30,8 @@ export interface RuntimeOptions {
     readonly nodejsCompat: boolean;
     readonly asyncDeterminism: AsyncDeterminism;
     readonly platform?: Partial<RuntimePlatform>;
+    /** Lazy access to task intrinsics that are still generated inline. */
+    readonly resourceTasks?: ResourceTaskContext;
 }
 
 export interface ResourceTableEntry {
@@ -39,7 +41,74 @@ export interface ResourceTableEntry {
 }
 
 export interface ResourceIntrinsics {
+    readonly tableFlag: number;
+    readonly state: ResourceState;
+    getHandleIndexSpace(key: number | ResourceTable): HandleIndexSpace;
+    tableCreateBorrow(table: ResourceTable, rep: ResourceRep, scopeId: ResourceScope): ResourceHandle;
+    tableCreateOwn(table: ResourceTable, rep: ResourceRep): ResourceHandle;
     tableGet(table: ArrayLike<number>, handle: ResourceHandle): ResourceTableEntry;
+    tableEnsureBorrowDrop(table: ArrayLike<number>, handle: ResourceHandle, scope: ResourceScope): void;
+    tableRemove(table: ResourceTable, handle: ResourceHandle): ResourceTableEntry;
+    transferBorrow(handle: ResourceHandle, fromTid: number, toTid: number): ResourceHandle | ResourceRep;
+    transferBorrowValidLifting(handle: ResourceHandle, fromTid: number, toTid: number): ResourceHandle | ResourceRep;
+    transferOwn(handle: ResourceHandle, fromTid: number, toTid: number): ResourceHandle;
+    callDestructor<T>(args: { componentIdx: number; dtor(rep: ResourceRep): T; rep: ResourceRep }): T;
+}
+
+/** Resizable pair slots, plus the instance owning this table and its known reps. */
+export interface ResourceTable extends Array<number> {
+    _componentIdx?: number;
+    _createdReps: Set<ResourceRep>;
+}
+
+export interface HandleIndexSpace {
+    next: number;
+    free: number[];
+    alloc(): number;
+    release(index: number): void;
+}
+
+export interface ResourceState {
+    readonly handleIndexSpaces: Map<number | ResourceTable, HandleIndexSpace>;
+    readonly handleTables: ResourceTable[];
+    scopeId: ResourceScope;
+    scopeCounter: ResourceScope;
+    readonly scopeTasks: Map<ResourceScope, ResourceBorrowTask>;
+    callBorrows: { rid: number; handle: ResourceHandle }[];
+    /** Host resource objects or `{ rsc, drop }` entries consumed by generated cleanup. */
+    currentBorrows: object[];
+}
+
+/** The part of a task used to account for resource borrows. */
+export interface ResourceBorrowTask {
+    resourceScopeId(): ResourceScope;
+    addResourceLender(table: ResourceTable, handle: ResourceHandle): void;
+    addBorrowedHandle(): void;
+    removeBorrowedHandle(): void;
+}
+
+/** The synchronous task lifecycle used when calling a resource destructor. */
+export interface ResourceDestructorTask {
+    id(): bigint;
+    enterSync(): void;
+    resolve(results: unknown[]): void;
+    exit(options?: { skipExclusiveLockCheck: boolean }): void;
+    isResolvedState(): boolean;
+    setErrored(error: unknown): void;
+    reject(error: unknown): void;
+    isExited(): boolean;
+}
+
+/** Transitional bridge to the generated module's task register and task factory. */
+export interface ResourceTaskContext {
+    getCurrentTask?(componentIdx: number): ResourceBorrowTask | undefined;
+    createTask?(args: {
+        componentIdx: number;
+        isAsync: false;
+        callingWasmExport: true;
+        entryFnName: '<resource-drop>';
+    }): ResourceDestructorTask;
+    withTask?<T>(args: { taskID: bigint; componentIdx: number; fn(): T }): T;
 }
 
 export interface RuntimeIntrinsics {

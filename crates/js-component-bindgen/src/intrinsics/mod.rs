@@ -215,12 +215,26 @@ pub(crate) enum IntrinsicBinding {
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeIntrinsicKind {
     Method,
-    Object { methods: &'static [&'static str] },
+    Object {
+        methods: &'static [&'static str],
+    },
+    Value {
+        value_type: &'static str,
+    },
+    /// Read and write shared state through the provider rather than copying it.
+    Reference {
+        expression: &'static str,
+        value_type: &'static str,
+    },
 }
 
 impl IntrinsicBinding {
-    fn local_name(self) -> &'static str {
+    pub(crate) fn reference(self) -> &'static str {
         match self {
+            Self::Runtime {
+                kind: RuntimeIntrinsicKind::Reference { expression, .. },
+                ..
+            } => expression,
             Self::Inline { local_name } | Self::Runtime { local_name, .. } => local_name,
         }
     }
@@ -1613,6 +1627,103 @@ mod tests {
     }
 
     #[test]
+    fn resource_runtime_keeps_live_state_and_discovers_lazy_task_dependencies() {
+        use ResourceIntrinsic::*;
+        let resources = [
+            ResourceTableFlag,
+            HandleIndexSpaces,
+            GetHandleIndexSpace,
+            ResourceTableCreateBorrow,
+            ResourceTableCreateOwn,
+            ResourceTableGet,
+            ResourceTableEnsureBorrowDrop,
+            ResourceTableRemove,
+            ResourceCallBorrows,
+            ResourceScopeCounter,
+            ResourceScopeTasks,
+            ResourceTransferBorrow,
+            ResourceTransferBorrowValidLifting,
+            ResourceTransferOwn,
+            CurResourceBorrows,
+            ResourceDestructorCall,
+        ];
+        let mut intrinsics: BTreeSet<_> = resources.into_iter().map(Intrinsic::Resource).collect();
+        intrinsics.extend([Intrinsic::HandleTables, Intrinsic::ScopeId]);
+        let opts = TranspileOpts::builder()
+            .name("resources".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        for resource in resources {
+            assert!(source.contains(resource.runtime_path()));
+            assert!(!source.contains(&format!("function {}(", resource.name())));
+        }
+        for dependency in [
+            Intrinsic::GetGlobalCurrentTaskMetaFn,
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask),
+            Intrinsic::WithGlobalCurrentTaskMetaFn,
+        ] {
+            assert!(intrinsics.contains(&dependency));
+        }
+        assert!(source.contains("getCurrentTask: componentIdx =>"));
+        assert!(source.contains("createTask: args => createNewCurrentTask(args)[0]"));
+        assert!(source.contains("withTask: args => _withGlobalCurrentTaskMeta(args)"));
+        // Task scopes and the external resource implementation share one state.
+        assert!(source.contains("++_jcoIntrinsics.resource.state.scopeCounter"));
+        assert!(source.contains("_jcoIntrinsics.resource.state.scopeTasks.set("));
+        assert!(source.contains("_jcoIntrinsics.resource.state.scopeTasks.delete("));
+        for name in [
+            "RESOURCE_SCOPE_ID",
+            "RESOURCE_CALL_BORROWS",
+            "curResourceBorrows",
+            "SCOPE_ID",
+        ] {
+            assert!(!source.contains(&format!("let {name} =")));
+            assert!(!source.contains(&format!("const {name} =")));
+        }
+        assert!(!source.contains("const HANDLE_TABLES ="));
+        assert!(!source.contains("const HANDLE_INDEX_SPACES ="));
+        assert_eq!(
+            Intrinsic::ScopeId.binding(true).reference(),
+            "_jcoIntrinsics.resource.state.scopeId"
+        );
+        assert_eq!(
+            Intrinsic::Resource(CurResourceBorrows)
+                .binding(true)
+                .reference(),
+            "_jcoIntrinsics.resource.state.currentBorrows"
+        );
+    }
+
+    #[test]
+    fn resource_table_runtime_does_not_pull_in_task_implementations() {
+        let mut intrinsics = BTreeSet::from([Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTableCreateOwn,
+        )]);
+        let opts = TranspileOpts::builder()
+            .name("resources".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        assert_eq!(intrinsics.len(), 1);
+        assert!(!source.contains("resourceTasks:"));
+        assert!(!source.contains("class AsyncTask"));
+        assert!(!source.contains("new Map()"));
+        assert!(source.contains("return intrinsic.bind(receiver)"));
+    }
+
+    #[test]
     fn self_dependencies_are_cycle_safe() {
         let current_tasks = Intrinsic::AsyncTask(AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap);
         let (source, intrinsics) = render([current_tasks]);
@@ -2473,7 +2584,7 @@ impl RenderIntrinsicsArgs<'_> {
             .insert(intrinsic);
         intrinsic
             .binding(self.transpile_opts.cm_runtime_es_module.is_some())
-            .local_name()
+            .reference()
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
@@ -2504,11 +2615,13 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
 
         debug_assert!(args.take_discovered_intrinsics().is_empty());
         let mut source = Source::default();
-        if matches!(
-            intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some()),
-            IntrinsicBinding::Inline { .. }
-        ) {
-            intrinsic.render(&mut source, args);
+        match intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some()) {
+            IntrinsicBinding::Inline { .. } => intrinsic.render(&mut source, args),
+            IntrinsicBinding::Runtime { .. } => {
+                if let Intrinsic::Resource(resource) = intrinsic {
+                    resource.require_runtime_dependencies(args);
+                }
+            }
         }
         let discovered = args.take_discovered_intrinsics();
         for dependency in &discovered {
@@ -2526,6 +2639,32 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         args.intrinsics,
         args.transpile_opts.cm_runtime_es_module.is_some(),
     ) {
+        // Task implementations still live in the generated module. Defer their
+        // lookup until a resource operation runs, after task state initializes.
+        let mut resource_tasks = String::new();
+        if args.intrinsics.contains(&Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTransferBorrow,
+        )) || args.intrinsics.contains(&Intrinsic::Resource(
+            ResourceIntrinsic::ResourceTransferBorrowValidLifting,
+        )) {
+            let meta = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+            let task = AsyncTaskIntrinsic::GetCurrentTask.name();
+            write!(resource_tasks, "getCurrentTask: componentIdx => {{ const meta = {meta}(componentIdx); return meta ? {task}(componentIdx, meta.taskID)?.task : undefined; }},").unwrap();
+        }
+        if args.intrinsics.contains(&Intrinsic::Resource(
+            ResourceIntrinsic::ResourceDestructorCall,
+        )) {
+            let create = AsyncTaskIntrinsic::CreateNewCurrentTask.name();
+            let with_task = Intrinsic::WithGlobalCurrentTaskMetaFn.name();
+            write!(
+                resource_tasks,
+                "createTask: args => {create}(args)[0], withTask: args => {with_task}(args),"
+            )
+            .unwrap();
+        }
+        if !resource_tasks.is_empty() {
+            resource_tasks = format!("resourceTasks: {{ {resource_tasks} }},");
+        }
         uwriteln!(
             output,
             r#"
@@ -2542,6 +2681,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     nodejsCompat: {nodejs_compat},
                     asyncDeterminism: '{determinism}',
                     platform: {{ WebAssembly }},
+                    {resource_tasks}
                 }});
                 if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
                     throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
@@ -2566,6 +2706,19 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             let (receiver_path, method) = path
                 .rsplit_once('.')
                 .expect("runtime intrinsic paths must name a member on a receiver");
+            let receiver_path = receiver_path.replace('.', "?.");
+            if let RuntimeIntrinsicKind::Reference { value_type, .. } = kind {
+                let article = if value_type == "object" { "an" } else { "a" };
+                output.push_str(&format!(
+                    r#"
+                        if (typeof {CM_RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path}?.{method} !== '{value_type}' ||
+                            {CM_RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path}?.{method} === null) {{
+                            throw new TypeError('Jco Component Model runtime intrinsic {path} must be {article} {value_type}');
+                        }}
+                    "#
+                ));
+                continue;
+            }
             output.push_str(&format!(
                 r#"
                     const {local_name} = (() => {{
@@ -2594,6 +2747,15 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     }
                     uwriteln!(output, "return intrinsic;");
                 }
+                RuntimeIntrinsicKind::Value { value_type } => output.push_str(&format!(
+                    r#"
+                        if (typeof intrinsic !== '{value_type}' || intrinsic === null) {{
+                            throw new TypeError('Jco Component Model runtime intrinsic {path} must be a {value_type}');
+                        }}
+                        return intrinsic;
+                    "#
+                )),
+                RuntimeIntrinsicKind::Reference { .. } => unreachable!(),
             }
             uwriteln!(output, "}})();");
         }
@@ -2732,13 +2894,27 @@ impl Intrinsic {
                 path: intrinsic.runtime_path(),
                 kind: intrinsic.runtime_kind(),
             },
-            Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
-                IntrinsicBinding::Runtime {
-                    local_name: self.name(),
-                    path: "resource.tableGet",
-                    kind: RuntimeIntrinsicKind::Method,
-                }
-            }
+            Self::Resource(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
+            },
+            Self::HandleTables if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: "resource.state.handleTables",
+                kind: RuntimeIntrinsicKind::Reference {
+                    expression: "_jcoIntrinsics.resource.state.handleTables",
+                    value_type: "object",
+                },
+            },
+            Self::ScopeId if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: "resource.state.scopeId",
+                kind: RuntimeIntrinsicKind::Reference {
+                    expression: "_jcoIntrinsics.resource.state.scopeId",
+                    value_type: "number",
+                },
+            },
             _ => IntrinsicBinding::Inline {
                 local_name: self.name(),
             },

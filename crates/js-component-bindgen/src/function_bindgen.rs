@@ -156,6 +156,10 @@ pub struct FunctionBindgen<'a> {
     /// Set of intrinsics
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
 
+    /// Use the external runtime's intrinsic references, including mutable state.
+    #[builder(default)]
+    pub external_runtime: bool,
+
     /// Whether to perform valid lifting optimization
     pub valid_lifting_optimization: bool,
     /// Whether WIT flags are represented as bigint values.
@@ -414,7 +418,10 @@ impl FunctionBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
-        intrinsic.name().to_string()
+        intrinsic
+            .binding(self.external_runtime)
+            .reference()
+            .to_string()
     }
 
     // Task-only templates may be built unconditionally, but must only be emitted

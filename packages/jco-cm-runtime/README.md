@@ -61,7 +61,7 @@ API is versioned independently from the npm package version.
 
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1`, `intrinsics.resource.tableGet`, `intrinsics.conversion`,
+with `apiVersion: 1`, `intrinsics.resource`, `intrinsics.conversion`,
 `intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
@@ -134,6 +134,14 @@ the returned object's properties depend on the host's available Web APIs.
 
 ### Resource tables
 
+`intrinsics.resource` implements all helpers from bindgen's `resource.rs`.
+`tableCreateOwn`, `tableCreateBorrow`, `tableRemove`, and `tableEnsureBorrowDrop`
+manage ownership and borrow lifetimes. `transferOwn`, `transferBorrow`, and
+`transferBorrowValidLifting` move resources between tables, retaining the inline
+implementation's handling of reps returned to their defining table.
+`callDestructor` runs a destructor in a fresh synchronous task and restores the
+enclosing task's context on success or failure.
+
 `resource.tableGet(table, handle)` reads an array-like table without modifying
 it and returns `{ rep, scope, own }`. The table layout is Jco's JavaScript
 representation of a Canonical ABI resource table and is part of the JavaScript
@@ -146,8 +154,31 @@ CM runtime API:
 - Slot `(handle << 1) + 1` contains the representation, with bit 30 indicating
   ownership. Clear that bit to obtain `rep`. A freed entry stores zero.
 - A slot past the end of the table, a decoded representation of zero or a freed
-  entry must trap with `unknown handle index <handle>` using the selected
+  entry causes `tableGet` to trap with `unknown handle index <handle>` using the selected
   `WebAssembly.RuntimeError` constructor.
+
+`ResourceTable` describes the resizable array and its `_createdReps` set and
+optional `_componentIdx`. `resource.tableFlag` exposes bit 30. All handle kinds
+of a component share the allocator returned by `getHandleIndexSpace(componentIdx)`;
+a table without a component index uses the table itself as its allocator key.
+Freed indices are reused in LIFO order.
+
+`resource.state` holds per-store handle tables, allocator maps, scope counters,
+scope-to-task mappings, and borrow lists. Generated code accesses mutable fields
+directly, so replacing a borrow list or incrementing a counter remains visible
+to both runtime methods and inline task helpers. Providers that delegate methods
+to this implementation must preserve its state object. `ResourceState`,
+`HandleIndexSpace`, and `ResourceBorrowTask` describe these shared structures.
+
+During this migration, generated bindings pass lazy callbacks through
+`options.resourceTasks` when resource transfers or destructors need task helpers
+that remain inline. `getCurrentTask` returns the destination component's active
+borrow task; `createTask` and `withTask` supply the destructor's task lifecycle
+and scoped task register. Providers must defer these callbacks until a resource
+operation runs: generated task state initializes after runtime creation.
+`ResourceTaskContext` and `ResourceDestructorTask` describe this bridge.
+Direct users can allocate and transfer resources without a task context;
+calling a destructor requires `createTask` and `withTask`.
 
 Incompatible changes to this table encoding or these method contracts require
 a new JavaScript CM runtime API version, independently of the npm package version.

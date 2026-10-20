@@ -25,6 +25,7 @@ export const runtime = {
             intrinsics: {
                 ...defaults.intrinsics,
                 resource: {
+                    ...defaults.intrinsics.resource,
                     tableFlag: 1 << 30,
                     tableGet(table, handle) {
                         tableGetCallCount++;

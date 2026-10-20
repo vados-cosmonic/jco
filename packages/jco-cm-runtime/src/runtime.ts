@@ -34,7 +34,7 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
             string: createStringIntrinsics(),
             jsHelper: createJsHelperIntrinsics(),
             conversion: createConversionIntrinsics(options.strict),
-            resource: createResourceIntrinsics(platform.WebAssembly.RuntimeError),
+            resource: createResourceIntrinsics(platform.WebAssembly.RuntimeError, options.resourceTasks),
         },
     };
 }

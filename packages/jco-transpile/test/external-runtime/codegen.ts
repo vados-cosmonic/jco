@@ -110,7 +110,7 @@ suite('External Component Model runtime', () => {
             name: 'a missing resource namespace',
             provider:
                 '{ apiVersion: 1, create(options) { const instance = defaultRuntime.create(options); delete instance.intrinsics.resource; return instance; } }',
-            error: 'runtime intrinsic resource.tableGet must be a function',
+            error: 'runtime intrinsic resource.tableFlag must be a number',
         },
         {
             name: 'a non-function conversion intrinsic',
@@ -127,7 +127,7 @@ suite('External Component Model runtime', () => {
         {
             name: 'missing intrinsics',
             provider: '{ apiVersion: 1, create() { return { apiVersion: 1 }; } }',
-            error: /runtime intrinsic [\w.]+ must be a function/,
+            error: /runtime intrinsic [\w.]+ must be an? (function|number|object)/,
         },
     ])('rejects $name during instantiation', async ({ provider, error }) => {
         const outDir = await getTmpDir();
