@@ -208,7 +208,14 @@ pub(crate) enum IntrinsicBinding {
     Runtime {
         local_name: &'static str,
         path: &'static str,
+        kind: RuntimeIntrinsicKind,
     },
+}
+
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum RuntimeIntrinsicKind {
+    Method,
+    Object { methods: &'static [&'static str] },
 }
 
 impl IntrinsicBinding {
@@ -2548,26 +2555,47 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
 
         for intrinsic in args.intrinsics.iter() {
-            let IntrinsicBinding::Runtime { local_name, path } =
-                intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some())
+            let IntrinsicBinding::Runtime {
+                local_name,
+                path,
+                kind,
+            } = intrinsic.binding(args.transpile_opts.cm_runtime_es_module.is_some())
             else {
                 continue;
             };
             let (receiver_path, method) = path
                 .rsplit_once('.')
-                .expect("runtime intrinsic paths must name a method on a receiver");
+                .expect("runtime intrinsic paths must name a member on a receiver");
             output.push_str(&format!(
                 r#"
                     const {local_name} = (() => {{
                         const receiver = {CM_RUNTIME_INTRINSICS_LOCAL_NAME}?.{receiver_path};
                         const intrinsic = receiver?.{method};
+                "#
+            ));
+            match kind {
+                RuntimeIntrinsicKind::Method => output.push_str(&format!(
+                    r#"
                         if (typeof intrinsic !== 'function') {{
                             throw new TypeError('Jco Component Model runtime intrinsic {path} must be a function');
                         }}
                         return intrinsic.bind(receiver);
-                    }})();
-                "#
-            ));
+                    "#
+                )),
+                RuntimeIntrinsicKind::Object { methods } => {
+                    for method in methods {
+                        output.push_str(&format!(
+                            r#"
+                                if (typeof intrinsic?.{method} !== 'function') {{
+                                    throw new TypeError('Jco Component Model runtime intrinsic {path}.{method} must be a function');
+                                }}
+                            "#
+                        ));
+                    }
+                    uwriteln!(output, "return intrinsic;");
+                }
+            }
+            uwriteln!(output, "}})();");
         }
     }
     let inline_conversion = |intrinsic| {
@@ -2687,15 +2715,23 @@ impl Intrinsic {
             Self::JsHelper(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),
+                kind: RuntimeIntrinsicKind::Method,
             },
             Self::Conversion(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),
+                kind: RuntimeIntrinsicKind::Method,
+            },
+            Self::String(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
             },
             Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
                 IntrinsicBinding::Runtime {
                     local_name: self.name(),
                     path: "resource.tableGet",
+                    kind: RuntimeIntrinsicKind::Method,
                 }
             }
             _ => IntrinsicBinding::Inline {

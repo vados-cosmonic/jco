@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that manipulate strings
 use std::fmt::Write;
 
-use crate::intrinsics::RenderIntrinsicsArgs;
+use crate::intrinsics::{RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::uwriteln;
 use crate::{intrinsics::Intrinsic, source::Source};
 
@@ -42,6 +42,33 @@ pub enum StringIntrinsic {
 }
 
 impl StringIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::Utf16Decoder => "string.utf16Decoder",
+            Self::Utf16Encode => "string.utf16Encode",
+            Self::Utf16EncodeAsync => "string.utf16EncodeAsync",
+            Self::Utf16ValidatingCopy => "string.utf16ValidatingCopy",
+            Self::GlobalTextDecoderUtf8 => "string.utf8Decoder",
+            Self::GlobalTextEncoderUtf8 => "string.utf8Encoder",
+            Self::Utf8Encode => "string.utf8Encode",
+            Self::Utf8EncodeAsync => "string.utf8EncodeAsync",
+            Self::ValidateGuestChar => "string.validateGuestChar",
+            Self::ValidateHostChar => "string.validateHostChar",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        match self {
+            Self::Utf16Decoder | Self::GlobalTextDecoderUtf8 => RuntimeIntrinsicKind::Object {
+                methods: &["decode"],
+            },
+            Self::GlobalTextEncoderUtf8 => RuntimeIntrinsicKind::Object {
+                methods: &["encode", "encodeInto"],
+            },
+            _ => RuntimeIntrinsicKind::Method,
+        }
+    }
+
     /// Retrieve all global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -215,6 +242,72 @@ impl StringIntrinsic {
                   }}
                 "#
             ),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TranspileOpts;
+    use crate::intrinsics::render_intrinsics;
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn external_strings_bind_methods_and_codec_objects_without_inline_helpers() {
+        let strings = [
+            StringIntrinsic::Utf16Decoder,
+            StringIntrinsic::Utf16Encode,
+            StringIntrinsic::Utf16EncodeAsync,
+            StringIntrinsic::Utf16ValidatingCopy,
+            StringIntrinsic::GlobalTextDecoderUtf8,
+            StringIntrinsic::GlobalTextEncoderUtf8,
+            StringIntrinsic::Utf8Encode,
+            StringIntrinsic::Utf8EncodeAsync,
+            StringIntrinsic::ValidateGuestChar,
+            StringIntrinsic::ValidateHostChar,
+        ];
+        for external in [false, true] {
+            let mut intrinsics = strings
+                .into_iter()
+                .map(Intrinsic::String)
+                .collect::<BTreeSet<_>>();
+            let opts = TranspileOpts {
+                cm_runtime_es_module: external.then(|| "./runtime.js".into()),
+                ..TranspileOpts::default()
+            };
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            for intrinsic in strings {
+                assert_eq!(source.contains(intrinsic.runtime_path()), external);
+            }
+            for inline in [
+                "new TextDecoder(",
+                "new TextEncoder(",
+                "const isLE =",
+                "function _utf8AllocateAndEncode(",
+            ] {
+                assert_eq!(source.contains(inline), !external);
+            }
+            if external {
+                assert_eq!(
+                    source.matches("return intrinsic.bind(receiver);").count(),
+                    7
+                );
+                assert_eq!(source.matches("return intrinsic;").count(), 3);
+                for method in [
+                    "utf16Decoder.decode",
+                    "utf8Decoder.decode",
+                    "utf8Encoder.encode",
+                    "utf8Encoder.encodeInto",
+                ] {
+                    assert!(source.contains(&format!("string.{method} must be a function")));
+                }
+            }
         }
     }
 }

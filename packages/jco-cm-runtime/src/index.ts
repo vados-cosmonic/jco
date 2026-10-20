@@ -1,6 +1,14 @@
 export { runtime } from './runtime.js';
 export type { ConversionIntrinsics } from './intrinsics/conversion.js';
 export type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
+export type {
+    AsyncStringRealloc,
+    StringAllocation,
+    StringDecoder,
+    StringEncoder,
+    StringIntrinsics,
+    StringRealloc,
+} from './intrinsics/string.js';
 export {
     CM_RUNTIME_API_VERSION,
     type AsyncDeterminism,

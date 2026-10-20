@@ -1,5 +1,6 @@
 import type { ConversionIntrinsics } from './intrinsics/conversion.js';
 import type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
+import type { StringIntrinsics } from './intrinsics/string.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -41,6 +42,7 @@ export interface ResourceIntrinsics {
 }
 
 export interface RuntimeIntrinsics {
+    readonly string: StringIntrinsics;
     readonly jsHelper: JsHelperIntrinsics;
     readonly conversion: ConversionIntrinsics;
     readonly resource: ResourceIntrinsics;

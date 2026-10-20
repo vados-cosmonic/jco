@@ -62,7 +62,7 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.resource.tableGet`, `intrinsics.conversion`,
-and `intrinsics.jsHelper`. Generated bindings pass `requestedApiVersion: 1`
+`intrinsics.jsHelper`, and `intrinsics.string`. Generated bindings pass `requestedApiVersion: 1`
 to `create`, check both API versions, and verify
 that each required intrinsic is callable. Other runtime intrinsics continue to
 be generated inline.
@@ -74,7 +74,8 @@ the bindings can identify the trap and reject subsequent calls to the trapped
 component. When this package's `runtime.create` is called directly without a
 platform override, it uses the global WebAssembly implementation.
 
-Intrinsic methods are bound to their namespace object. A
+Intrinsic methods are bound to their namespace object. Codec objects are kept
+as objects, with their required methods checked during instantiation. A
 `resource.tableGet` implementation may use `this` to access per-store state.
 Each call to the generated `instantiate` function creates a fresh runtime;
 direct ES module output creates its runtime when the module is evaluated.
@@ -102,6 +103,26 @@ types and messages.
 used memory buffer. Each runtime owns its cache; memory growth or switching
 buffers refreshes the view. Both ordinary and shared memory buffers are supported.
 The `JsHelperIntrinsics` type describes these helpers.
+
+### Strings
+
+`intrinsics.string` implements all helpers from bindgen's `string.rs`.
+`utf8Decoder` and `utf16Decoder` expose `decode`, reject malformed input, and
+preserve a leading U+FEFF. `utf8Encoder` exposes `encode` and `encodeInto`.
+Each runtime owns its codec objects; alternative providers can supply objects
+implementing the exported `StringDecoder` and `StringEncoder` interfaces.
+
+`utf8Encode` and `utf16Encode` allocate and write strings into guest memory,
+replacing unpaired host surrogates with U+FFFD. Their `Async` variants await
+the supplied allocator before accessing memory. UTF-8 uses a single exact-size
+allocation; its empty-string result is `{ ptr: 1, len: 0 }` without allocating.
+UTF-16 lengths count code units, UTF-8 lengths count bytes, and non-sentinel
+results also report codepoint counts. `StringAllocation`, `StringRealloc`, and
+`AsyncStringRealloc` describe this contract.
+
+`utf16ValidatingCopy` copies valid UTF-16 code units and reports whether they
+all fit in Latin-1. `validateGuestChar` and `validateHostChar` retain the inline
+character conversion behavior, including returning the first host codepoint.
 
 ### Resource tables
 
