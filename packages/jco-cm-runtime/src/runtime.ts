@@ -2,6 +2,7 @@ import { createResourceIntrinsics } from './intrinsics/resource.js';
 import { createConversionIntrinsics } from './intrinsics/conversion.js';
 import { createJsHelperIntrinsics } from './intrinsics/js-helper.js';
 import { createStringIntrinsics } from './intrinsics/string.js';
+import { createWebIdlIntrinsics } from './intrinsics/webidl.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -29,6 +30,7 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
     return {
         apiVersion: CM_RUNTIME_API_VERSION,
         intrinsics: {
+            webidl: createWebIdlIntrinsics(),
             string: createStringIntrinsics(),
             jsHelper: createJsHelperIntrinsics(),
             conversion: createConversionIntrinsics(options.strict),

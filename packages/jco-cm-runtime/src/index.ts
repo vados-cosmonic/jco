@@ -1,4 +1,5 @@
 export { runtime } from './runtime.js';
+export type { WebIdlIntrinsics } from './intrinsics/webidl.js';
 export type { ConversionIntrinsics } from './intrinsics/conversion.js';
 export type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
 export type {

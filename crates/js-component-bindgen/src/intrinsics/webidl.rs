@@ -9,6 +9,12 @@ pub enum WebIdlIntrinsic {
 }
 
 impl WebIdlIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::GlobalThisIdlProxy => "webidl.globalThisIdlProxy",
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["globalThisIdlProxy"]
@@ -86,6 +92,35 @@ impl WebIdlIntrinsic {
                     return (idlProxy = proxy(globalThis));
                 };
             "#),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::TranspileOpts;
+    use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, render_intrinsics};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn external_webidl_uses_the_runtime_proxy() {
+        for external in [false, true] {
+            let mut intrinsics =
+                BTreeSet::from([Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy)]);
+            let opts = TranspileOpts {
+                cm_runtime_es_module: external.then(|| "./runtime.js".into()),
+                ..TranspileOpts::default()
+            };
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            assert_eq!(source.contains("var idlProxy;"), !external);
+            assert_eq!(source.contains("function globalThisIdlProxy"), !external);
+            assert_eq!(source.contains("webidl.globalThisIdlProxy"), external);
         }
     }
 }

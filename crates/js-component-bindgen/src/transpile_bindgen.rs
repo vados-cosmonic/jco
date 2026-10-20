@@ -648,6 +648,11 @@ impl JsBindgen<'_> {
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
             );
+        } else {
+            // WebIDL imports call intrinsics while initializing their bindings.
+            // External runtime methods are const bindings, so initialize them
+            // before those imports rather than relying on function hoisting.
+            output.push_str(&js_intrinsics);
         }
 
         // Render all imports
@@ -747,7 +752,6 @@ impl JsBindgen<'_> {
                 "\
                     {}
                     {}
-                    {}
                     {maybe_init_export}const $init = (() => {{
                         let {gen} = (function* _initGenerator () {{
                             {}\
@@ -789,7 +793,6 @@ impl JsBindgen<'_> {
                     }})();
                     {maybe_init}\
                 ",
-                &js_intrinsics as &str,
                 &intrinsic_definitions as &str,
                 &self.src.js as &str,
                 &compilation_promises as &str,

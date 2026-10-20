@@ -62,10 +62,10 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.resource.tableGet`, `intrinsics.conversion`,
-`intrinsics.jsHelper`, and `intrinsics.string`. Generated bindings pass `requestedApiVersion: 1`
-to `create`, check both API versions, and verify
-that each required intrinsic is callable. Other runtime intrinsics continue to
-be generated inline.
+`intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
+Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
+versions, and verify the required intrinsic methods. Other runtime intrinsics
+continue to be generated inline.
 
 Generated bindings pass the selected WebAssembly implementation in
 `options.platform.WebAssembly`, including any per-instantiation override.
@@ -123,6 +123,14 @@ results also report codepoint counts. `StringAllocation`, `StringRealloc`, and
 `utf16ValidatingCopy` copies valid UTF-16 code units and reports whether they
 all fit in Latin-1. `validateGuestChar` and `validateHostChar` retain the inline
 character conversion behavior, including returning the first host codepoint.
+
+### WebIDL
+
+`intrinsics.webidl.globalThisIdlProxy()` returns the WebIDL adapter over the
+host's `globalThis`, cached per runtime instance. It preserves bindgen's existing
+accessor and setter conventions, HTML/DOM name normalization, method receivers,
+and proxy argument unwrapping. `WebIdlIntrinsics` describes the provider method;
+the returned object's properties depend on the host's available Web APIs.
 
 ### Resource tables
 
