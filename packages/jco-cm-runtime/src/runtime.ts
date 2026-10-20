@@ -3,6 +3,7 @@ import { createConversionIntrinsics } from './intrinsics/conversion.js';
 import { createJsHelperIntrinsics } from './intrinsics/js-helper.js';
 import { createStringIntrinsics } from './intrinsics/string.js';
 import { createWebIdlIntrinsics } from './intrinsics/webidl.js';
+import { createCoreIntrinsics } from './intrinsics/core.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -27,14 +28,16 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
         throw new TypeError('Jco Component Model runtime requires WebAssembly.RuntimeError');
     }
 
+    const resource = createResourceIntrinsics(platform.WebAssembly.RuntimeError, options.resourceTasks);
     return {
         apiVersion: CM_RUNTIME_API_VERSION,
         intrinsics: {
+            core: createCoreIntrinsics(options, platform, resource),
             webidl: createWebIdlIntrinsics(),
             string: createStringIntrinsics(),
             jsHelper: createJsHelperIntrinsics(),
             conversion: createConversionIntrinsics(options.strict),
-            resource: createResourceIntrinsics(platform.WebAssembly.RuntimeError, options.resourceTasks),
+            resource,
         },
     };
 }

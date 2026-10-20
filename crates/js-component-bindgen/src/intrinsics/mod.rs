@@ -15,6 +15,7 @@ const CM_RUNTIME_LOCAL_NAME: &str = "_jcoRuntime";
 const CM_RUNTIME_INTRINSICS_LOCAL_NAME: &str = "_jcoIntrinsics";
 
 pub(crate) mod conversion;
+mod core;
 use conversion::ConversionIntrinsic;
 
 pub(crate) mod js_helper;
@@ -1053,7 +1054,15 @@ impl Intrinsic {
                         size() {{ return this.#size; }}
 
                         clear() {{
-                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ rep, target: this.target }});
+                            {debug_log_fn}('[{rep_table_class}#clear()] args', {{ target: this.target }});
+                            if (this.#space) {{
+                                for (let rep = 1; rep < this.#data.length / 2; rep++) {{
+                                    if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== {rep_table_class}.FREE) {{
+                                        this.#space.release(rep);
+                                    }}
+                                }}
+                            }}
+                            this.#size = 0;
                             this.#data = [0, null];
                         }}
                     }}
@@ -1721,6 +1730,81 @@ mod tests {
         assert!(!source.contains("class AsyncTask"));
         assert!(!source.contains("new Map()"));
         assert!(source.contains("return intrinsic.bind(receiver)"));
+    }
+
+    #[test]
+    fn core_runtime_preserves_constructor_and_function_values() {
+        for intrinsic in [
+            Intrinsic::RepTableClass,
+            Intrinsic::ManagedBufferClass,
+            Intrinsic::BufferManagerClass,
+            Intrinsic::ComponentError,
+            Intrinsic::WebAssemblyRuntimeError,
+            Intrinsic::AsyncFunctionCtor,
+            Intrinsic::HasOwnProperty,
+            Intrinsic::PlatformReadableStreamClass,
+        ] {
+            let mut intrinsics = BTreeSet::from([intrinsic]);
+            let opts = TranspileOpts::builder()
+                .name("test".into())
+                .cm_runtime_es_module("runtime".into())
+                .build();
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            assert_eq!(intrinsics.len(), 1);
+            assert!(source.contains("return intrinsic;"));
+            assert!(!source.contains("intrinsic.bind(receiver)"));
+            assert!(!source.contains(&format!("class {}", intrinsic.name())));
+        }
+    }
+
+    #[test]
+    fn core_runtime_keeps_compiler_metadata_and_defers_task_dependencies() {
+        let mut intrinsics = BTreeSet::from([
+            Intrinsic::SuspendingImportWrapperFn,
+            Intrinsic::FactTrapMessages,
+            Intrinsic::ConditionalSuspending1I32ToI32Fn,
+            Intrinsic::InstantiateCore,
+        ]);
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .instantiation_occurred(true)
+                .build(),
+        );
+        assert!(source.contains("coreContext: {"));
+        assert!(source.contains("currentTaskMayBlock: () =>"));
+        assert!(source.contains("throwIfInterrupted: componentIdx =>"));
+        assert!(source.contains(&format!("factTrapMessages: {}", fact_trap_messages_js())));
+        assert!(source.contains(
+            "CONDITIONAL_SUSPENDING_WASM._conditionalSuspending1I32ToI32 = new WebAssembly.Module("
+        ));
+        assert!(!source.contains("function _conditionalSuspending1I32ToI32("));
+        assert!(!source.contains("const instantiateCore ="));
+        assert!(!source.contains("function _suspendingImport("));
+        assert!(intrinsics.contains(&Intrinsic::Component(ComponentIntrinsic::CheckMayLeave)));
+        assert!(intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask)));
+        assert!(!source.contains("const CURRENT_TASK_META = {}"));
+    }
+
+    #[test]
+    fn rep_table_clear_resets_size_and_releases_only_live_shared_indices() {
+        let source = render_intrinsic_body(Intrinsic::RepTableClass);
+        let clear = source.split("clear() {").nth(1).unwrap();
+        assert!(!clear.contains("{ rep, target:"));
+        assert!(clear.contains("this.#size = 0;"));
+        assert!(clear.contains("this.#data[(rep << 1) + 1] === null"));
+        assert!(clear.contains("this.#data[rep << 1] !== RepTable.FREE"));
+        assert!(clear.contains("this.#space.release(rep)"));
     }
 
     #[test]
@@ -2621,6 +2705,10 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 if let Intrinsic::Resource(resource) = intrinsic {
                     resource.require_runtime_dependencies(args);
                 }
+                intrinsic.require_core_runtime_dependencies(args);
+                if intrinsic.conditional_suspending_wasm().is_some() {
+                    source.push_str(&intrinsic.register_conditional_suspending_js(args));
+                }
             }
         }
         let discovered = args.take_discovered_intrinsics();
@@ -2665,6 +2753,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         if !resource_tasks.is_empty() {
             resource_tasks = format!("resourceTasks: {{ {resource_tasks} }},");
         }
+        let core_options = core::runtime_options(args);
         uwriteln!(
             output,
             r#"
@@ -2682,6 +2771,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     asyncDeterminism: '{determinism}',
                     platform: {{ WebAssembly }},
                     {resource_tasks}
+                    {core_options}
                 }});
                 if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
                     throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
@@ -2695,6 +2785,10 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
 
         for intrinsic in args.intrinsics.iter() {
+            // The caller can supply this function in instantiation mode.
+            if *intrinsic == Intrinsic::InstantiateCore && args.instantiation_occurred {
+                continue;
+            }
             let IntrinsicBinding::Runtime {
                 local_name,
                 path,
@@ -2915,6 +3009,7 @@ impl Intrinsic {
                     value_type: "number",
                 },
             },
+            _ if external_runtime && self.core_binding().is_some() => self.core_binding().unwrap(),
             _ => IntrinsicBinding::Inline {
                 local_name: self.name(),
             },

@@ -1,4 +1,26 @@
 export { runtime } from './runtime.js';
+export type {
+    BufferElementContext,
+    BufferElementMetadata,
+    BufferManager,
+    BufferManagerConstructor,
+    ComponentError,
+    ComponentErrorConstructor,
+    ConditionalTrampoline,
+    CoreContext,
+    CoreIntrinsics,
+    CreateBufferOptions,
+    ManagedBuffer,
+    ManagedBufferConstructor,
+    ManagedBufferOptions,
+    MemoryMeta,
+    RepTable,
+    RepTableConstructor,
+    RuntimeFinalizationRegistry,
+    RuntimeMemory,
+    TaskMeta,
+    TaskRegisters,
+} from './intrinsics/core-types.js';
 export type { WebIdlIntrinsics } from './intrinsics/webidl.js';
 export type { ConversionIntrinsics } from './intrinsics/conversion.js';
 export type { JsHelperIntrinsics } from './intrinsics/js-helper.js';

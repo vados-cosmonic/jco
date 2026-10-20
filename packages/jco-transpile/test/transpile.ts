@@ -3,7 +3,7 @@ import { Buffer } from 'node:buffer';
 
 import { suite, test, assert } from 'vitest';
 
-import { transpile, transpileBytes } from './transpilation.js';
+import { externalRuntime, transpile, transpileBytes } from './transpilation.js';
 
 import { readComponentBytes } from './helpers.js';
 
@@ -26,6 +26,7 @@ suite('Transpile', async () => {
         const { files } = await transpileBytes(variantsWasmBytes, { name: 'variants' });
         const source = Buffer.from(files['variants.js']).toString();
         assert.include(source, 'throw retCopy.val;');
+        assert.notInclude(source, 'throw new ComponentError(');
         assert.notInclude(source, 'class ComponentError extends Error');
     });
 
@@ -36,7 +37,12 @@ suite('Transpile', async () => {
         });
         const source = Buffer.from(files['variants.js']).toString();
         assert.include(source, 'throw new ComponentError(retCopy.val);');
-        assert.include(source, 'class ComponentError extends Error');
+        if (externalRuntime) {
+            assert.include(source, 'receiver?.ComponentError');
+            assert.notInclude(source, 'class ComponentError extends Error');
+        } else {
+            assert.include(source, 'class ComponentError extends Error');
+        }
     });
 
     test.concurrent('can inline variant cases in generated declarations', async () => {

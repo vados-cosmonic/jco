@@ -61,7 +61,7 @@ API is versioned independently from the npm package version.
 
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1`, `intrinsics.resource`, `intrinsics.conversion`,
+with `apiVersion: 1`, `intrinsics.core`, `intrinsics.resource`, `intrinsics.conversion`,
 `intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
@@ -74,13 +74,50 @@ the bindings can identify the trap and reject subsequent calls to the trapped
 component. When this package's `runtime.create` is called directly without a
 platform override, it uses the global WebAssembly implementation.
 
-Intrinsic methods are bound to their namespace object. Codec objects are kept
-as objects, with their required methods checked during instantiation. A
+Intrinsic methods are bound to their namespace object. Constructors, symbols,
+constants, and shared state retain their original values. In particular,
+constructors support `new`, `instanceof`, and static members; `hasOwnProperty`
+retains its `.call` receiver. Codec objects are kept as objects, with their
+required methods checked during instantiation. A
 `resource.tableGet` implementation may use `this` to access per-store state.
 Each call to the generated `instantiate` function creates a fresh runtime;
 direct ES module output creates its runtime when the module is evaluated.
 Generated bindings currently do not invoke the optional `dispose()` hook, so
 providers must not rely on it for automatic cleanup.
+
+### Core helpers
+
+`intrinsics.core` implements the shared helpers from bindgen's `intrinsics/mod.rs`:
+errors, validation, symbols, compilation, memory registration, representation
+tables, managed buffers, task registers, and conditional suspension. `CoreIntrinsics`
+describes the methods and values. Handle tables and the resource scope counter
+remain in `intrinsics.resource.state`, shared with managed buffer transfers.
+
+Each runtime owns its `RepTable`, `ManagedBuffer`, and `BufferManager` classes,
+default `bufferManager`, memory map, task registers, and conditional-suspension
+module registry. `RepTable` can use a component's shared `HandleIndexSpace`;
+clearing a table resets its size and releases its live indices. Managed buffers
+use the generated element lift/lower callbacks described by `BufferElementMetadata`
+and `BufferElementContext`, including resource ownership transfers.
+
+Compilation and instantiation helpers use `options.platform.WebAssembly`.
+`compile`, `compileStreaming`, `instantiate`, `Instance`, and `Suspending` are
+only required when an operation uses them. Runtime creation does not compile
+Wasm or require JSPI. Generated bindings continue to load conditional-suspension
+modules, including through `getCoreModule` in precompiled mode, into
+`core.conditionalSuspendingWasm`. Instantiated output preserves the caller's
+`instantiateCore` callback. Compiler-owned FACT trap discriminants and messages
+arrive through `options.factTrapMessages`.
+
+`currentTaskMeta` is the shared task register. Synchronous task scopes restore
+the enclosing registers; asynchronous scopes clear the completing task while
+preserving another component's active task. During migration, suspending imports
+use lazy `options.coreContext` callbacks to consult component state and tasks
+that remain inline. Providers must defer these callbacks until an import runs,
+after generated task state has initialized. `CoreContext`, `TaskMeta`, and
+`TaskRegisters` describe this contract. The existing `resourceTasks` bridge
+remains supported for bindings generated before core helpers moved into the
+runtime.
 
 ### Conversions
 

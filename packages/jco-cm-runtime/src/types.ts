@@ -2,6 +2,7 @@ import type { ConversionIntrinsics } from './intrinsics/conversion.js';
 import type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
 import type { StringIntrinsics } from './intrinsics/string.js';
 import type { WebIdlIntrinsics } from './intrinsics/webidl.js';
+import type { CoreContext, CoreIntrinsics } from './intrinsics/core-types.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -20,6 +21,11 @@ export interface RuntimeErrorConstructor {
 export interface RuntimePlatform {
     readonly WebAssembly: {
         readonly RuntimeError: RuntimeErrorConstructor;
+        readonly compile?: typeof WebAssembly.compile;
+        readonly compileStreaming?: typeof WebAssembly.compileStreaming;
+        readonly instantiate?: typeof WebAssembly.instantiate;
+        readonly Instance?: typeof WebAssembly.Instance;
+        readonly Suspending?: new (fn: (...args: number[]) => unknown) => WebAssembly.ImportValue;
     };
 }
 
@@ -32,6 +38,10 @@ export interface RuntimeOptions {
     readonly platform?: Partial<RuntimePlatform>;
     /** Lazy access to task intrinsics that are still generated inline. */
     readonly resourceTasks?: ResourceTaskContext;
+    /** Compiler-owned FACT trap discriminants and their messages. */
+    readonly factTrapMessages?: Readonly<Record<number, string>>;
+    /** Lazy access to component/task operations that remain inline. */
+    readonly coreContext?: CoreContext;
 }
 
 export interface ResourceTableEntry {
@@ -112,6 +122,7 @@ export interface ResourceTaskContext {
 }
 
 export interface RuntimeIntrinsics {
+    readonly core: CoreIntrinsics;
     readonly webidl: WebIdlIntrinsics;
     readonly string: StringIntrinsics;
     readonly jsHelper: JsHelperIntrinsics;
