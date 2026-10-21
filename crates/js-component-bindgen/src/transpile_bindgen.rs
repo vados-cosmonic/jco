@@ -525,8 +525,8 @@ impl JsBindgen<'_> {
         if matches!(self.opts.instantiation_mode, Some(InstantiationMode::Async)) {
             uwriteln!(
                 compilation_promises,
-                "if (!getCoreModule) getCoreModule = (name) => {}(new URL(`./${{name}}`, import.meta.url));",
-                self.intrinsic(Intrinsic::FetchCompile)
+                "if (!getCoreModule) getCoreModule = (name) => {}new URL(`./${{name}}`, import.meta.url));",
+                self.intrinsic_call_prefix(Intrinsic::FetchCompile)
             );
         }
 
@@ -545,8 +545,8 @@ impl JsBindgen<'_> {
                 let data = files.remove(&name_idx).unwrap();
                 uwriteln!(
                     compilation_promises,
-                    "const {local_name} = {}('{}');",
-                    self.intrinsic(Intrinsic::Base64Compile),
+                    "const {local_name} = {}'{}');",
+                    self.intrinsic_call_prefix(Intrinsic::Base64Compile),
                     general_purpose::STANDARD_NO_PAD.encode(&data),
                 );
             } else {
@@ -560,8 +560,8 @@ impl JsBindgen<'_> {
                 }
                 uwriteln!(
                     compilation_promises,
-                    "const {local_name} = {}(new URL('./{name_idx}', import.meta.url));",
-                    self.intrinsic(Intrinsic::FetchCompile)
+                    "const {local_name} = {}new URL('./{name_idx}', import.meta.url));",
+                    self.intrinsic_call_prefix(Intrinsic::FetchCompile)
                 );
             }
             if matches!(
@@ -844,6 +844,13 @@ impl JsBindgen<'_> {
         intrinsic
             .binding(self.opts.cm_runtime_es_module.is_some())
             .call(operands)
+    }
+
+    fn intrinsic_call_prefix(&mut self, intrinsic: Intrinsic) -> String {
+        self.all_intrinsics.insert(intrinsic);
+        intrinsic
+            .binding(self.opts.cm_runtime_es_module.is_some())
+            .call_prefix(true)
     }
 
     /// Write out utility helpers/objects (available via esModule._util)
@@ -1375,10 +1382,10 @@ impl<'a> Instantiator<'a, '_> {
             .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::ClearCurrentTask));
         let set_task_meta = self
             .bindgen
-            .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+            .intrinsic_call_prefix(Intrinsic::SetGlobalCurrentTaskMetaFn);
         let clear_task_meta = self
             .bindgen
-            .intrinsic(Intrinsic::ClearGlobalCurrentTaskMetaFn);
+            .intrinsic_call_prefix(Intrinsic::ClearGlobalCurrentTaskMetaFn);
 
         let mut setup = source::Source::default();
         for component_idx in &component_indices {
@@ -1396,7 +1403,7 @@ impl<'a> Instantiator<'a, '_> {
                       callingWasmExport: true,
                       entryFnName: '<initialize>',
                   }});
-                  {set_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
+                  {set_task_meta}{{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
                 "#,
             );
         }
@@ -1408,7 +1415,7 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(
                 self.src.js_init,
                 r#"
-                  {clear_task_meta}({{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
+                  {clear_task_meta}{{ componentIdx: {component_idx}, taskID: _initTaskID{component_idx} }});
                   {clear_task}({component_idx}, _initTaskID{component_idx});
                 "#,
             );
@@ -1940,11 +1947,12 @@ impl<'a> Instantiator<'a, '_> {
                 let subtask_cancel_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                let suspending_wrap_fn = self
+                    .bindgen
+                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                 let conditional_suspending_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ConditionalSuspending1I32ToI32Fn);
+                    .intrinsic_call_prefix(Intrinsic::ConditionalSuspending1I32ToI32Fn);
                 let guard_trap_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
@@ -1957,9 +1965,9 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, true);
-                        const trampoline{i} = {conditional_suspending_fn}(
+                        const trampoline{i} = {conditional_suspending_fn}
                             {guard_trap_fn}({instance_idx}, trampoline{i}Cancel, true),
-                            {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
+                            {suspending_wrap_fn}{instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
                         instance_idx = instance.as_u32(),
@@ -1969,9 +1977,9 @@ impl<'a> Instantiator<'a, '_> {
                         self.src.js,
                         r#"
                         const trampoline{i}Cancel = {subtask_cancel_fn}.bind(null, {instance_idx}, false);
-                        const trampoline{i} = {conditional_suspending_fn}(
+                        const trampoline{i} = {conditional_suspending_fn}
                             {guard_trap_fn}({instance_idx}, trampoline{i}Cancel, true),
-                            {suspending_wrap_fn}({instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
+                            {suspending_wrap_fn}{instance_idx}, (subtaskRep) => trampoline{i}Cancel(subtaskRep, true)),
                         );
                         "#,
                         instance_idx = instance.as_u32(),
@@ -2035,11 +2043,12 @@ impl<'a> Instantiator<'a, '_> {
                 let waitable_set_wait_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Waitable(WaitableIntrinsic::WaitableSetWait));
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                let suspending_wrap_fn = self
+                    .bindgen
+                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                 let conditional_suspending_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ConditionalSuspending2I32ToI32Fn);
+                    .intrinsic_call_prefix(Intrinsic::ConditionalSuspending2I32ToI32Fn);
 
                 uwriteln!(
                     self.src.js,
@@ -2051,9 +2060,9 @@ impl<'a> Instantiator<'a, '_> {
                         memoryIdx: {memory_idx},
                         getMemoryFn: () => memory{memory_idx},
                     }});
-                    const trampoline{i} = {conditional_suspending_fn}(
-                        {suspending_wrap_fn}({instance_idx}, (waitableSetRep, resultPtr) => trampoline{i}Wait(waitableSetRep, resultPtr, true), true),
-                        {suspending_wrap_fn}({instance_idx}, trampoline{i}Wait),
+                    const trampoline{i} = {conditional_suspending_fn}
+                        {suspending_wrap_fn}{instance_idx}, (waitableSetRep, resultPtr) => trampoline{i}Wait(waitableSetRep, resultPtr, true), true),
+                        {suspending_wrap_fn}{instance_idx}, trampoline{i}Wait),
                     );
                     "#,
                 );
@@ -2200,10 +2209,10 @@ impl<'a> Instantiator<'a, '_> {
                     let memory_idx = memory_idx.as_u32();
                     let register_global_memory_for_component_fn = self
                         .bindgen
-                        .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
+                        .intrinsic_call_prefix(Intrinsic::RegisterGlobalMemoryForComponent);
                     uwriteln!(
                         self.src.js_init,
-                        r#"{register_global_memory_for_component_fn}({{
+                        r#"{register_global_memory_for_component_fn}{{
                              componentIdx: {component_instance_id},
                              memoryIdx: {memory_idx},
                              memory: memory{memory_idx},
@@ -2230,20 +2239,21 @@ impl<'a> Instantiator<'a, '_> {
                         "const trampoline{i} = {stream_read_fn}.bind(null, {ctx});",
                     );
                 } else {
-                    let suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let suspending_wrap_fn = self
+                        .bindgen
+                        .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     let conditional_suspending_fn = self
                         .bindgen
-                        .intrinsic(Intrinsic::ConditionalSuspending3I32ToI32Fn);
+                        .intrinsic_call_prefix(Intrinsic::ConditionalSuspending3I32ToI32Fn);
                     let guard_trap_fn = self
                         .bindgen
                         .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
                     uwriteln!(
                         self.src.js,
                         r#"
-                        const trampoline{i} = {conditional_suspending_fn}(
+                        const trampoline{i} = {conditional_suspending_fn}
                             {guard_trap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, isAsync: true, syncFastOnly: true }}), true),
-                            {suspending_wrap_fn}({component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
+                            {suspending_wrap_fn}{component_instance_id}, {stream_read_fn}.bind(null, {{ ...{ctx}, deferSyncFinish: true }})),
                         );"#,
                     );
                 }
@@ -2306,10 +2316,10 @@ impl<'a> Instantiator<'a, '_> {
                     let memory_idx = memory_idx.as_u32();
                     let register_global_memory_for_component_fn = self
                         .bindgen
-                        .intrinsic(Intrinsic::RegisterGlobalMemoryForComponent);
+                        .intrinsic_call_prefix(Intrinsic::RegisterGlobalMemoryForComponent);
                     uwriteln!(
                         self.src.js_init,
-                        r#"{register_global_memory_for_component_fn}({{
+                        r#"{register_global_memory_for_component_fn}{{
                              componentIdx: {component_instance_id},
                              memoryIdx: {memory_idx},
                              memory: memory{memory_idx},
@@ -2336,11 +2346,12 @@ impl<'a> Instantiator<'a, '_> {
                         "const trampoline{i} = {stream_write_fn}.bind(null, {ctx});",
                     );
                 } else {
-                    let suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let suspending_wrap_fn = self
+                        .bindgen
+                        .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_instance_id}, {stream_write_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_instance_id}, {stream_write_fn}.bind(null, {ctx})));",
                     );
                 }
             }
@@ -2380,11 +2391,12 @@ impl<'a> Instantiator<'a, '_> {
                         "const trampoline{i} = {stream_cancel_fn}.bind(null, {ctx});",
                     );
                 } else {
-                    let suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let suspending_wrap_fn = self
+                        .bindgen
+                        .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {stream_cancel_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {stream_cancel_fn}.bind(null, {ctx})));",
                     );
                 }
             }
@@ -2597,11 +2609,12 @@ impl<'a> Instantiator<'a, '_> {
                         "const trampoline{i} = {intrinsic_fn}.bind(null, {ctx});",
                     );
                 } else {
-                    let suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let suspending_wrap_fn = self
+                        .bindgen
+                        .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {intrinsic_fn}.bind(null, {ctx})));",
                     );
                 }
             }
@@ -2642,11 +2655,12 @@ impl<'a> Instantiator<'a, '_> {
                         "const trampoline{i} = {future_cancel_op_fn}.bind(null, {ctx});",
                     );
                 } else {
-                    let suspending_wrap_fn =
-                        self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                    let suspending_wrap_fn = self
+                        .bindgen
+                        .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                     uwriteln!(
                         self.src.js,
-                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {future_cancel_op_fn}.bind(null, {ctx})));",
+                        "const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {future_cancel_op_fn}.bind(null, {ctx})));",
                     );
                 }
             }
@@ -3057,19 +3071,20 @@ impl<'a> Instantiator<'a, '_> {
 
                 // NOTE: For Trampoline::LowerImport, the trampoline index is actually already defined,
                 // but we *redefine* it to call the lower import function first.
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                let suspending_wrap_fn = self
+                    .bindgen
+                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                 if is_async || func_ty_async {
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false));"
+                        "let trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {call}, false, false, false));"
                     );
                 } else {
                     // TODO(breaking): once manually specifying async imports is removed,
                     // we can avoid the second check below.
                     uwriteln!(
                         self.src.js,
-                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}({component_idx}, {call}, false, false, false)) : {call};"
+                        "let trampoline{i} = _trampoline{i}.manuallyAsync ? new WebAssembly.Suspending({suspending_wrap_fn}{component_idx}, {call}, false, false, false)) : {call};"
                     );
                 }
             }
@@ -3682,13 +3697,14 @@ impl<'a> Instantiator<'a, '_> {
                 let yield_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::Yield));
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                let suspending_wrap_fn = self
+                    .bindgen
+                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                 let component_instance_idx = instance.as_u32();
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}({component_instance_idx}, {yield_fn}.bind(null, {{
+                      const trampoline{i} = new WebAssembly.Suspending({suspending_wrap_fn}{component_instance_idx}, {yield_fn}.bind(null, {{
                           isCancellable: {cancellable},
                           componentIdx: {component_instance_idx},
                       }})));
@@ -3729,11 +3745,12 @@ impl<'a> Instantiator<'a, '_> {
                 let enter_symmetric_sync_guest_call_fn = self.bindgen.intrinsic(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::EnterSymmetricSyncGuestCall),
                 );
-                let suspending_wrap_fn =
-                    self.bindgen.intrinsic(Intrinsic::SuspendingImportWrapperFn);
+                let suspending_wrap_fn = self
+                    .bindgen
+                    .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
                 let conditional_suspending_fn = self
                     .bindgen
-                    .intrinsic(Intrinsic::ConditionalSuspending3I32ToVoidFn);
+                    .intrinsic_call_prefix(Intrinsic::ConditionalSuspending3I32ToVoidFn);
                 let guard_trap_fn = self
                     .bindgen
                     .intrinsic(Intrinsic::Component(ComponentIntrinsic::GuardTrap));
@@ -3753,9 +3770,9 @@ impl<'a> Instantiator<'a, '_> {
                     uwriteln!(
                         self.src.js,
                         r#"
-                          const trampoline{i} = {conditional_suspending_fn}(
+                          const trampoline{i} = {conditional_suspending_fn}
                               {guard_trap_fn}(null, (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {enter_symmetric_sync_guest_call_fn}(callerComponentIdx, calleeIsAsync, calleeComponentIdx, true), true),
-                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}(callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
+                              (callerComponentIdx, calleeIsAsync, calleeComponentIdx) => {suspending_wrap_fn}callerComponentIdx, {enter_symmetric_sync_guest_call_fn}, false, true)(callerComponentIdx, calleeIsAsync, calleeComponentIdx),
                           );
                         "#,
                     );
@@ -3932,14 +3949,16 @@ impl<'a> Instantiator<'a, '_> {
             self.add_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
             let current_task_get_fn =
                 Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask).name();
-            let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn.name();
+            let get_global_current_task_meta_fn = Intrinsic::GetGlobalCurrentTaskMetaFn
+                .binding(self.bindgen.opts.cm_runtime_es_module.is_some())
+                .call_prefix(true);
 
             let dst = import_obj.entry("env").or_insert(BTreeMap::new());
             let prev = dst.insert(
                 "setTempRet0",
                 format!(
                     "(x) => {{
-                const {{ taskID }} = {get_global_current_task_meta_fn}({component_instance_idx});
+                const {{ taskID }} = {get_global_current_task_meta_fn}{component_instance_idx});
 
                 const taskMeta = {current_task_get_fn}({component_instance_idx}, taskID);
                 if (!taskMeta) {{ throw new Error('invalid/missing async task meta'); }}
@@ -3982,11 +4001,11 @@ impl<'a> Instantiator<'a, '_> {
         {
             let set_task_meta = self
                 .bindgen
-                .intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                .intrinsic_call_prefix(Intrinsic::SetGlobalCurrentTaskMetaFn);
             let idx = component_idx.as_u32();
             let import_object = imports.strip_prefix(", ").unwrap_or("{}");
             imports = format!(
-                ", ({set_task_meta}({{ componentIdx: {idx}, taskID: _initTaskID{idx} }}), {import_object})"
+                ", ({set_task_meta}{{ componentIdx: {idx}, taskID: _initTaskID{idx} }}), {import_object})"
             );
         }
 
@@ -4029,14 +4048,19 @@ impl<'a> Instantiator<'a, '_> {
                 });
         assert_eq!(i, async_analysis_instance);
         let iu32 = i.as_u32();
-        let instantiate = self.bindgen.intrinsic(Intrinsic::InstantiateCore);
+        let instantiate = if self.bindgen.opts.instantiation_mode.is_some() {
+            Intrinsic::InstantiateCore.binding(false).call_prefix(true)
+        } else {
+            self.bindgen
+                .intrinsic_call_prefix(Intrinsic::InstantiateCore)
+        };
         uwriteln!(self.src.js, "let exports{iu32};");
 
         match self.bindgen.opts.instantiation_mode {
             Some(InstantiationMode::Async) | None => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = yield {instantiate}(yield module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = yield {instantiate}yield module{}{imports}));",
                     module_idx.as_u32(),
                 )
             }
@@ -4044,7 +4068,7 @@ impl<'a> Instantiator<'a, '_> {
             Some(InstantiationMode::Sync) => {
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = {instantiate}(module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = {instantiate}module{}{imports}));",
                     module_idx.as_u32(),
                 );
             }

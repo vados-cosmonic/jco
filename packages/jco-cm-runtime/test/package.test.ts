@@ -55,6 +55,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         expect(Object.keys(manifest.exports).sort()).toEqual([
             '.',
             './intrinsics/conversion',
+            './intrinsics/core',
             './intrinsics/js-helper',
             './intrinsics/resource',
             './intrinsics/string',
@@ -73,7 +74,12 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule } from './contract.js';
+            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule } from './contract.js';
+            export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
+            export const clampGuest: CoreModule['clampGuest'] = (value, min, max) => {
+                if (value < min || value > max) throw new TypeError('out of range');
+                return value;
+            };
             export const initializeWebIdlProxyCache: WebIdlModule['initializeWebIdlProxyCache'] = () => ({ proxy: undefined });
             export const validateHostChar: StringModule['validateHostChar'] = value => {
                 if (typeof value !== 'string') throw new TypeError('must be a string');
@@ -99,12 +105,29 @@ test('packed exports, standalone declarations, and independent provider conforma
             import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
             import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+            import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
             const defaultModule: ResourceModule = resource;
+            const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
+            const registers = custom.initializeTaskRegisters();
+            defaultCore.setCurrentTaskMeta(registers, { componentIdx: 0, taskID: 1n });
+            if (defaultCore.withCurrentTaskMeta(registers, { componentIdx: 1, taskID: 2n, fn: () => defaultCore.getCurrentTaskMeta(registers)?.taskID }) !== 2n || defaultCore.getCurrentTaskMeta(registers)?.taskID !== 1n) throw new Error('task register consumer failed');
+            const Rep = defaultCore.initializeRepTableClass({ RuntimeError: Error });
+            const OtherRep = defaultCore.initializeRepTableClass({ RuntimeError: Error });
+            const reps = new Rep<string>();
+            if (Rep === OtherRep || Rep.FREE === OtherRep.FREE || !(reps instanceof Rep) || reps.get(reps.insert('value')) !== 'value') throw new Error('constructor consumer failed');
+            const ErrorClass = defaultCore.initializeComponentErrorClass();
+            const payload = { message: 'payload' };
+            const error = new ErrorClass(payload);
+            if (defaultCore.getErrorPayload(defaultCore.initializeHasOwnProperty(), error) !== payload || custom.clampGuest(42, 0, 100) !== 42) throw new Error('error capability consumer failed');
+            const memoryMap = defaultCore.initializeComponentMemoryMap();
+            const wasmMemory = new WebAssembly.Memory({ initial: 1 });
+            defaultCore.registerMemory(memoryMap, { componentIdx: 0, memoryIdx: 0, memory: wasmMemory });
+            if (defaultCore.lookupMemories(memoryMap, { componentIdx: 0, memoryIdx: 0 }) !== wasmMemory) throw new Error('memory owner consumer failed');
             const indexSpaces = defaultModule.initializeHandleIndexSpaces();
             const scopeTasks = defaultModule.initializeResourceScopeTasks();
             const removal = { RuntimeError: Error, indexSpaces, scopeTasks };
@@ -150,6 +173,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         const negatives = (await readFile(new URL('./contracts.ts', import.meta.url), 'utf8'))
             .replaceAll('../src/intrinsics/resource.js', '@bytecodealliance/jco-cm-runtime/intrinsics/resource')
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
+            .replaceAll('../src/intrinsics/core.js', '@bytecodealliance/jco-cm-runtime/intrinsics/core')
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
@@ -197,6 +221,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
             const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
             const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
+            const { clampGuest, typeCheckValidI32, initializeTaskRegisters } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
+            if (clampGuest(42, 0, 100) !== 42 || !typeCheckValidI32(42) || Object.keys(initializeTaskRegisters()).length) throw new Error('core capability leak');
             if (initializeWebIdlProxyCache().proxy !== undefined) throw new Error('eager WebIDL proxy');
             if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) throw new Error('string capability leak');
             if (emptyFunc(42) !== undefined) throw new Error('empty function capability leak');

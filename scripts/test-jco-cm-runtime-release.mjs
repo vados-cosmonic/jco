@@ -58,3 +58,16 @@ const webIdlCache = initializeWebIdlProxyCache();
 const proxy = globalThisIdlProxy(webIdlCache);
 assert.equal(globalThisIdlProxy(webIdlCache), proxy);
 assert.equal(Reflect.get(proxy, 'URL'), URL);
+
+const { initializeTaskRegisters, withCurrentTaskMeta, getCurrentTaskMeta, initializeRepTableClass } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
+const registers = initializeTaskRegisters();
+assert.equal(
+    withCurrentTaskMeta(registers, { componentIdx: 0, taskID: 1n, fn: () => getCurrentTaskMeta(registers).taskID }),
+    1n,
+);
+assert.equal(getCurrentTaskMeta(registers), undefined);
+const RepTable = initializeRepTableClass({ RuntimeError: WebAssembly.RuntimeError });
+const reps = new RepTable();
+assert.equal(reps.get(reps.insert(42)), 42);
+assert.notEqual(RepTable.FREE, initializeRepTableClass({ RuntimeError: Error }).FREE);

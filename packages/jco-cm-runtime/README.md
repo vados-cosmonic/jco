@@ -20,7 +20,8 @@ statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 resource operations and storage initializers from `intrinsics/resource`, selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
-from `intrinsics/webidl`.
+from `intrinsics/webidl`, with core operations, constructors and state owners
+from `intrinsics/core`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -45,7 +46,8 @@ runtime directory tree with JavaScript MIME types.
 Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
-string variants and the WebIDL proxy (50/274 logical intrinsic variants);
+string variants, the WebIDL proxy and the remaining 52 core variants
+(102/274 logical intrinsic variants);
 other families remain inline during migration.
 
 ```js
@@ -80,7 +82,8 @@ const conformance: ResourceModule = resource;
 
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
-`./intrinsics/js-helper`, `./intrinsics/string` and `./intrinsics/webidl` subpaths
+`./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
+`./intrinsics/core` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -119,8 +122,9 @@ Generated code reads and replaces their members directly, so operations observe
 the live values rather than captured snapshots. Every selected owner is created
 once per instantiation; importing the module creates no map or task.
 
-Borrow transfer accepts a lazy current-task lookup while tasks remain inline.
-Destructors receive only lazy `createTask` and `withTask` capabilities. Each
+Borrow transfer receives the actual task registers and a lazy task lookup while
+tasks remain inline. Destructors receive only lazy `createTask` and the actual
+`registers` owner. Each
 destructor creates a synchronous task with fresh context slots and restores the
 enclosing task after success or failure. Explicit disposal releases the handle
 before invoking a destructor and becomes a no-op on repeated disposal.
@@ -228,3 +232,39 @@ inline behavior. Native methods that require a receiver still fail when
 destructured and called without it. Available properties depend on the host's Web
 APIs. Custom API-v2 runtimes must publish this new subpath when adopting this
 compiler's direct WebIDL output; they may re-export the matching defaults.
+
+## Core contract
+
+`intrinsics/core` satisfies `CoreModule`. Pure helpers receive operands only.
+Compilation receives the selected WebAssembly methods and the applicable Node
+policy; the methods keep their original receiver. File compilation creates its
+cache only when selected and loads Node filesystem support only when called.
+Optional JSPI constructors are read when their operation needs them.
+
+`initializeTaskRegisters()` returns the actual mutable owner shared by task,
+component and resource operations. Metadata operations take that owner explicitly.
+Synchronous scopes restore both enclosing registers on success or failure;
+asynchronous scopes clear their own registers without clearing a different task.
+`initializeComponentMemoryMap()` returns the actual shared memory lookup map.
+These initializers return state rather than an operation registry.
+
+Constructor initializers return selected class values once per instantiation.
+`initializeRepTableClass({ RuntimeError })` preserves `new`, `instanceof` and its
+per-class `FREE` sentinel. `initializeComponentErrorClass()` preserves each
+store's error constructor and payload behavior. Managed-buffer and manager class
+initializers receive only their resource owners or selected buffer constructor.
+Separate instantiations have separate class identities; constructors are never
+hoisted into shared module state. Importing this subpath initializes no classes,
+maps, symbols, codecs or optional platform facilities.
+
+`initializeHasOwnProperty()` returns the native unbound function selected for
+the instantiation. Error extraction receives it explicitly and preserves its
+`.call` receiver. Default operations use their own static dependencies; overriding
+a sibling task operation does not intercept default resource destructor internals.
+The explicit host `instantiateCore` callback retains its existing two-argument
+signature and takes precedence over the default named core operation.
+
+Custom providers adopting this compiler must publish the core subpath and update
+resource borrow/destructor contexts to receive `registers`; the earlier v2
+`getCurrentTask`/`withTask` bridge shapes are replaced by shared state and the
+remaining narrowly named task capability.

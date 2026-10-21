@@ -128,7 +128,7 @@ impl HostIntrinsic {
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask),
                 );
                 let set_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let current_task_may_block =
                     render_args.require_intrinsic(AsyncTaskIntrinsic::CurrentTaskMayBlock);
                 let runtime_error_class =
@@ -276,7 +276,7 @@ impl HostIntrinsic {
                             isAsync,
                         }};
 
-                        {set_global_current_task_meta_fn}({{
+                        {set_global_current_task_meta_fn}{{
                             taskID: newTask.id(),
                             componentIdx: newTask.componentIdx(),
                         }});
@@ -302,7 +302,7 @@ impl HostIntrinsic {
                 let async_driver_loop_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
                 let lookup_memories_for_component_fn =
-                    render_args.require_intrinsic(Intrinsic::LookupMemoriesForComponent);
+                    render_args.intrinsic_call_prefix(Intrinsic::LookupMemoriesForComponent);
                 let current_component_idx_globals = render_args
                     .require_intrinsic(AsyncTaskIntrinsic::GlobalAsyncCurrentComponentIdxs);
                 let blocking_call_depth =
@@ -310,11 +310,11 @@ impl HostIntrinsic {
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
                 let with_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let get_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentTaskMetaFn);
 
                 // TODO: lower here for non-zero param count
                 // https://github.com/bytecodealliance/wasmtime/blob/69ef9afc11a2846248c9e94affca0223dbd033fc/crates/wasmtime/src/runtime/component/concurrent.rs#L1775
@@ -327,7 +327,7 @@ impl HostIntrinsic {
                     function {async_start_call_fn}(args, callee, paramCount, resultCount, flags) {{
                         const componentIdx = {current_component_idx_globals}.at(-1);
 
-                        const globalTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                        const globalTaskMeta = {get_global_current_task_meta_fn}componentIdx);
                         if (!globalTaskMeta) {{ throw new Error('missing global current task globalTaskMeta'); }}
                         const taskID = globalTaskMeta.taskID;
 
@@ -428,7 +428,7 @@ impl HostIntrinsic {
                                 // TODO: centralize calling of returnFn to *one place* (if possible)
                                 if (subtaskCallMeta.returnFnCalled) {{ return; }}
 
-                                const res = {with_global_current_task_meta_fn}({{
+                                const res = {with_global_current_task_meta_fn}{{
                                     taskID: callerTask.id(),
                                     componentIdx: callerTask.componentIdx(),
                                     fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),
@@ -452,9 +452,9 @@ impl HostIntrinsic {
 
                             let callerMemory;
                             if (callerMemoryIdx !== null && callerMemoryIdx !== undefined) {{
-                                callerMemory = {lookup_memories_for_component_fn}({{ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx }});
+                                callerMemory = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx, memoryIdx: callerMemoryIdx }});
                             }} else {{
-                                const callerMemories = {lookup_memories_for_component_fn}({{ componentIdx: callerComponentIdx }});
+                                const callerMemories = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx }});
                                 if (callerMemories.length !== 1) {{ throw new Error(`unsupported amount of caller memories`); }}
                                 callerMemory = callerMemories[0];
                             }}
@@ -603,7 +603,7 @@ impl HostIntrinsic {
                                     jspiCallee = callee._cachedPromising;
                                 }}
 
-                                callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                callbackResult = await {with_global_current_task_meta_async_fn}{{
                                     taskID: preparedTask.id(),
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => jspiCallee.apply(null, startRes),
@@ -628,7 +628,7 @@ impl HostIntrinsic {
                             let callbackResult;
                             if (!calleeIsAsync) {{ {blocking_call_depth}.value++; }}
                             try {{
-                                callbackResult = {with_global_current_task_meta_fn}({{
+                                callbackResult = {with_global_current_task_meta_fn}{{
                                     taskID: preparedTask.id(),
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => callee.apply(null, startRes),
@@ -714,7 +714,7 @@ impl HostIntrinsic {
                                     // can execute context.get while lowering their inputs,
                                     // so restore the same task context around the delayed
                                     // start that the eager path observes.
-                                    {with_global_current_task_meta_fn}({{
+                                    {with_global_current_task_meta_fn}{{
                                         taskID: preparedTask.id(),
                                         componentIdx: preparedTask.componentIdx(),
                                         fn: startSubtask,
@@ -788,13 +788,13 @@ impl HostIntrinsic {
                 let get_current_task_fn = render_args
                     .require_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
                 let with_global_current_task_meta_async_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentTaskMetaFnAsync);
                 let with_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::WithGlobalCurrentTaskMetaFn);
                 let get_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::GetGlobalCurrentTaskMetaFn);
                 let set_global_current_task_meta_fn =
-                    render_args.require_intrinsic(Intrinsic::SetGlobalCurrentTaskMetaFn);
+                    render_args.intrinsic_call_prefix(Intrinsic::SetGlobalCurrentTaskMetaFn);
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
 
@@ -823,7 +823,7 @@ impl HostIntrinsic {
                     async function {sync_start_call_fn}(args, callee, paramCount) {{
                         const componentIdx = {current_component_idx_globals}.at(-1);
 
-                        const globalTaskMeta = {get_global_current_task_meta_fn}(componentIdx);
+                        const globalTaskMeta = {get_global_current_task_meta_fn}componentIdx);
                         if (!globalTaskMeta) {{ throw new Error('missing global current task meta during sync start call'); }}
                         const taskID = globalTaskMeta.taskID;
 
@@ -848,7 +848,7 @@ impl HostIntrinsic {
                         // and move its current-task register. Capture the entry at call
                         // time and restore it before the caller resumes (the same
                         // discipline as the suspending-import wrapper).
-                        const savedCallerTaskMeta = {get_global_current_task_meta_fn}(callerComponentIdx);
+                        const savedCallerTaskMeta = {get_global_current_task_meta_fn}callerComponentIdx);
                         try {{
 
                         const callbackFn = getCallbackFn();
@@ -886,7 +886,7 @@ impl HostIntrinsic {
                             const subtaskCallMeta = subtask.getCallMetadata();
                             if (subtaskCallMeta?.returnFn && !subtaskCallMeta.returnFnCalled) {{
                                 const callerTask = subtask.getParentTask();
-                                subtaskCallMeta.returnFnResult = {with_global_current_task_meta_fn}({{
+                                subtaskCallMeta.returnFnResult = {with_global_current_task_meta_fn}{{
                                     taskID: callerTask.id(),
                                     componentIdx: callerTask.componentIdx(),
                                     fn: () => subtaskCallMeta.returnFn.apply(null, [subtaskCallMeta.resultPtr]),
@@ -959,7 +959,7 @@ impl HostIntrinsic {
                         const calleeLifecyclePromise = (async () => {{
                             let callbackResult;
                             try {{
-                                callbackResult = await {with_global_current_task_meta_async_fn}({{
+                                callbackResult = await {with_global_current_task_meta_async_fn}{{
                                     taskID: preparedTask.id(),
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => {{
@@ -1021,7 +1021,7 @@ impl HostIntrinsic {
                         return flatResult;
                         }} finally {{
                             if (savedCallerTaskMeta) {{
-                                {set_global_current_task_meta_fn}({{
+                                {set_global_current_task_meta_fn}{{
                                     taskID: savedCallerTaskMeta.taskID,
                                     componentIdx: callerComponentIdx,
                                 }});
