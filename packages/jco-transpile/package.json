@@ -75,7 +75,8 @@
         "test:extended:external-runtime": "node scripts/test-external-runtime.mjs -c test/vitest.extended.ts",
         "bench:external-runtime": "node scripts/bench-external-runtime.mjs",
         "bench:external-runtime:parity": "node scripts/bench-external-runtime.mjs --parity",
-        "types:check:bench:external-runtime": "tsc -p bench/external-runtime/tsconfig.json"
+        "types:check:bench:external-runtime": "tsc -p bench/external-runtime/tsconfig.json",
+        "bench:external-runtime:investigate": "node scripts/investigate-external-runtime.mjs"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.30.0",

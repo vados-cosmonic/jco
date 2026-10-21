@@ -30,14 +30,27 @@ export interface Artifact {
     builtins: string[];
     wasm: { bytes: number; files: Record<string, string> };
 }
-export async function optimize(entry: string, bundler: Bundler, treeshake = true) {
+/** Diagnostic overrides are opt-in; the regression suite uses the defaults. */
+export interface BundleExperiment {
+    minify?: boolean;
+    assumePureReads?: boolean;
+    define?: Record<string, string>;
+    transform?: (code: string, id: string) => string;
+}
+export async function optimize(entry: string, bundler: Bundler, treeshake = true, experiment: BundleExperiment = {}) {
     const options = {
         input: entry,
-        treeshake,
+        treeshake:
+            treeshake && experiment.assumePureReads
+                ? { propertyReadSideEffects: false as const, unknownGlobalSideEffects: false }
+                : treeshake,
         external: (id: string) => id.startsWith('node:'),
         plugins: [
             {
                 name: 'runtime-file-urls',
+                transform(code: string, id: string) {
+                    return experiment.transform?.(code, id);
+                },
                 resolveId(id: string, importer?: string) {
                     const path = id.startsWith('file:')
                         ? fileURLToPath(id)
@@ -63,11 +76,17 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
             throw new Error(warning.message);
         },
     };
-    const build = bundler === 'rolldown' ? await rolldown({ ...options, platform: 'node' }) : await rollup(options);
+    if (experiment.define && bundler !== 'rolldown') {
+        throw new Error('The define experiment requires Rolldown');
+    }
+    const build =
+        bundler === 'rolldown'
+            ? await rolldown({ ...options, platform: 'node', transform: { define: experiment.define } })
+            : await rollup(options);
     try {
         const generated = await build.generate(
             bundler === 'rolldown'
-                ? { format: 'esm', minify: true, codeSplitting: false }
+                ? { format: 'esm', minify: experiment.minify ?? true, codeSplitting: false }
                 : { format: 'esm', inlineDynamicImports: true },
         );
         if (generated.output.length !== 1 || generated.output[0].type !== 'chunk') {
@@ -79,7 +98,7 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
             throw new Error(`Unbundled dependency would invalidate size measurements: ${imports.join(', ')}`);
         }
         const code =
-            bundler === 'rolldown'
+            bundler === 'rolldown' || experiment.minify === false
                 ? chunk.code
                 : (
                       await minify('bundle.mjs', chunk.code, {
@@ -88,7 +107,14 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
                           mangle: {},
                       })
                   ).code;
-        return { code, chunks: generated.output.length, builtins: imports.toSorted() };
+        return {
+            code,
+            chunks: generated.output.length,
+            builtins: imports.toSorted(),
+            modules: Object.fromEntries(
+                Object.entries(chunk.modules).map(([id, module]) => [id, module.renderedLength]),
+            ),
+        };
     } finally {
         await build.close();
     }

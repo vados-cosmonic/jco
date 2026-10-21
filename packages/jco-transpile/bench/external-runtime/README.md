@@ -11,6 +11,11 @@ the sections below for methodology, budgets, workload coverage and limitations.
 these cases, but single-component transfer size and source/initialization costs
 still regress. These results support keeping production's inline default.
 
+The [follow-up investigation](investigation/README.md) isolates the causes with
+bundler controls, a small factory-property reproducer, and startup allocation
+traces. The main obstacle is elimination of unused members from live factory
+return objects; the modules themselves are already combined into one chunk.
+
 ## Complete bundled JavaScript
 
 Ratios are external / inline; below 1 favors external. Both modes include their
@@ -39,8 +44,9 @@ Brotli. Raw deduplication alone is insufficient evidence for transfer-size parit
 An entirely unused runtime import disappears with both bundlers. Once
 `runtime.create` is used, the adder bundle still retains unneeded namespaces
 such as error-context helpers and JSPI support. Source inspection shows the
-provider returns all namespaces and binds methods to their namespace objects;
-these object/receiver contracts limit what the current optimizers eliminate.
+provider returns all namespaces and binds methods to their namespace objects.
+The follow-up controls show that removing generated receiver binding alone has
+little effect: factory-return objects already prevent the expected elimination.
 The size gates provide a baseline for investigating narrower/lazier factories
 or static specialization without weakening provider semantics.
 
