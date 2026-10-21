@@ -1,0 +1,5 @@
+{
+    "schema": 2,
+    "apiVersion": 2,
+    "mapped": ["Resource(ResourceTableGet)"]
+}
