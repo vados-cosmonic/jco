@@ -33,6 +33,7 @@
         "String(Utf8Encode)",
         "String(Utf8EncodeAsync)",
         "String(ValidateGuestChar)",
-        "String(ValidateHostChar)"
+        "String(ValidateHostChar)",
+        "WebIdl(GlobalThisIdlProxy)"
     ]
 }
