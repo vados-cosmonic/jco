@@ -73,3 +73,14 @@ strings.utf16Encode({ encoder }, 'x', () => 0, { buffer: new ArrayBuffer(8) });
 // @ts-expect-error a codec must supply its method with the structural call signature
 const invalidEncoder: StringEncodeInto = { encodeInto: (input: number) => input };
 void invalidEncoder;
+
+import * as webidl from '../src/intrinsics/webidl.js';
+import type { WebIdlModule } from '../src/runtime.js';
+const webIdlModule: WebIdlModule = webidl;
+const webIdlCache = webIdlModule.initializeWebIdlProxyCache();
+webIdlModule.globalThisIdlProxy(webIdlCache);
+webIdlCache.proxy = undefined;
+// @ts-expect-error proxy operations require the explicit mutable cache owner
+webIdlModule.globalThisIdlProxy();
+// @ts-expect-error the cache is structural and contains no runtime registry
+webIdlModule.globalThisIdlProxy({ runtime: {} });

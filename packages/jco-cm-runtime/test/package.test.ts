@@ -58,6 +58,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/js-helper',
             './intrinsics/resource',
             './intrinsics/string',
+            './intrinsics/webidl',
             './runtime',
         ]);
         expect(manifest.sideEffects).toBe(false);
@@ -72,7 +73,8 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule, ConversionModule, StringModule } from './contract.js';
+            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule } from './contract.js';
+            export const initializeWebIdlProxyCache: WebIdlModule['initializeWebIdlProxyCache'] = () => ({ proxy: undefined });
             export const validateHostChar: StringModule['validateHostChar'] = value => {
                 if (typeof value !== 'string') throw new TypeError('must be a string');
                 return value.codePointAt(0);
@@ -99,11 +101,16 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
+            import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
             const defaultModule: ResourceModule = resource;
             const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
             const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+            const webIdlModule: RuntimeModuleContracts['intrinsics/webidl'] = webidl;
+            const webIdlCache = custom.initializeWebIdlProxyCache();
+            const globalProxy = webIdlModule.globalThisIdlProxy(webIdlCache);
+            if (globalProxy !== webIdlModule.globalThisIdlProxy(webIdlCache) || Reflect.get(globalProxy, 'URL') !== URL) throw new Error('WebIDL consumer failed');
             const strings: RuntimeModuleContracts['intrinsics/string'] = string;
             const encoder = strings.initializeUtf8Encoder();
             const stringMemory = { buffer: new ArrayBuffer(8) };
@@ -130,6 +137,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
+            .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -165,7 +173,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'minimal.mjs'),
             `
-            for (const key of ['WebAssembly', 'TextEncoder', 'TextDecoder', 'DataView', 'Int32Array', 'Float32Array', 'BigInt64Array', 'Float64Array']) {
+            for (const key of ['WebAssembly', 'TextEncoder', 'TextDecoder', 'DataView', 'Proxy', 'Symbol', 'Int32Array', 'Float32Array', 'BigInt64Array', 'Float64Array']) {
                 Object.defineProperty(globalThis, key, { get() { throw new Error('unexpected capability: ' + key); } });
             }
             await import('@bytecodealliance/jco-cm-runtime/runtime');
@@ -173,6 +181,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
             const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
             const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
+            const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
+            if (initializeWebIdlProxyCache().proxy !== undefined) throw new Error('eager WebIDL proxy');
             if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) throw new Error('string capability leak');
             if (emptyFunc(42) !== undefined) throw new Error('empty function capability leak');
             if (toUint32({ strict: false }, '42') !== 42 || toString(42) !== '42') throw new Error('scalar capability leak');

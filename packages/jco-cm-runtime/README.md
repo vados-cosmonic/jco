@@ -19,7 +19,8 @@ bindings are loaded or bundled.
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 `tableGet` from `intrinsics/resource` and selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
-string operations/codecs from `intrinsics/string`.
+string operations/codecs from `intrinsics/string` and the global WebIDL adapter
+from `intrinsics/webidl`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -43,7 +44,8 @@ runtime directory tree with JavaScript MIME types.
 
 Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations, both JavaScript helpers and all ten string variants (32/274 logical intrinsic variants);
+operations, both JavaScript helpers, all ten string variants and the WebIDL proxy
+(33/274 logical intrinsic variants);
 other families remain inline during migration.
 
 ```js
@@ -78,7 +80,7 @@ const conformance: ResourceModule = resource;
 
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
-`./intrinsics/js-helper` and `./intrinsics/string` subpaths
+`./intrinsics/js-helper`, `./intrinsics/string` and `./intrinsics/webidl` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -191,3 +193,20 @@ the memory buffer after realloc returns or resolves. Empty UTF-8 input keeps its
 Importing this subpath creates no codecs or scratch state. Custom API-v2 runtimes
 must publish the new named string subpath when adopting this compiler; they may
 re-export defaults or implement the self-contained structural contracts.
+
+## WebIDL contract
+
+`intrinsics/webidl` satisfies `WebIdlModule`.
+`initializeWebIdlProxyCache()` returns only `{ proxy: undefined }`;
+`globalThisIdlProxy(context)` lazily creates and caches the adapter over the host's
+`globalThis`. Importing the subpath or creating the empty cache constructs no
+proxy or symbols. Each selected cache owns its adapter and private symbols.
+
+Generated direct-module bindings initialize this context before WebIDL import
+destructuring invokes the adapter. Explicit `instantiate` calls use their supplied
+imports and select no WebIDL cache. Accessor/setter conventions, HTML/DOM name
+normalization, method receivers, proxy argument unwrapping and reflection retain
+inline behavior. Native methods that require a receiver still fail when
+destructured and called without it. Available properties depend on the host's Web
+APIs. Custom API-v2 runtimes must publish this new subpath when adopting this
+compiler's direct WebIDL output; they may re-export the matching defaults.

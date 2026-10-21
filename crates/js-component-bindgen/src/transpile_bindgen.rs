@@ -607,6 +607,11 @@ impl JsBindgen<'_> {
             .transpile_opts(opts)
             .build();
         let js_intrinsics = render_intrinsics(render_args);
+        let early_webidl_intrinsics = opts.instantiation_mode.is_none()
+            && opts.cm_runtime_es_module.is_some()
+            && self
+                .all_intrinsics
+                .contains(&Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         if let Some(base) = opts.cm_runtime_es_module.as_deref() {
             runtime::render_imports(&mut output, &self.all_intrinsics, base);
         }
@@ -641,6 +646,10 @@ impl JsBindgen<'_> {
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
             );
+        } else if early_webidl_intrinsics {
+            // Direct WebIDL import destructuring invokes the contextual proxy.
+            // Its version check and cache must already be initialized.
+            output.push_str(&js_intrinsics);
         }
 
         // Render all imports
@@ -649,8 +658,12 @@ impl JsBindgen<'_> {
         } else {
             None
         };
-        self.esm_bindgen
-            .render_imports(&mut output, imports_object, &mut self.local_names);
+        self.esm_bindgen.render_imports(
+            &mut output,
+            imports_object,
+            &mut self.local_names,
+            opts.cm_runtime_es_module.is_some(),
+        );
 
         // Create instantiation code
         if self.opts.instantiation_mode.is_some() {
@@ -782,7 +795,7 @@ impl JsBindgen<'_> {
                     }})();
                     {maybe_init}\
                 ",
-                &js_intrinsics as &str,
+                if early_webidl_intrinsics { "" } else { &js_intrinsics as &str },
                 &intrinsic_definitions as &str,
                 &self.src.js as &str,
                 &compilation_promises as &str,
@@ -4563,7 +4576,10 @@ impl<'a> Instantiator<'a, '_> {
         import_binding: Option<String>,
         local_name: String,
     ) {
-        if import_specifier.starts_with("webidl:") {
+        if import_specifier.starts_with("webidl:")
+            && (self.bindgen.opts.cm_runtime_es_module.is_none()
+                || self.bindgen.opts.instantiation_mode.is_none())
+        {
             self.bindgen
                 .intrinsic(Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         }

@@ -51,3 +51,10 @@ assert.deepEqual(
     { ptr: 0, len: 2, codepoints: 1 },
 );
 assert.equal(initializeUtf16Decoder().decode(new Uint16Array(stringMemory.buffer, 0, 2)), '🚀');
+
+const { initializeWebIdlProxyCache, globalThisIdlProxy } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
+const webIdlCache = initializeWebIdlProxyCache();
+const proxy = globalThisIdlProxy(webIdlCache);
+assert.equal(globalThisIdlProxy(webIdlCache), proxy);
+assert.equal(Reflect.get(proxy, 'URL'), URL);
