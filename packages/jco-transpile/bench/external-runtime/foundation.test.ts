@@ -103,6 +103,18 @@ test(
         ]) {
             runtimeArtifacts[name] = hash(await readFile(new URL(name, defaultRuntimeUrl)));
         }
+        const mappingSources = Object.fromEntries(
+            await Promise.all(
+                ['runtime.rs', 'runtime/core.rs'].map(async (name) => [
+                    name,
+                    hash(
+                        await readFile(
+                            new URL('../../../../crates/js-component-bindgen/src/intrinsics/' + name, import.meta.url),
+                        ),
+                    ),
+                ]),
+            ),
+        );
         const environment = {
             compilerArtifacts,
             runtimeArtifacts,
@@ -116,11 +128,8 @@ test(
             controllerFlags: process.execArgv,
             debug: process.env.JCO_DEBUG ?? null,
             lockHash: hash(await readFile(new URL('../../../../pnpm-lock.yaml', import.meta.url))),
-            mappingSourceHash: hash(
-                await readFile(
-                    new URL('../../../../crates/js-component-bindgen/src/intrinsics/runtime.rs', import.meta.url),
-                ),
-            ),
+            mappingSources,
+            mappingSourceHash: hash(JSON.stringify(mappingSources)),
         };
         const settings = {
             processCount,
