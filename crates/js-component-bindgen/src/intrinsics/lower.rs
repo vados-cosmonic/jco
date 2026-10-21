@@ -562,15 +562,17 @@ impl LowerIntrinsic {
             Self::LowerFlatStringUtf16 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_string_utf16_fn = self.name();
-                let utf16_encode_fn =
-                    render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
+                let utf16_encode_fn = render_args.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::Utf16Encode),
+                    "ctx.vals[0], ctx.realloc, ctx.memory",
+                );
 
                 output.push_str(&format!("
                     function {lower_flat_string_utf16_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_string_utf16_fn}()] args', {{ ctx }});
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
-                        const {{ ptr, len }} = {utf16_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
+                        const {{ ptr, len }} = {utf16_encode_fn};
 
                         const view = new DataView(ctx.memory.buffer);
                         view.setUint32(ctx.storagePtr, ptr, true);
@@ -584,15 +586,17 @@ impl LowerIntrinsic {
             Self::LowerFlatStringUtf8 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_flat_string_utf8_fn = self.name();
-                let utf8_encode_fn =
-                    render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
+                let utf8_encode_fn = render_args.intrinsic_call(
+                    Intrinsic::String(StringIntrinsic::Utf8Encode),
+                    "ctx.vals[0], ctx.realloc, ctx.memory",
+                );
 
                 output.push_str(&format!(r#"
                     function {lower_flat_string_utf8_fn}(ctx) {{
                         {debug_log_fn}('[{lower_flat_string_utf8_fn}()] args', ctx);
                         if (!ctx.realloc) {{ throw new Error('missing realloc during flat string lower'); }}
 
-                        const {{ ptr, len }} = {utf8_encode_fn}(ctx.vals[0], ctx.realloc, ctx.memory);
+                        const {{ ptr, len }} = {utf8_encode_fn};
 
                         const view = new DataView(ctx.memory.buffer);
                         view.setUint32(ctx.storagePtr, ptr, true);

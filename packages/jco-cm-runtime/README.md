@@ -18,7 +18,8 @@ bindings are loaded or bundled.
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 `tableGet` from `intrinsics/resource` and selected conversions from
-`intrinsics/conversion` and JavaScript helpers from `intrinsics/js-helper`.
+`intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
+string operations/codecs from `intrinsics/string`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -42,7 +43,7 @@ runtime directory tree with JavaScript MIME types.
 
 Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations and both JavaScript helpers (22/274 logical intrinsic variants);
+operations, both JavaScript helpers and all ten string variants (32/274 logical intrinsic variants);
 other families remain inline during migration.
 
 ```js
@@ -77,7 +78,7 @@ const conformance: ResourceModule = resource;
 
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
-`./intrinsics/js-helper` subpaths
+`./intrinsics/js-helper` and `./intrinsics/string` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -164,3 +165,29 @@ Importing either function allocates no cache. Providers implementing earlier v2
 output must add this named subpath when adopting this compiler. A provider may
 wrap `dataView` while re-exporting the other defaults; each default uses its own
 static implementation dependencies.
+
+## String contract
+
+`intrinsics/string` satisfies `StringModule`. Codec values are created by separate
+`initializeUtf8Decoder()`, `initializeUtf16Decoder()` and `initializeUtf8Encoder()`
+exports. Generated bindings initialize only selected codecs, once per relevant
+instantiation, and preserve the returned object for all method callers. The
+structural `StringDecoder`, `StringEncoder` and `StringEncodeInto` interfaces
+require only their public methods. Calls preserve the codec's method receiver;
+codecs from separate instantiations have independent identity and streaming state.
+Decoders use fatal decoding and preserve a leading BOM.
+
+`utf8Encode(encoder, value, realloc, memory)` and its async counterpart receive
+the actual selected encoder, shared with direct transcoding method calls. This
+explicit capability lets a custom encoder intercept default allocation operations.
+Re-exporting a default operation does not intercept its internal static helpers.
+`utf16Encode(context, value, realloc, memory)` and its async counterpart receive
+only `{ littleEndian: boolean }` from `initializeUtf16Encoding()`, with no codecs.
+All encoders use exact allocations, replace unpaired host surrogates and obtain
+the memory buffer after realloc returns or resolves. Empty UTF-8 input keeps its
+`{ ptr: 1, len: 0 }` sentinel without allocating.
+
+`utf16ValidatingCopy`, `validateGuestChar` and `validateHostChar` are context-free.
+Importing this subpath creates no codecs or scratch state. Custom API-v2 runtimes
+must publish the new named string subpath when adopting this compiler; they may
+re-export defaults or implement the self-contained structural contracts.

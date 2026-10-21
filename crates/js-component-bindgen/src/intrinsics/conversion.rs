@@ -77,6 +77,7 @@ impl ConversionIntrinsic {
             suffix: "intrinsics/conversion",
             export,
             context,
+            kind: super::runtime::RuntimeImportKind::Call,
         }
     }
 

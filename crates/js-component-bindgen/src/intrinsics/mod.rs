@@ -10,7 +10,9 @@ use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
 pub(crate) mod runtime;
-use runtime::{CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, VERSION_LOCAL};
+use runtime::{
+    CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, RuntimeImportKind, VERSION_LOCAL,
+};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -220,6 +222,16 @@ impl IntrinsicBinding {
     pub(crate) fn call(self, operands: &str) -> String {
         let name = self.local_name();
         match self {
+            Self::Runtime {
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::InitializedValue,
+                        ..
+                    },
+                ..
+            } => {
+                panic!("initialized runtime values must be used as values")
+            }
             Self::Runtime {
                 import:
                     RuntimeImport {
@@ -2683,6 +2695,10 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::String(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: intrinsic.runtime_import(),
+            },
             Self::JsHelper(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: intrinsic.runtime_import(),
@@ -2698,6 +2714,7 @@ impl Intrinsic {
                         suffix: "intrinsics/resource",
                         export: "tableGet",
                         context: Some(RuntimeContext::ResourceTableGet),
+                        kind: RuntimeImportKind::Call,
                     },
                 }
             }

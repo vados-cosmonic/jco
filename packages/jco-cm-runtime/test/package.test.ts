@@ -57,6 +57,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/conversion',
             './intrinsics/js-helper',
             './intrinsics/resource',
+            './intrinsics/string',
             './runtime',
         ]);
         expect(manifest.sideEffects).toBe(false);
@@ -71,7 +72,11 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule, ConversionModule } from './contract.js';
+            import type { ResourceModule, ConversionModule, StringModule } from './contract.js';
+            export const validateHostChar: StringModule['validateHostChar'] = value => {
+                if (typeof value !== 'string') throw new TypeError('must be a string');
+                return value.codePointAt(0);
+            };
             export const toUint32: ConversionModule['toUint32'] = (context, value) => {
                 if (context.strict && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffffff)) throw new TypeError('invalid u32');
                 return (value as number) >>> 0;
@@ -93,11 +98,17 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
+            import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
             const defaultModule: ResourceModule = resource;
             const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
             const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+            const strings: RuntimeModuleContracts['intrinsics/string'] = string;
+            const encoder = strings.initializeUtf8Encoder();
+            const stringMemory = { buffer: new ArrayBuffer(8) };
+            const allocation = strings.utf8Encode(encoder, 'é', () => 0, stringMemory);
+            if (allocation.len !== 2 || strings.initializeUtf8Decoder().decode(new Uint8Array(stringMemory.buffer, 0, 2)) !== 'é' || custom.validateHostChar('🚀') !== 0x1f680) throw new Error('string consumer failed');
             const cache = helpers.initializeDataViewCache();
             const memory = { buffer: new ArrayBuffer(8) };
             const view = helpers.dataView(cache, memory);
@@ -118,6 +129,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/resource.js', '@bytecodealliance/jco-cm-runtime/intrinsics/resource')
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
+            .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -160,6 +172,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
             const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
             const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
+            const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
+            if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) throw new Error('string capability leak');
             if (emptyFunc(42) !== undefined) throw new Error('empty function capability leak');
             if (toUint32({ strict: false }, '42') !== 42 || toString(42) !== '42') throw new Error('scalar capability leak');
             const entry = tableGet({ RuntimeError: Error }, [1 << 30, 0, 7, 42], 1);

@@ -31,3 +31,23 @@ view.setUint32(0, 42, true);
 assert.equal(dataView(cache, memory), view);
 assert.equal(view.getUint32(0, true), 42);
 assert.equal(emptyFunc(42), undefined);
+
+const {
+    initializeUtf8Encoder,
+    initializeUtf8Decoder,
+    initializeUtf16Decoder,
+    initializeUtf16Encoding,
+    utf8Encode,
+    utf16Encode,
+} = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
+const stringMemory = { buffer: new ArrayBuffer(16) };
+assert.deepEqual(
+    utf8Encode(initializeUtf8Encoder(), 'é', () => 0, stringMemory),
+    { ptr: 0, len: 2, codepoints: 1 },
+);
+assert.equal(initializeUtf8Decoder().decode(new Uint8Array(stringMemory.buffer, 0, 2)), 'é');
+assert.deepEqual(
+    utf16Encode(initializeUtf16Encoding(), '🚀', () => 0, stringMemory),
+    { ptr: 0, len: 2, codepoints: 1 },
+);
+assert.equal(initializeUtf16Decoder().decode(new Uint16Array(stringMemory.buffer, 0, 2)), '🚀');

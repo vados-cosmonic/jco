@@ -21,6 +21,7 @@ impl JsHelperIntrinsic {
         RuntimeImport {
             suffix: "intrinsics/js-helper",
             export: self.name(),
+            kind: super::runtime::RuntimeImportKind::Call,
             context: match self {
                 Self::EmptyFunc => None,
                 Self::DataView => Some(RuntimeContext::DataViewCache),

@@ -2775,15 +2775,16 @@ impl<'a> Instantiator<'a, '_> {
                 // Generate a string encoding function to match this trampoline that does appropriate encoding
                 match string_encoding {
                     wasmtime_environ::component::StringEncoding::Utf8 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf8Encode));
+                        let encode_fn = self.bindgen.intrinsic_call(
+                            Intrinsic::String(StringIntrinsic::Utf8Encode),
+                            "s, reallocFn, memory",
+                        );
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
-                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
+                                 let {{ ptr, len }} = {encode_fn};
                                  outputPtr >>>= 0;
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
@@ -2791,15 +2792,16 @@ impl<'a> Instantiator<'a, '_> {
                         );
                     }
                     wasmtime_environ::component::StringEncoding::Utf16 => {
-                        let encode_fn = self
-                            .bindgen
-                            .intrinsic(Intrinsic::String(StringIntrinsic::Utf16Encode));
+                        let encode_fn = self.bindgen.intrinsic_call(
+                            Intrinsic::String(StringIntrinsic::Utf16Encode),
+                            "s, reallocFn, memory",
+                        );
                         uwriteln!(
                             self.src.js,
                             "function trampoline{i}OutputStr(s, outputPtr) {{
                                  const memory = memory{memory_idx};
                                  const reallocFn = realloc{realloc_fn_idx};
-                                 let {{ ptr, len }} = {encode_fn}(s, reallocFn, memory);
+                                 let {{ ptr, len }} = {encode_fn};
                                  outputPtr >>>= 0;
                                  new DataView(memory.buffer).setUint32(outputPtr, ptr, true)
                                  new DataView(memory.buffer).setUint32(outputPtr + 4, len, true)
