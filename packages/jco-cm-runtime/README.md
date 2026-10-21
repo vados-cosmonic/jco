@@ -61,7 +61,7 @@ API is versioned independently from the npm package version.
 
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
-with `apiVersion: 1`, `intrinsics.core`, `intrinsics.resource`, `intrinsics.conversion`,
+with `apiVersion: 1`, `intrinsics.core`, `intrinsics.component`, `intrinsics.resource`, `intrinsics.conversion`,
 `intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
@@ -112,12 +112,49 @@ arrive through `options.factTrapMessages`.
 `currentTaskMeta` is the shared task register. Synchronous task scopes restore
 the enclosing registers; asynchronous scopes clear the completing task while
 preserving another component's active task. During migration, suspending imports
-use lazy `options.coreContext` callbacks to consult component state and tasks
-that remain inline. Providers must defer these callbacks until an import runs,
+use lazy `options.coreContext` callbacks to consult the generated module's
+component and task helpers. Component helpers now use the external runtime;
+task helpers remain inline. Providers must defer these callbacks until an import runs,
 after generated task state has initialized. `CoreContext`, `TaskMeta`, and
 `TaskRegisters` describe this contract. The existing `resourceTasks` bridge
 remains supported for bindings generated before core helpers moved into the
 runtime.
+
+### Component state
+
+`intrinsics.component` implements all helpers from bindgen's `component.rs`.
+`instanceFlags` contains the live canonical ABI `may_leave` globals. `asyncState`
+maps component indices to `ComponentAsyncState` instances; `getOrCreateAsyncState`
+returns the same instance for each index. `storeTrap` and `storeAsyncState` hold
+the first trap and shared deadlock/wake-source accounting. These objects belong
+to one runtime instance and are shared with the generated code. Providers that
+delegate default methods must retain these state objects.
+
+`ComponentAsyncState` manages backpressure, FIFO admission, task-owned execution
+locks, and suspended tasks. Its handle table uses the resource namespace's shared
+index allocator. Synchronous release callbacks run before lock handoff, and each
+scheduler tick resumes at most one task, preserving JSPI task-register ordering.
+Backpressure waiters resolve when the counter reaches zero and remove their
+handlers. `ComponentTask`, `SuspendedTask`, and `AdmissionTicket` describe the
+structural scheduler contracts while task implementations remain inline.
+
+`guardMayLeave` and `guardTrap` preserve the wrapped function's receiver and
+return value. Trap recording uses the selected `WebAssembly.RuntimeError` and
+the core namespace's current-task register. Ordinary traps mark the affected
+component; deadlock detection traps every component in the store and releases
+queued admission and lock waiters. `trackHostOperation` accounts for pending
+host promises and forwards their disposal methods, allowing deadlock checks to
+distinguish blocked guest tasks from work that can still wake externally.
+
+Generated bindings pass `options.componentTrapMessages` for the compiler's
+engine-trap normalization and cannot-enter message. Direct users can supply
+the same metadata; without it, engine messages remain unchanged and the default
+cannot-enter message is used. `options.componentContext.createWaitable` lazily
+constructs the waitable class that remains inline. It is required only when
+calling `ComponentAsyncState.createWaitable`, and must not be invoked during
+runtime creation. `ComponentContext`, `ComponentWaitable`, and
+`ComponentTrapMessages` describe these options. Existing `coreContext` and
+`resourceTasks` callbacks remain supported for earlier API-v1 bindings.
 
 ### Conversions
 

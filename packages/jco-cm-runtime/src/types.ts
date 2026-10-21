@@ -3,6 +3,7 @@ import type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
 import type { StringIntrinsics } from './intrinsics/string.js';
 import type { WebIdlIntrinsics } from './intrinsics/webidl.js';
 import type { CoreContext, CoreIntrinsics } from './intrinsics/core-types.js';
+import type { ComponentContext, ComponentIntrinsics, ComponentTrapMessages } from './intrinsics/component-types.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -40,8 +41,12 @@ export interface RuntimeOptions {
     readonly resourceTasks?: ResourceTaskContext;
     /** Compiler-owned FACT trap discriminants and their messages. */
     readonly factTrapMessages?: Readonly<Record<number, string>>;
-    /** Lazy access to component/task operations that remain inline. */
+    /** Lazy access to the generated module's selected component/task operations. */
     readonly coreContext?: CoreContext;
+    /** Lazy factory for waitables that remain in generated bindings. */
+    readonly componentContext?: ComponentContext;
+    /** Trap messages supplied by the compiler's Wasmtime version. */
+    readonly componentTrapMessages?: ComponentTrapMessages;
 }
 
 export interface ResourceTableEntry {
@@ -122,6 +127,7 @@ export interface ResourceTaskContext {
 }
 
 export interface RuntimeIntrinsics {
+    readonly component: ComponentIntrinsics;
     readonly core: CoreIntrinsics;
     readonly webidl: WebIdlIntrinsics;
     readonly string: StringIntrinsics;

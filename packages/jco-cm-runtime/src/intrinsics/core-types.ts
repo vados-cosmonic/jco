@@ -15,7 +15,7 @@ export interface MemoryMeta {
     memoryIdx?: number;
     memory?: RuntimeMemory;
 }
-/** Lazy access to component/task operations that are still generated inline. */
+/** Lazy access to a generated module's selected component/task operations. */
 export interface CoreContext {
     checkMayLeave(componentIdx: number): void;
     getCurrentTask(componentIdx: number, taskID: bigint): { mayBlock(): boolean | undefined } | undefined;

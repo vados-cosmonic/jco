@@ -4,10 +4,30 @@ use std::fmt::Write as _;
 
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
-use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::source::Source;
 use crate::uwriteln;
 use wasmtime_environ::Trap;
+
+fn core_trap_messages_js() -> String {
+    let entries = [
+        ("unreachable", Trap::UnreachableCodeReached),
+        ("memory access out of bounds", Trap::MemoryOutOfBounds),
+        ("divide by zero", Trap::IntegerDivisionByZero),
+        ("remainder by zero", Trap::IntegerDivisionByZero),
+        ("divide result unrepresentable", Trap::IntegerOverflow),
+        (
+            "float unrepresentable in integer range",
+            Trap::BadConversionToInteger,
+        ),
+        ("table index is out of bounds", Trap::TableOutOfBounds),
+        ("function signature mismatch", Trap::BadSignature),
+        ("call stack exhausted", Trap::StackOverflow),
+    ]
+    .map(|(message, trap)| format!("{message:?}: {:?}", trap.to_string()))
+    .join(",");
+    format!("{{{entries}}}")
+}
 
 /// This enum contains intrinsics that manage per-component state
 #[derive(Debug, Copy, Clone, Ord, PartialOrd, Eq, PartialEq)]
@@ -89,6 +109,83 @@ pub enum ComponentIntrinsic {
 }
 
 impl ComponentIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::GlobalInstanceFlagsMap => "component.instanceFlags",
+            Self::GlobalStoreTrap => "component.storeTrap",
+            Self::GlobalStoreAsyncState => "component.storeAsyncState",
+            Self::CheckForDeadlock => "component.checkForDeadlock",
+            Self::TrackHostOperation => "component.trackHostOperation",
+            Self::NormalizeCoreTrap => "component.normalizeCoreTrap",
+            Self::CheckMayLeave => "component.checkMayLeave",
+            Self::GuardMayLeave => "component.guardMayLeave",
+            Self::RecordTrap => "component.recordTrap",
+            Self::GuardTrap => "component.guardTrap",
+            Self::GlobalAsyncStateMap => "component.asyncState",
+            Self::GetOrCreateAsyncState => "component.getOrCreateAsyncState",
+            Self::BackpressureInc => "component.backpressureInc",
+            Self::BackpressureDec => "component.backpressureDec",
+            Self::ComponentAsyncStateClass => "component.ComponentAsyncState",
+            Self::ComponentStateSetAllError => "component.setAllError",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        match self {
+            Self::GlobalInstanceFlagsMap
+            | Self::GlobalStoreTrap
+            | Self::GlobalStoreAsyncState
+            | Self::GlobalAsyncStateMap => RuntimeIntrinsicKind::Value {
+                value_type: "object",
+            },
+            Self::ComponentAsyncStateClass => RuntimeIntrinsicKind::Value {
+                value_type: "function",
+            },
+            _ => RuntimeIntrinsicKind::Method,
+        }
+    }
+
+    pub(crate) fn require_runtime_dependencies(&self, args: &RenderIntrinsicsArgs<'_>) {
+        if matches!(
+            self,
+            Self::ComponentAsyncStateClass | Self::GetOrCreateAsyncState
+        ) {
+            // Component state exposes a waitable factory; its constructor still lives inline.
+            args.require_intrinsic(WaitableIntrinsic::WaitableClass);
+        }
+    }
+
+    pub(crate) fn runtime_options(args: &RenderIntrinsicsArgs<'_>) -> String {
+        if !args
+            .intrinsics
+            .iter()
+            .any(|i| matches!(i, Intrinsic::Component(_)))
+        {
+            return String::new();
+        }
+        let mut options = format!(
+            "componentTrapMessages: {{ core: {}, cannotEnter: {:?} }},",
+            core_trap_messages_js(),
+            Trap::CannotEnterComponent.to_string(),
+        );
+        if args
+            .intrinsics
+            .contains(&Intrinsic::Component(Self::ComponentAsyncStateClass))
+            || args
+                .intrinsics
+                .contains(&Intrinsic::Component(Self::GetOrCreateAsyncState))
+        {
+            use std::fmt::Write as _;
+            write!(
+                options,
+                "componentContext: {{ createWaitable: args => new {}(args) }},",
+                WaitableIntrinsic::WaitableClass.name()
+            )
+            .unwrap();
+        }
+        options
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -253,27 +350,10 @@ impl ComponentIntrinsic {
                 let normalize_core_trap_fn = render_args.require_intrinsic(Self::NormalizeCoreTrap);
                 let runtime_error_class =
                     render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
-                let unreachable = Trap::UnreachableCodeReached.to_string();
-                let memory_oob = Trap::MemoryOutOfBounds.to_string();
-                let integer_division_by_zero = Trap::IntegerDivisionByZero.to_string();
-                let integer_overflow = Trap::IntegerOverflow.to_string();
-                let bad_conversion = Trap::BadConversionToInteger.to_string();
-                let table_oob = Trap::TableOutOfBounds.to_string();
-                let bad_signature = Trap::BadSignature.to_string();
-                let stack_overflow = Trap::StackOverflow.to_string();
+                let messages = core_trap_messages_js();
                 output.push_str(&format!(
                     r#"
-                    const CORE_TRAP_MESSAGES = new Map([
-                        ['unreachable', {unreachable:?}],
-                        ['memory access out of bounds', {memory_oob:?}],
-                        ['divide by zero', {integer_division_by_zero:?}],
-                        ['remainder by zero', {integer_division_by_zero:?}],
-                        ['divide result unrepresentable', {integer_overflow:?}],
-                        ['float unrepresentable in integer range', {bad_conversion:?}],
-                        ['table index is out of bounds', {table_oob:?}],
-                        ['function signature mismatch', {bad_signature:?}],
-                        ['call stack exhausted', {stack_overflow:?}],
-                    ]);
+                    const CORE_TRAP_MESSAGES = new Map(Object.entries({messages}));
                     function {normalize_core_trap_fn}(err) {{
                         if (!(err instanceof {runtime_error_class})) {{ return err; }}
                         const message = CORE_TRAP_MESSAGES.get(err.message);
@@ -546,7 +626,10 @@ impl ComponentIntrinsic {
 
                         setBackpressure(v) {{
                             this.#backpressure = v;
-                            return this.#backpressure
+                            for (const handler of [...(this.#handlerMap.get('backpressure-change') ?? [])]) {{
+                                handler.fn(v);
+                            }}
+                            return this.#backpressure;
                         }}
                         getBackpressure() {{ return this.#backpressure; }}
 
@@ -578,25 +661,20 @@ impl ComponentIntrinsic {
                         hasBackpressure() {{ return this.#backpressure > 0; }}
 
                         waitForBackpressure() {{
-                            let backpressureCleared = false;
-                            const cstate = this;
-                            cstate.addBackpressureWaiter();
-                            const handlerID = this.registerHandler({{
-                                event: 'backpressure-change',
-                                fn: (bp) => {{
-                                    if (bp === 0) {{
-                                        cstate.removeHandler(handlerID);
-                                        backpressureCleared = true;
-                                    }}
-                                }}
-                            }});
+                            if (!this.hasBackpressure()) {{ return Promise.resolve(null); }}
+                            this.addBackpressureWaiter();
                             return new Promise((resolve) => {{
-                                const interval = setInterval(() => {{
-                                    if (backpressureCleared) {{ return; }}
-                                    clearInterval(interval);
-                                    cstate.removeBackpressureWaiter();
-                                    resolve(null);
-                                }}, 0);
+                                let pending = true;
+                                const handlerID = this.registerHandler({{
+                                    event: 'backpressure-change',
+                                    fn: (bp) => {{
+                                        if (bp !== 0 || !pending) {{ return; }}
+                                        pending = false;
+                                        this.removeHandler({{ event: 'backpressure-change', handlerID }});
+                                        this.removeBackpressureWaiter();
+                                        resolve(null);
+                                    }},
+                                }});
                             }});
                         }}
 

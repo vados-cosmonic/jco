@@ -2166,11 +2166,10 @@ mod tests {
         ));
 
         assert!(
-            normalizer.contains(
-                r#"['unreachable', "wasm trap: wasm `unreachable` instruction executed"]"#
-            )
+            normalizer
+                .contains(r#""unreachable": "wasm trap: wasm `unreachable` instruction executed""#)
         );
-        assert!(normalizer.contains("['divide by zero', \"wasm trap: integer divide by zero\"]"));
+        assert!(normalizer.contains("\"divide by zero\": \"wasm trap: integer divide by zero\""));
         assert!(state.contains("err = _normalizeCoreTrap(err);"));
     }
 
@@ -2186,6 +2185,65 @@ mod tests {
             r#"throw new WebAssemblyRuntimeError("wasm trap: cannot enter component instance");"#
         ));
         assert!(!state.contains("if (STORE_TRAP.error !== null) { throw STORE_TRAP.error; }"));
+    }
+
+    #[test]
+    fn component_runtime_shares_values_and_defers_waitable_creation() {
+        let mut intrinsics = BTreeSet::from([
+            Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
+            Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+            Intrinsic::Component(ComponentIntrinsic::GlobalInstanceFlagsMap),
+            Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap),
+            Intrinsic::Component(ComponentIntrinsic::GlobalStoreAsyncState),
+            Intrinsic::Component(ComponentIntrinsic::GlobalAsyncStateMap),
+        ]);
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        assert!(
+            source.contains("componentContext: { createWaitable: args => new Waitable(args) }")
+        );
+        assert!(source.contains("componentTrapMessages: { core:"));
+        assert!(source.contains(r#"cannotEnter: "wasm trap: cannot enter component instance""#));
+        assert!(
+            source
+                .contains(r#""unreachable": "wasm trap: wasm `unreachable` instruction executed""#)
+        );
+        assert!(source.contains("component.ComponentAsyncState must be a function"));
+        assert!(source.contains("class Waitable"));
+        assert!(!source.contains("class ComponentAsyncState"));
+        assert!(!source.contains("const INSTANCE_FLAGS = new Map()"));
+        assert!(!source.contains("const ASYNC_STATE = new Map()"));
+        assert!(!source.contains("const STORE_TRAP = { error: null }"));
+        assert!(!source.contains("function getOrCreateAsyncState("));
+        assert!(intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
+    }
+
+    #[test]
+    fn component_runtime_guard_does_not_require_inline_component_state() {
+        let mut intrinsics = BTreeSet::from([Intrinsic::Component(ComponentIntrinsic::GuardTrap)]);
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        assert_eq!(intrinsics.len(), 1);
+        assert!(source.contains("component.guardTrap must be a function"));
+        assert!(source.contains("return intrinsic.bind(receiver)"));
+        assert!(!source.contains("componentContext:"));
+        assert!(!source.contains("class ComponentAsyncState"));
     }
 
     #[test]
@@ -2705,6 +2763,9 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 if let Intrinsic::Resource(resource) = intrinsic {
                     resource.require_runtime_dependencies(args);
                 }
+                if let Intrinsic::Component(component) = intrinsic {
+                    component.require_runtime_dependencies(args);
+                }
                 intrinsic.require_core_runtime_dependencies(args);
                 if intrinsic.conditional_suspending_wasm().is_some() {
                     source.push_str(&intrinsic.register_conditional_suspending_js(args));
@@ -2754,6 +2815,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             resource_tasks = format!("resourceTasks: {{ {resource_tasks} }},");
         }
         let core_options = core::runtime_options(args);
+        let component_options = ComponentIntrinsic::runtime_options(args);
         uwriteln!(
             output,
             r#"
@@ -2772,6 +2834,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     platform: {{ WebAssembly }},
                     {resource_tasks}
                     {core_options}
+                    {component_options}
                 }});
                 if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
                     throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
@@ -2968,6 +3031,11 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::Component(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
+            },
             Self::WebIdl(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),

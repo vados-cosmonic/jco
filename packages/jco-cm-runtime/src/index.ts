@@ -1,5 +1,22 @@
 export { runtime } from './runtime.js';
 export type {
+    AdmissionTicket,
+    ComponentAsyncState,
+    ComponentAsyncStateConstructor,
+    ComponentContext,
+    ComponentDeadlockDetail,
+    ComponentIntrinsics,
+    ComponentStoreAsyncState,
+    ComponentTask,
+    ComponentTickResult,
+    ComponentTrapMessages,
+    ComponentWaitable,
+    ComponentWaitableSet,
+    SuspendedTask,
+    SuspendTaskOptions,
+    WaitableEvent,
+} from './intrinsics/component-types.js';
+export type {
     BufferElementContext,
     BufferElementMetadata,
     BufferManager,

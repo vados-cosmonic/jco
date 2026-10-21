@@ -80,18 +80,23 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
 }
 
 test.concurrent.each([
-    { mutation: 'core.RepTable = {};', error: 'core.RepTable must be a function' },
+    {
+        mutation: 'core.ComponentError = {};',
+        error: 'core.ComponentError must be a function',
+        fixturePath: fileURLToPath(new URL('../fixtures/components/runtime/variants.component.wasm', import.meta.url)),
+    },
     { mutation: 'core.symbolDispose = "dispose";', error: 'core.symbolDispose must be a symbol' },
     { mutation: 'core.withCurrentTaskMeta = undefined;', error: 'core.withCurrentTaskMeta must be a function' },
-])('rejects invalid core providers: $error', async ({ mutation, error }) => {
+])('rejects invalid core providers: $error', async ({ mutation, error, fixturePath }) => {
     const dir = await getTmpDir();
     try {
         await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
         await writeFile(join(dir, 'provider.js'), providerSource(mutation));
-        const { files } = await transpile(fixture, {
+        const { files } = await transpile(fixturePath ?? fixture, {
             name: 'core',
             instantiation: 'sync',
             cmRuntimeEsModule: './provider.js',
+            noComponentErrorWrapping: false,
         });
         await writeFiles(files, { baseDir: dir });
         const bindings = await import(pathToFileURL(join(dir, 'core.js')).href);
