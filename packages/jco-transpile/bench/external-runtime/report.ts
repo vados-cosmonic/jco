@@ -8,8 +8,8 @@ const expectedReports = bundlers
     ])
     .toSorted();
 
-export const gate = process.env.JCO_RUNTIME_METRICS_GATE ?? 'baseline';
-export const recording = process.env.JCO_RUNTIME_METRICS_RECORD === '1';
+export const gate = process.env.JCO_EXTERNAL_RUNTIME_BENCH_GATE ?? 'baseline';
+export const recording = process.env.JCO_EXTERNAL_RUNTIME_BENCH_RECORD === '1';
 if (!['baseline', 'parity'].includes(gate)) {
     throw new Error(`Unknown metrics gate: ${gate}`);
 }
@@ -25,7 +25,7 @@ export const bundlerVersions = Object.fromEntries(
         ]),
     ),
 );
-export const outputDir = resolve(process.env.JCO_RUNTIME_METRICS_OUTPUT ?? 'test/output/runtime-metrics');
+export const outputDir = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT ?? 'bench/output/external-runtime');
 export interface Values {
     inline: Record<string, number>;
     external: Record<string, number>;

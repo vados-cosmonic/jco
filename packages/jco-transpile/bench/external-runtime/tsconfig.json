@@ -1,6 +1,6 @@
 {
     "extends": "../../tsconfig.json",
-    "include": ["./*.ts", "./*.mjs", "../vitest.runtime-metrics.ts"],
+    "include": ["./*.ts", "./*.mjs"],
     "compilerOptions": {
         "target": "es2022",
         "rootDir": "../..",

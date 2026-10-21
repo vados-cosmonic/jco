@@ -6,7 +6,7 @@ import { bundlers, scenarios } from './cases.js';
 import { buildPair, optimize, readBundle } from './build.js';
 import { measure } from './measure.js';
 import { outputDir, reportAndGate } from './report.js';
-import { defaultRuntimeUrl } from '../transpilation.js';
+import { defaultRuntimeUrl } from '../../test/transpilation.js';
 
 for (const bundler of bundlers) {
     test.each(scenarios)(`${bundler}: bundled size of $id`, async ({ id, components }) => {

@@ -37,19 +37,19 @@ separate for the two modes.
 
 ## Comparing bundled runtimes
 
-The dedicated `runtime-metrics` suite compares inline and external runtime output
+The dedicated `bench/external-runtime` suite compares inline and external runtime output
 in the same run, using Rolldown and Rollup. It includes the complete runtime in
 bundle sizes, checks core Wasm payloads, validates bundled behavior, and measures
 parse, evaluation, initialization and call costs in isolated processes.
 
 ```sh
 pnpm --filter @bytecodealliance/jco-cm-runtime build
-pnpm --filter @bytecodealliance/jco-transpile test:runtime-metrics
+pnpm --filter @bytecodealliance/jco-transpile bench:external-runtime
 ```
 
 Run this command on an otherwise idle machine. It runs serially and is excluded
 from the ordinary functional suites. CI runs it once on Linux with Node 24 and
 uploads the measurements and bundled JavaScript. See
-[runtime-metrics/README.md](runtime-metrics/README.md) for coverage, budgets,
+[bench/external-runtime/README.md](../bench/external-runtime/README.md) for coverage, budgets,
 limitations, baseline updates and the stricter parity gate. A passing regression
 gate does **not** imply that external and inline output have reached parity.

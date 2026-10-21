@@ -12,7 +12,7 @@ if (record && args.length !== 1) {
 if (record && process.env.CI) {
     throw new Error('Baseline recording is disabled in CI');
 }
-const output = resolve(process.env.JCO_RUNTIME_METRICS_OUTPUT ?? 'test/output/runtime-metrics');
+const output = resolve(process.env.JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT ?? 'bench/output/external-runtime');
 await mkdir(output, { recursive: true });
 // Only remove this suite's reports, preserving unrelated output.
 for (const name of await readdir(output)) {
@@ -26,16 +26,16 @@ const child = spawn(
         fileURLToPath(new URL('./vitest.mjs', import.meta.resolve('vitest/package.json'))),
         'run',
         '-c',
-        'test/vitest.runtime-metrics.ts',
+        'bench/external-runtime/vitest.config.ts',
         ...args.filter((arg) => !['--record', '--parity'].includes(arg)),
     ],
     {
         stdio: 'inherit',
         env: {
             ...process.env,
-            JCO_RUNTIME_METRICS_GATE: parity ? 'parity' : 'baseline',
-            JCO_RUNTIME_METRICS_RECORD: record ? '1' : '0',
-            JCO_RUNTIME_METRICS_OUTPUT: output,
+            JCO_EXTERNAL_RUNTIME_BENCH_GATE: parity ? 'parity' : 'baseline',
+            JCO_EXTERNAL_RUNTIME_BENCH_RECORD: record ? '1' : '0',
+            JCO_EXTERNAL_RUNTIME_BENCH_OUTPUT: output,
         },
     },
 );
@@ -71,7 +71,7 @@ if (record && code === 0 && !completeSuite) {
 }
 if (record && code === 0) {
     await writeFile(
-        'test/runtime-metrics/baseline.json',
+        'bench/external-runtime/baseline.json',
         JSON.stringify(
             {
                 schema: 1,

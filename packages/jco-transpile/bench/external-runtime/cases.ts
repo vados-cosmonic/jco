@@ -59,8 +59,8 @@ export function componentPath(id: ComponentId) {
     return fileURLToPath(
         new URL(
             path.startsWith('local/')
-                ? `../fixtures/generated/rust-test-components/${path.slice(6)}`
-                : `../fixtures/components/${path}`,
+                ? `../../test/fixtures/generated/rust-test-components/${path.slice(6)}`
+                : `../../test/fixtures/components/${path}`,
             import.meta.url,
         ),
     );

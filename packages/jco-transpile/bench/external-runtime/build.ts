@@ -9,7 +9,7 @@ import { rolldown } from 'rolldown';
 import { rollup } from 'rollup';
 import { minify } from 'oxc-minify';
 import { componentPath, type Bundler, type ComponentId } from './cases.js';
-import { defaultRuntimeUrl, transpile, writeFiles } from '../transpilation.js';
+import { defaultRuntimeUrl, transpile, writeFiles } from '../../test/transpilation.js';
 
 const runtimeDirectory = dirname(fileURLToPath(defaultRuntimeUrl));
 const runtimePackage = JSON.parse(await readFile(new URL('../package.json', defaultRuntimeUrl), 'utf8'));
@@ -155,7 +155,7 @@ export function create${i}(load, imports) { return instantiate${i}(name => load(
     };
 }
 export async function buildPair(parts: readonly ComponentId[], bundler: Bundler) {
-    const dir = await mkdtemp(join(tmpdir(), 'jco-runtime-metrics-'));
+    const dir = await mkdtemp(join(tmpdir(), 'jco-external-runtime-bench-'));
     try {
         const inline = await buildArtifact(join(dir, 'inline'), 'inline', parts, bundler);
         const external = await buildArtifact(join(dir, 'external'), 'external', parts, bundler);
