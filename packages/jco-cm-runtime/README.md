@@ -23,6 +23,7 @@ string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
 from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
+Error-context storage and operations use `intrinsics/error-context`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -48,7 +49,7 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(126/274 logical intrinsic variants, including all 16 component and eight waitable variants);
+(137/274 logical intrinsic variants, including all 16 component, eight waitable and eleven error-context variants);
 other families remain inline during migration.
 
 ```js
@@ -331,3 +332,32 @@ those calls. Required customization uses the explicit selected capabilities.
 Custom providers must publish the waitable subpath and replace the component
 constructor's earlier `createWaitable` callback with `Waitable`. Importing the
 subpath allocates no store state and reads no optional platform facilities.
+
+## Error-context contract
+
+`intrinsics/error-context` satisfies `ErrorContextModule`. Its three initializers
+return a per-store global-table class, the actual table-registration record, and
+the actual nested local-table Map. The class receives only the selected
+representation-table constructor. Its mutable static `data` starts at `null`;
+`get()` creates storage on first use and observes later replacement of that
+static slot. No component state or task capability is needed for global
+reservation and reference-count adjustment, which receive only the live getter.
+
+Local-table lookup receives its Map and selected constructor. Handle creation
+and debug-message lookup receive the global getter and actual component lookup.
+New/drop also receive the local-table context; transfer additionally receives
+the actual registration record's component-index view. String readers/writers,
+component/table locations and handles remain per-call operands. Generated table
+initialization mutates the same owners consumed by these operations.
+
+New, debug and drop trampolines keep their bound null receiver. A direct transfer
+callback binds its context with an undefined receiver using `void 0`, which
+cannot be shadowed by a component binding; inline output retains the
+original function reference. Transfers retain source entries for later generated
+cleanup while updating local/global reference counts. Default operations call
+their own static dependencies, so overriding a sibling export does not intercept
+their internal calls. Custom providers must publish this new subpath.
+
+The public contract is structural and self-contained. Importing this module
+creates no class, tables, maps or optional platform capabilities. State and class
+initializers are selected only when their dependency graph needs them.

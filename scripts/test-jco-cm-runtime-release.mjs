@@ -86,3 +86,18 @@ assert.equal(waitable.getPendingEvent(), null);
 waitable.drop();
 assert.equal(set.numWaitables(), 0);
 assert.notEqual(Waitable, initializeWaitableClass());
+
+const {
+    initializeGlobalErrorContextTableClass,
+    initializeLocalErrorContextTables,
+    initializeErrorContextTableRegistrations,
+    errCtxReserveGlobalRep,
+    errCtxGlobalRefCountAdd,
+} = await import('@bytecodealliance/jco-cm-runtime/intrinsics/error-context');
+const GlobalTable = initializeGlobalErrorContextTableClass(RepTable);
+assert.equal(GlobalTable.data, null);
+assert.equal(initializeLocalErrorContextTables().size, 0);
+assert.deepEqual(initializeErrorContextTableRegistrations(), {});
+const reserved = errCtxReserveGlobalRep(GlobalTable, 'release', 0);
+assert.equal(errCtxGlobalRefCountAdd(GlobalTable, reserved.globalRep), 1);
+assert.equal(GlobalTable.get().get(reserved.globalRep).debugMessage, 'release');

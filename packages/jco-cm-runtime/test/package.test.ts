@@ -61,6 +61,7 @@ test('packed exports, standalone declarations, and independent provider conforma
                 'CoreModule',
                 'ComponentModule',
                 'WaitableModule',
+                'ErrorContextModule',
             ].map((name) => {
                 const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                 expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -75,6 +76,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/component',
             './intrinsics/conversion',
             './intrinsics/core',
+            './intrinsics/error-context',
             './intrinsics/js-helper',
             './intrinsics/resource',
             './intrinsics/string',
@@ -132,12 +134,13 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
             import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
             import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
+            import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
-            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable };
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext };
             const expectedExports = ${JSON.stringify(contractExports)};
             const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max']);
             for (const [name, exports] of Object.entries(expectedExports)) {
@@ -187,6 +190,20 @@ test('packed exports, standalone declarations, and independent provider conforma
             if (!(w instanceof Waitable) || !(state.handles.get(setRep) instanceof WaitableSet) || !w.isInSet()) throw new Error('waitable constructor consumer failed');
             w.drop();
             waitables.removeWaitableSet({ RuntimeError: Error }, { state, waitableSetRep: setRep });
+            const errors: RuntimeModuleContracts['intrinsics/error-context'] = errorContext;
+            const GlobalTable = errors.initializeGlobalErrorContextTableClass(Rep);
+            const localTables = errors.initializeLocalErrorContextTables();
+            const registrations = errors.initializeErrorContextTableRegistrations();
+            if (GlobalTable.data !== null || localTables.size || Object.keys(registrations).length) throw new Error('error-context eager storage');
+            const errorLocal = { localTables, RepTable: Rep };
+            const errorHandles = { globalTable: GlobalTable, lookup: { asyncState, ComponentAsyncState: State } };
+            const errorContextView = { ...errorHandles, local: errorLocal };
+            errors.errCtxGetLocalTable(errorLocal, 0, 0, { upsert: true });
+            const errorHandle = errors.errCtxNew(errorContextView, { componentIdx: 0, localTableIdx: 0, readStrFn: () => 'packed error' }, 0, 12);
+            let errorMessage = '';
+            errors.errCtxDebugMessage(errorHandles, { componentIdx: 0, writeStrFn: message => { errorMessage = message; } }, errorHandle, 0);
+            errors.errCtxDrop(errorContextView, { componentIdx: 0, localTableIdx: 0 }, errorHandle);
+            if (errorMessage !== 'packed error' || GlobalTable.get().size() !== 0) throw new Error('error-context consumer failed');
             instanceFlags.set(0, { value: 1 });
             custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
             const receiver = { answer: 42 };
@@ -237,6 +254,10 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/core.js', '@bytecodealliance/jco-cm-runtime/intrinsics/core')
             .replaceAll('../src/intrinsics/component.js', '@bytecodealliance/jco-cm-runtime/intrinsics/component')
             .replaceAll('../src/intrinsics/waitable.js', '@bytecodealliance/jco-cm-runtime/intrinsics/waitable')
+            .replaceAll(
+                '../src/intrinsics/error-context.js',
+                '@bytecodealliance/jco-cm-runtime/intrinsics/error-context',
+            )
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
@@ -287,6 +308,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { clampGuest, typeCheckValidI32, initializeTaskRegisters } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
             const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
             const { initializeWaitableClass, initializeWaitableSetClass } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
+            const { initializeLocalErrorContextTables, initializeErrorContextTableRegistrations } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/error-context');
+            if (initializeLocalErrorContextTables().size || Object.keys(initializeErrorContextTableRegistrations()).length) throw new Error('error-context capability leak');
             const Waitable = initializeWaitableClass(), WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
             const w = new Waitable({}), set = new WaitableSet(0);
             w.join(set); w.drop();
