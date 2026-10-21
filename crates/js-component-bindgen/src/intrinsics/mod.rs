@@ -3028,6 +3028,15 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::JsHelper(intrinsic) if external_runtime => match intrinsic.runtime_import() {
+                Some(import) => IntrinsicBinding::Runtime {
+                    local_name: self.name(),
+                    import,
+                },
+                None => IntrinsicBinding::Inline {
+                    local_name: self.name(),
+                },
+            },
             Self::Conversion(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: intrinsic.runtime_import(),

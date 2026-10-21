@@ -17,6 +17,7 @@ pub(crate) enum RuntimeContext {
     StrictNumeric,
     Bitcast32,
     Bitcast64,
+    DataViewCache,
 }
 
 impl RuntimeContext {
@@ -28,6 +29,8 @@ impl RuntimeContext {
             "_jcoBitcast64Context",
             "_jcoInitializeBitcast32",
             "_jcoInitializeBitcast64",
+            "_jcoDataViewCacheContext",
+            "_jcoInitializeDataViewCache",
         ]
     }
 
@@ -37,18 +40,32 @@ impl RuntimeContext {
             Self::StrictNumeric => "_jcoStrictNumericContext",
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
+            Self::DataViewCache => "_jcoDataViewCacheContext",
         }
     }
 
     /// Initializers return narrow state, never operation tables.
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
-        let (export, local_name) = match self {
-            Self::Bitcast32 => ("initializeBitcast32", "_jcoInitializeBitcast32"),
-            Self::Bitcast64 => ("initializeBitcast64", "_jcoInitializeBitcast64"),
+        let (suffix, export, local_name) = match self {
+            Self::Bitcast32 => (
+                "intrinsics/conversion",
+                "initializeBitcast32",
+                "_jcoInitializeBitcast32",
+            ),
+            Self::Bitcast64 => (
+                "intrinsics/conversion",
+                "initializeBitcast64",
+                "_jcoInitializeBitcast64",
+            ),
+            Self::DataViewCache => (
+                "intrinsics/js-helper",
+                "initializeDataViewCache",
+                "_jcoInitializeDataViewCache",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
-            suffix: "intrinsics/conversion",
+            suffix,
             export,
             local_name,
         })
@@ -64,7 +81,7 @@ impl RuntimeContext {
             Self::StrictNumeric => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::Bitcast32 | Self::Bitcast64 => {
+            Self::Bitcast32 | Self::Bitcast64 | Self::DataViewCache => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
