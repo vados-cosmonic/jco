@@ -10,9 +10,7 @@ use crate::source::Source;
 use crate::{TranspileOpts, uwrite, uwriteln};
 
 pub(crate) mod runtime;
-use runtime::{
-    CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, TABLE_GET_CONTEXT, VERSION_LOCAL,
-};
+use runtime::{CM_RUNTIME_API_VERSION, RuntimeContext, RuntimeImport, VERSION_LOCAL};
 
 pub(crate) mod conversion;
 use conversion::ConversionIntrinsic;
@@ -2912,16 +2910,17 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             } = intrinsic.binding(true)
                 && contexts.insert(context.local_name())
             {
-                context.render(&mut output);
+                context.render(&mut output, args.transpile_opts.strict);
             }
         }
     }
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F32ToI32))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I32ToF32))
+    let inline_conversion = |intrinsic| {
+        args.intrinsics.contains(&Intrinsic::Conversion(intrinsic))
+            && !Intrinsic::Conversion(intrinsic)
+                .is_runtime_provided(args.external_runtime_enabled())
+    };
+    if inline_conversion(ConversionIntrinsic::F32ToI32)
+        || inline_conversion(ConversionIntrinsic::I32ToF32)
     {
         output.push_str(
             "
@@ -2931,12 +2930,8 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         );
     }
 
-    if args
-        .intrinsics
-        .contains(&Intrinsic::Conversion(ConversionIntrinsic::F64ToI64))
-        || args
-            .intrinsics
-            .contains(&Intrinsic::Conversion(ConversionIntrinsic::I64ToF64))
+    if inline_conversion(ConversionIntrinsic::F64ToI64)
+        || inline_conversion(ConversionIntrinsic::I64ToF64)
     {
         output.push_str(
             "
@@ -3033,6 +3028,10 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::Conversion(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: intrinsic.runtime_import(),
+            },
             Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
                 IntrinsicBinding::Runtime {
                     local_name: self.name(),
@@ -3064,6 +3063,7 @@ impl Intrinsic {
         JsHelperIntrinsic::get_global_names()
             .into_iter()
             .chain(ConversionIntrinsic::get_global_names())
+            .chain(RuntimeContext::get_global_names())
             .chain(WebIdlIntrinsic::get_global_names())
             .chain(StringIntrinsic::get_global_names())
             .chain(ResourceIntrinsic::get_global_names())
@@ -3093,7 +3093,6 @@ impl Intrinsic {
                 "instantiateCore",
                 "isLE",
                 VERSION_LOCAL,
-                TABLE_GET_CONTEXT,
                 "scopeId",
                 "symbolCabiDispose",
                 "symbolCabiLower",
