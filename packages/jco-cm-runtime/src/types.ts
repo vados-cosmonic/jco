@@ -5,6 +5,7 @@ import type { WebIdlIntrinsics } from './intrinsics/webidl.js';
 import type { CoreContext, CoreIntrinsics } from './intrinsics/core-types.js';
 import type { ComponentContext, ComponentIntrinsics, ComponentTrapMessages } from './intrinsics/component-types.js';
 import type { WaitableContext, WaitableIntrinsics } from './intrinsics/waitable-types.js';
+import type { ErrorContextIntrinsics } from './intrinsics/error-context-types.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -130,6 +131,7 @@ export interface ResourceTaskContext {
 }
 
 export interface RuntimeIntrinsics {
+    readonly errorContext: ErrorContextIntrinsics;
     readonly waitable: WaitableIntrinsics;
     readonly component: ComponentIntrinsics;
     readonly core: CoreIntrinsics;

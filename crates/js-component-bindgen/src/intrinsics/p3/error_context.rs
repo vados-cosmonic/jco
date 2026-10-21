@@ -1,7 +1,7 @@
 //! Intrinsics that represent helpers that implement error contexts
 
 use crate::intrinsics::component::ComponentIntrinsic;
-use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::source::Source;
 
 /// This enum contains intrinsics that implement error contexts
@@ -173,6 +173,34 @@ pub enum ErrCtxIntrinsic {
 }
 
 impl ErrCtxIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::ComponentGlobalTable => "errorContext.GlobalErrorContextTable",
+            Self::GlobalErrCtxTableMap => "errorContext.tables",
+            Self::ComponentLocalTable => "errorContext.localTables",
+            Self::ErrorContextNew => "errorContext.errCtxNew",
+            Self::ErrorContextDrop => "errorContext.errCtxDrop",
+            Self::ErrorContextTransfer => "errorContext.errCtxTransfer",
+            Self::ErrorContextDebugMessage => "errorContext.errCtxDebugMessage",
+            Self::GetLocalTable => "errorContext.errCtxGetLocalTable",
+            Self::GlobalRefCountAdd => "errorContext.errCtxGlobalRefCountAdd",
+            Self::CreateLocalHandle => "errorContext.errCtxCreateLocalHandle",
+            Self::ReserveGlobalRep => "errorContext.errCtxReserveGlobalRep",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        match self {
+            Self::ComponentGlobalTable => RuntimeIntrinsicKind::Value {
+                value_type: "function",
+            },
+            Self::GlobalErrCtxTableMap | Self::ComponentLocalTable => RuntimeIntrinsicKind::Value {
+                value_type: "object",
+            },
+            _ => RuntimeIntrinsicKind::Method,
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [

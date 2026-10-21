@@ -62,7 +62,8 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.core`, `intrinsics.component`, `intrinsics.resource`, `intrinsics.conversion`,
-`intrinsics.waitable`, `intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
+`intrinsics.waitable`, `intrinsics.errorContext`, `intrinsics.jsHelper`,
+`intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
 continue to be generated inline.
@@ -180,6 +181,32 @@ wait, poll, or drop needs them, after generated task state initializes.
 waitables or sets, joining them, and calling `removeWaitableSet` need no task callbacks.
 The legacy standalone `Waitable.waitForPendingEvent` hook accepts a scheduler
 with `waitUntil`; generated bindings do not use that hook.
+
+### Error contexts
+
+`intrinsics.errorContext` implements all 11 helpers from bindgen's
+`p3/error_context.rs`. `GlobalErrorContextTable` is a raw class whose static
+`get()` lazily creates the store-wide `RepTable`. Its mutable `data` property,
+the table registration object `tables`, and the component-local map `localTables`
+belong to one runtime instance. Generated bindings populate the latter two
+directly; providers delegating default methods must retain their identities.
+
+`errCtxNew` reads a debug message through its supplied string callback and
+allocates a global representation and local handle. `errCtxDebugMessage` writes
+that message through the generated string writer. `errCtxDrop` updates local
+and global reference counts and reclaims entries when their references reach
+zero. Local error-context tables contain numeric handles into the component's
+shared handle table, so error contexts use the same index allocator as resources
+and waitables.
+
+`errCtxTransfer` uses `tables` to find the source and destination components,
+creates a destination handle, and retains the source entries for generated
+cleanup, matching the inline reference-count convention. `errCtxGetLocalTable`
+validates existing tables unless `{ upsert: true }` is supplied. The remaining
+helpers expose global reservation, local handle creation, and reference-count
+adjustment. These operations need no task bridge. `ErrorContextIntrinsics`,
+`GlobalErrorContext`, `LocalErrorContext`, and the string callback context types
+describe their contracts.
 
 ### Conversions
 

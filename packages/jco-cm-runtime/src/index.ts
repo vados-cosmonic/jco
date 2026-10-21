@@ -1,5 +1,16 @@
 export { runtime } from './runtime.js';
 export type {
+    ErrorContextDebugContext,
+    ErrorContextIntrinsics,
+    ErrorContextLocation,
+    ErrorContextNewContext,
+    ErrorContextTableRegistration,
+    GlobalErrorContext,
+    GlobalErrorContextTableConstructor,
+    LocalErrorContext,
+    LocalErrorContextTables,
+} from './intrinsics/error-context-types.js';
+export type {
     Waitable,
     WaitableConstructor,
     WaitableContext,

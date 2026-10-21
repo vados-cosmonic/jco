@@ -7,6 +7,7 @@ import { createCoreIntrinsics } from './intrinsics/core.js';
 import { createComponentIntrinsics } from './intrinsics/component.js';
 import { createWaitableClasses } from './intrinsics/waitable-classes.js';
 import { createWaitableIntrinsics } from './intrinsics/waitable.js';
+import { createErrorContextIntrinsics } from './intrinsics/error-context.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -40,6 +41,7 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
         intrinsics: {
             core,
             component,
+            errorContext: createErrorContextIntrinsics(core, component),
             waitable: createWaitableIntrinsics(options, core, component, waitableClasses),
             webidl: createWebIdlIntrinsics(),
             string: createStringIntrinsics(),

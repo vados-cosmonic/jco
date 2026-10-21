@@ -2188,6 +2188,69 @@ mod tests {
     }
 
     #[test]
+    fn error_context_runtime_preserves_shared_tables_without_inline_dependencies() {
+        use ErrCtxIntrinsic::*;
+        let variants = [
+            ComponentGlobalTable,
+            GlobalErrCtxTableMap,
+            ComponentLocalTable,
+            ErrorContextNew,
+            ErrorContextDrop,
+            ErrorContextTransfer,
+            ErrorContextDebugMessage,
+            GetLocalTable,
+            GlobalRefCountAdd,
+            CreateLocalHandle,
+            ReserveGlobalRep,
+        ];
+        let mut intrinsics = BTreeSet::from_iter(variants.map(Intrinsic::ErrCtx));
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        assert_eq!(intrinsics.len(), variants.len());
+        for variant in variants {
+            let intrinsic = Intrinsic::ErrCtx(variant);
+            let IntrinsicBinding::Runtime { path, kind, .. } = intrinsic.binding(true) else {
+                panic!("error-context helper must be external");
+            };
+            assert_eq!(path, variant.runtime_path());
+            assert!(source.contains(&format!("{path} must be a ")));
+            match variant {
+                ComponentGlobalTable => assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "function"
+                    }
+                )),
+                GlobalErrCtxTableMap | ComponentLocalTable => assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "object"
+                    }
+                )),
+                _ => assert!(matches!(kind, RuntimeIntrinsicKind::Method)),
+            }
+            assert!(matches!(
+                intrinsic.binding(false),
+                IntrinsicBinding::Inline { .. }
+            ));
+            assert!(!source.contains(&format!("function {}(", variant.name())));
+        }
+        assert!(!source.contains("class GlobalErrorContextTable"));
+        assert!(!source.contains("const ERR_CTX_TABLES = {}"));
+        assert!(!source.contains("let errCtxLocal = new Map()"));
+        assert!(!source.contains("class RepTable"));
+        assert!(!source.contains("Context:"));
+    }
+
+    #[test]
     fn waitable_runtime_preserves_constructors_and_defers_inline_bridges() {
         use WaitableIntrinsic::*;
         let variants = [
@@ -3120,6 +3183,11 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::ErrCtx(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
+            },
             Self::Waitable(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),
