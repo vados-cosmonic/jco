@@ -55,6 +55,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         expect(Object.keys(manifest.exports).sort()).toEqual([
             '.',
             './intrinsics/conversion',
+            './intrinsics/js-helper',
             './intrinsics/resource',
             './runtime',
         ]);
@@ -91,10 +92,17 @@ test('packed exports, standalone declarations, and independent provider conforma
             import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
             import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+            import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
             const defaultModule: ResourceModule = resource;
             const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
+            const helpers: RuntimeModuleContracts['intrinsics/js-helper'] = jsHelper;
+            const cache = helpers.initializeDataViewCache();
+            const memory = { buffer: new ArrayBuffer(8) };
+            const view = helpers.dataView(cache, memory);
+            view.setUint32(0, 42, true);
+            if (helpers.dataView(cache, memory) !== view || view.getUint32(0, true) !== 42 || helpers.emptyFunc(1) !== undefined) throw new Error('cache consumer failed');
             const customUint32: ConversionModule['toUint32'] = custom.toUint32;
             if (customUint32({ strict: false }, -1) !== 0xffffffff || defaultConversions.toUint32({ strict: true }, 42) !== 42) throw new Error('numeric consumer failed');
             const scratch32 = defaultConversions.initializeBitcast32();
@@ -109,6 +117,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         const negatives = (await readFile(new URL('./contracts.ts', import.meta.url), 'utf8'))
             .replaceAll('../src/intrinsics/resource.js', '@bytecodealliance/jco-cm-runtime/intrinsics/resource')
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
+            .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -150,6 +159,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             await import('@bytecodealliance/jco-cm-runtime/runtime');
             const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
             const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
+            const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
+            if (emptyFunc(42) !== undefined) throw new Error('empty function capability leak');
             if (toUint32({ strict: false }, '42') !== 42 || toString(42) !== '42') throw new Error('scalar capability leak');
             const entry = tableGet({ RuntimeError: Error }, [1 << 30, 0, 7, 42], 1);
             if (entry.rep !== 42) throw new Error('bad entry');

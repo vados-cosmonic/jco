@@ -45,3 +45,17 @@ bitcastContext.i32[0] = 0x3f800000;
 // @ts-expect-error storage identities remain stable for an instantiation
 bitcastContext.i32 = [0];
 void broadNumericContext;
+
+import * as jsHelper from '../src/intrinsics/js-helper.js';
+import type { JsHelperModule, DataViewCacheContext } from '../src/runtime.js';
+const jsHelperModule: JsHelperModule = jsHelper;
+jsHelperModule.emptyFunc(1, undefined);
+const dataViewContext: DataViewCacheContext = jsHelperModule.initializeDataViewCache();
+dataViewContext.view = new DataView(new ArrayBuffer(8));
+jsHelperModule.dataView(dataViewContext, { buffer: dataViewContext.view.buffer });
+// @ts-expect-error memory is a call operand, not the cache context
+jsHelperModule.dataView({ buffer: new ArrayBuffer(8) });
+// @ts-expect-error cache requires its real mutable view owner
+jsHelperModule.dataView({ privateView: true }, { buffer: new ArrayBuffer(8) });
+// @ts-expect-error memory must expose an ArrayBuffer-like buffer
+jsHelperModule.dataView(dataViewContext, { buffer: 'not a buffer' });

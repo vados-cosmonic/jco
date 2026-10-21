@@ -18,7 +18,8 @@ bindings are loaded or bundled.
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
 `tableGet` from `intrinsics/resource` and selected conversions from
-`intrinsics/conversion`. Only implemented subpaths are published.
+`intrinsics/conversion` and JavaScript helpers from `intrinsics/js-helper`.
+Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
 | Base                               | Resource import                                        | Version import                             |
@@ -41,7 +42,8 @@ runtime directory tree with JavaScript MIME types.
 
 Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations (20/274 logical intrinsic variants); other families remain inline during migration.
+operations and both JavaScript helpers (22/274 logical intrinsic variants);
+other families remain inline during migration.
 
 ```js
 import { tableGet } from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
@@ -74,7 +76,8 @@ const conformance: ResourceModule = resource;
 ```
 
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
-and the implemented `./intrinsics/resource` and `./intrinsics/conversion` subpaths
+and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
+`./intrinsics/js-helper` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -146,3 +149,18 @@ supply matching named operations with the documented structural capabilities.
 A selected override of `requireValidNumericPrimitive` does not intercept default
 `toUint32`'s own static dependency; interception must be explicit in an overriding
 `toUint32` implementation.
+
+## JavaScript helper contract
+
+`intrinsics/js-helper` satisfies `JsHelperModule`. `emptyFunc(...args)` is a
+context-free no-op. `initializeDataViewCache()` creates a `DataViewCacheContext`
+containing only a mutable `view`. `dataView(context, memory)` returns that view
+when its buffer matches `memory.buffer`, or replaces it with a new view. Generated
+bindings create this cache only when a memory load or store selects `dataView`,
+once per instantiation. Memory growth and switches between memories refresh the
+same live cache owner; independent instantiations have independent caches.
+
+Importing either function allocates no cache. Providers implementing earlier v2
+output must add this named subpath when adopting this compiler. A provider may
+wrap `dataView` while re-exporting the other defaults; each default uses its own
+static implementation dependencies.
