@@ -34,6 +34,7 @@ impl JsHelperIntrinsic {
         Some(RuntimeImport {
             suffix: "intrinsics/js-helper",
             export: self.name(),
+            kind: super::runtime::RuntimeImportKind::Call,
             context: match self {
                 Self::MaybeSyncGeneratorFn | Self::ConditionalSuspendingHostImportFn => {
                     return None;

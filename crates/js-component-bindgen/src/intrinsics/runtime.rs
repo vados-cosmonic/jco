@@ -18,6 +18,10 @@ pub(crate) enum RuntimeContext {
     Bitcast32,
     Bitcast64,
     DataViewCache,
+    Utf8Decoder,
+    Utf16Decoder,
+    Utf8Encoder,
+    Utf16Encoding,
 }
 
 impl RuntimeContext {
@@ -31,6 +35,11 @@ impl RuntimeContext {
             "_jcoInitializeBitcast64",
             "_jcoDataViewCacheContext",
             "_jcoInitializeDataViewCache",
+            "_jcoInitializeUtf8Decoder",
+            "_jcoInitializeUtf16Decoder",
+            "_jcoInitializeUtf8Encoder",
+            "_jcoInitializeUtf16Encoding",
+            "_jcoUtf16EncodingContext",
         ]
     }
 
@@ -41,6 +50,10 @@ impl RuntimeContext {
             Self::Bitcast32 => "_jcoBitcast32Context",
             Self::Bitcast64 => "_jcoBitcast64Context",
             Self::DataViewCache => "_jcoDataViewCacheContext",
+            Self::Utf8Decoder => "TEXT_DECODER_UTF8",
+            Self::Utf16Decoder => "utf16Decoder",
+            Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
+            Self::Utf16Encoding => "_jcoUtf16EncodingContext",
         }
     }
 
@@ -62,6 +75,26 @@ impl RuntimeContext {
                 "initializeDataViewCache",
                 "_jcoInitializeDataViewCache",
             ),
+            Self::Utf8Decoder => (
+                "intrinsics/string",
+                "initializeUtf8Decoder",
+                "_jcoInitializeUtf8Decoder",
+            ),
+            Self::Utf16Decoder => (
+                "intrinsics/string",
+                "initializeUtf16Decoder",
+                "_jcoInitializeUtf16Decoder",
+            ),
+            Self::Utf8Encoder => (
+                "intrinsics/string",
+                "initializeUtf8Encoder",
+                "_jcoInitializeUtf8Encoder",
+            ),
+            Self::Utf16Encoding => (
+                "intrinsics/string",
+                "initializeUtf16Encoding",
+                "_jcoInitializeUtf16Encoding",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -81,7 +114,13 @@ impl RuntimeContext {
             Self::StrictNumeric => {
                 uwriteln!(output, "const {local} = {{ strict: {strict} }};")
             }
-            Self::Bitcast32 | Self::Bitcast64 | Self::DataViewCache => {
+            Self::Bitcast32
+            | Self::Bitcast64
+            | Self::DataViewCache
+            | Self::Utf8Decoder
+            | Self::Utf16Decoder
+            | Self::Utf8Encoder
+            | Self::Utf16Encoding => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
@@ -96,13 +135,20 @@ pub(crate) struct RuntimeInitializer {
     pub(crate) local_name: &'static str,
 }
 
-/// A named call export. Context requirements are separate from the public name.
-/// Add value/constructor/state descriptors when such exports are implemented.
+#[derive(Debug, Copy, Clone, Eq, PartialEq)]
+pub(crate) enum RuntimeImportKind {
+    Call,
+    /// The binding refers to the selected context initializer's returned value.
+    InitializedValue,
+}
+
+/// A named operation or initialized value, with separately selected capabilities.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) struct RuntimeImport {
     pub(crate) suffix: &'static str,
     pub(crate) export: &'static str,
     pub(crate) context: Option<RuntimeContext>,
+    pub(crate) kind: RuntimeImportKind,
 }
 
 /// Resolve an informal runtime package/directory contract without consulting the filesystem.
@@ -159,10 +205,12 @@ pub(crate) fn render_imports(output: &mut Source, intrinsics: &BTreeSet<Intrinsi
     let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
     for intrinsic in intrinsics {
         if let IntrinsicBinding::Runtime { local_name, import } = intrinsic.binding(true) {
-            modules
-                .entry(import.suffix)
-                .or_default()
-                .insert((import.export, local_name));
+            if import.kind == RuntimeImportKind::Call {
+                modules
+                    .entry(import.suffix)
+                    .or_default()
+                    .insert((import.export, local_name));
+            }
             if let Some(initializer) = import.context.and_then(RuntimeContext::initializer) {
                 modules
                     .entry(initializer.suffix)
