@@ -418,7 +418,10 @@ impl FunctionBindgen<'_> {
 
     fn intrinsic(&mut self, intrinsic: Intrinsic) -> String {
         self.intrinsics.insert(intrinsic);
-        intrinsic.name().to_string()
+        intrinsic
+            .binding(self.external_runtime)
+            .reference()
+            .to_string()
     }
 
     fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
@@ -2905,8 +2908,10 @@ impl Bindgen for FunctionBindgen<'_> {
                         let tid = tid.as_u32();
                         let rid = rid.as_u32();
                         let symbol_dispose = self.intrinsic(Intrinsic::SymbolDispose);
-                        let rsc_table_remove = self
-                            .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
+                        let rsc_table_remove = self.intrinsic_call(
+                            Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                            &format!("handleTable{tid}, {handle}"),
+                        );
                         let rsc_flag = self
                             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
                         if !imported {
@@ -2928,12 +2933,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let component_idx = component_idx.as_u32();
                                 let dtor_call = dtor_name.as_ref().map(|dtor| {
                                     if *needs_task_context {
-                                        let call_resource_destructor = self.intrinsic(
-                                            Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall),
-                                        );
-                                        format!(
-                                            "{call_resource_destructor}({{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }});"
-                                        )
+                                        self.intrinsic_call(Intrinsic::Resource(ResourceIntrinsic::ResourceDestructorCall), &format!("{{ componentIdx: {component_idx}, dtor: {dtor}, rep: handleEntry.rep }}")) + ";"
                                     } else {
                                         format!("{dtor}(handleEntry.rep);")
                                     }
@@ -2948,7 +2948,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                             self.src,
                                             "Object.defineProperty({rsc}, {symbol_dispose}, {{ writable: true, value: function () {{
                                         finalizationRegistry{tid}.unregister({rsc});
-                                        const handleEntry = {rsc_table_remove}(handleTable{tid}, {handle});
+                                        const handleEntry = {rsc_table_remove};
                                         {rsc}[{symbol_dispose}] = {empty_func};
                                         {rsc}[{symbol_resource_handle}] = undefined;
                                         {dtor_call}
@@ -2989,7 +2989,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     "else {{
                                         captureTable{rid}.delete({rep});
                                     }}
-                                    {rsc_table_remove}(handleTable{tid}, {handle});"
+                                    {rsc_table_remove};"
                                 );
                             }
                         }
@@ -3143,9 +3143,10 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // resource was constructed externally.
                                 let symbol_resource_rep =
                                     self.intrinsic(Intrinsic::SymbolResourceRep);
-                                let create_own_fn = self.intrinsic(Intrinsic::Resource(
-                                    ResourceIntrinsic::ResourceTableCreateOwn,
-                                ));
+                                let create_own_fn = self.intrinsic_call(
+                                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
+                                    &format!("handleTable{tid}, rep"),
+                                );
 
                                 uwriteln!(
                                     self.src,
@@ -3157,7 +3158,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                       if (!{handle}) {{
                                           const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
                                           captureTable{rid}.set(rep, {op});
-                                          {handle} = {create_own_fn}(handleTable{tid}, rep);
+                                          {handle} = {create_own_fn};
                                       }}
                                     "#
                                 );
@@ -3176,9 +3177,12 @@ impl Bindgen for FunctionBindgen<'_> {
                                 let symbol_resource_rep =
                                     self.intrinsic(Intrinsic::SymbolResourceRep);
                                 let scope_id = self.intrinsic(Intrinsic::ScopeId);
-                                let create_borrow_fn = self.intrinsic(Intrinsic::Resource(
-                                    ResourceIntrinsic::ResourceTableCreateBorrow,
-                                ));
+                                let create_borrow_fn = self.intrinsic_call(
+                                    Intrinsic::Resource(
+                                        ResourceIntrinsic::ResourceTableCreateBorrow,
+                                    ),
+                                    &format!("handleTable{tid}, rep, {scope_id}"),
+                                );
 
                                 uwriteln!(
                                     self.src,
@@ -3190,7 +3194,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                       if (!{handle}) {{
                                           const rep = {op}[{symbol_resource_rep}] || ++captureCnt{rid};
                                           captureTable{rid}.set(rep, {op});
-                                          {handle} = {create_borrow_fn}(handleTable{tid}, rep, {scope_id});
+                                          {handle} = {create_borrow_fn};
                                       }}
                                     "#
                                 );

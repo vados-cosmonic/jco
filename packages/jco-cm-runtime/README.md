@@ -17,7 +17,7 @@ bindings are loaded or bundled.
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
-`tableGet` from `intrinsics/resource` and selected conversions from
+resource operations and storage initializers from `intrinsics/resource`, selected conversions from
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`.
@@ -43,9 +43,9 @@ map each public subpath to its `.js` file. HTTP servers must serve the whole
 runtime directory tree with JavaScript MIME types.
 
 Bindings check version 2 before use. Missing subpaths or named exports fail
-through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
-operations, both JavaScript helpers, all ten string variants and the WebIDL proxy
-(33/274 logical intrinsic variants);
+through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
+and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
+string variants and the WebIDL proxy (50/274 logical intrinsic variants);
 other families remain inline during migration.
 
 ```js
@@ -59,7 +59,7 @@ const entry = tableGet(context, [1 << 30, 0, 7, 42 | (1 << 30)], 1);
 Generated bindings create one stable `ResourceTableGetContext` after selecting
 their WebAssembly implementation: once per explicit `instantiate` call, or once
 per direct module evaluation. It contains only `RuntimeError`. Tables and handles
-are operands; tables remain shared with inline resource operations in that store.
+are operands; tables remain shared with other operations in that store.
 The function has no receiver dependency. It must use the supplied constructor for
 traps, including when the global WebAssembly implementation is absent or differs.
 No codecs, scratch arrays, scheduler or optional JSPI facilities are initialized
@@ -107,6 +107,24 @@ and returns `{ rep, scope, own }`.
   Clear that bit to obtain `rep`; a freed entry stores zero.
 - A missing slot, zero representation or freed entry traps with
   `unknown handle index <handle>` using `context.RuntimeError`.
+
+`initializeHandleIndexSpaces()` returns the shared allocator map; resource tables,
+waitables and error contexts of a component use the same index space. Table
+creation takes that map directly. Removal receives only `RuntimeError`,
+`indexSpaces` and `scopeTasks`; transfer additionally selects the actual table
+owner. `initializeHandleTables()` and `initializeResourceScopeTasks()` return
+collections, with no operation table. Scope initializers return mutable
+`{ value }` cells; call/current borrow initializers return `{ borrows }` owners.
+Generated code reads and replaces their members directly, so operations observe
+the live values rather than captured snapshots. Every selected owner is created
+once per instantiation; importing the module creates no map or task.
+
+Borrow transfer accepts a lazy current-task lookup while tasks remain inline.
+Destructors receive only lazy `createTask` and `withTask` capabilities. Each
+destructor creates a synchronous task with fresh context slots and restores the
+enclosing task after success or failure. Explicit disposal releases the handle
+before invoking a destructor and becomes a no-op on repeated disposal.
+`tableEnsureBorrowDrop` and `tableFlag` are context-free.
 
 Changes to the encoding or operation contracts require a new runtime API version.
 

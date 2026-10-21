@@ -218,6 +218,20 @@ impl IntrinsicBinding {
         }
     }
 
+    pub(crate) fn reference(self) -> &'static str {
+        match self {
+            Self::Runtime {
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::LiveReference { expression },
+                        ..
+                    },
+                ..
+            } => expression,
+            _ => self.local_name(),
+        }
+    }
+
     /// Render a call, inserting only the context required by this operation.
     pub(crate) fn call(self, operands: &str) -> String {
         let name = self.local_name();
@@ -225,7 +239,10 @@ impl IntrinsicBinding {
             Self::Runtime {
                 import:
                     RuntimeImport {
-                        kind: RuntimeImportKind::InitializedValue,
+                        kind:
+                            RuntimeImportKind::InitializedValue
+                            | RuntimeImportKind::Value
+                            | RuntimeImportKind::LiveReference { .. },
                         ..
                     },
                 ..
@@ -682,11 +699,14 @@ impl Intrinsic {
                 let handle_tables = args.require_intrinsic(Intrinsic::HandleTables);
                 let table_flag = args
                     .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
-                let table_remove = args
-                    .require_intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove));
-                let table_create_own = args.require_intrinsic(Intrinsic::Resource(
-                    ResourceIntrinsic::ResourceTableCreateOwn,
-                ));
+                let table_remove = args.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                    &format!("{handle_tables}[tableIdx], handle"),
+                );
+                let table_create_own = args.intrinsic_call(
+                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
+                    "table, resource.rep",
+                );
                 output.push_str(&format!(
                     r#"
                     class {managed_buffer_class} {{
@@ -790,7 +810,7 @@ impl Intrinsic {
                                         componentIdx: this.#componentIdx,
                                         stringEncoding: this.#elemMeta.stringEncoding,
                                         liftResource: opts.transferResources ? (handle, tableIdx) => {{
-                                            const {{ rep }} = {table_remove}({handle_tables}[tableIdx], handle);
+                                            const {{ rep }} = {table_remove};
                                             return {{ rep }};
                                         }} : undefined,
                                     }};
@@ -847,7 +867,7 @@ impl Intrinsic {
                                                 table._createdReps = new Set();
                                                 {handle_tables}[tableIdx] = table;
                                             }}
-                                            return {table_create_own}(table, resource.rep);
+                                            return {table_create_own};
                                         }} : undefined,
                                     }}
                                     for (const v of values) {{
@@ -2504,7 +2524,7 @@ impl RenderIntrinsicsArgs<'_> {
             .insert(intrinsic);
         intrinsic
             .binding(self.transpile_opts.cm_runtime_es_module.is_some())
-            .local_name()
+            .reference()
     }
 
     fn take_discovered_intrinsics(&self) -> BTreeSet<Intrinsic> {
@@ -2540,6 +2560,8 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             IntrinsicBinding::Inline { .. }
         ) {
             intrinsic.render(&mut source, args);
+        } else {
+            runtime::discover_inline_dependencies(intrinsic, args);
         }
         let discovered = args.take_discovered_intrinsics();
         for dependency in &discovered {
@@ -2565,7 +2587,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 }}
             "#,
         );
-        let mut contexts = BTreeSet::new();
+        let mut contexts = Vec::new();
         for intrinsic in args.intrinsics.iter() {
             if let IntrinsicBinding::Runtime {
                 import:
@@ -2575,10 +2597,12 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     },
                 ..
             } = intrinsic.binding(true)
-                && contexts.insert(context.local_name())
             {
-                context.render(&mut output, args.transpile_opts.strict);
+                context.collect(&mut contexts);
             }
+        }
+        for context in contexts {
+            context.render(&mut output, args.transpile_opts.strict);
         }
     }
     let inline_conversion = |intrinsic| {
@@ -2711,17 +2735,14 @@ impl Intrinsic {
                 local_name: self.name(),
                 import: intrinsic.runtime_import(),
             },
-            Self::Resource(ResourceIntrinsic::ResourceTableGet) if external_runtime => {
-                IntrinsicBinding::Runtime {
-                    local_name: self.name(),
-                    import: RuntimeImport {
-                        suffix: "intrinsics/resource",
-                        export: "tableGet",
-                        context: Some(RuntimeContext::ResourceTableGet),
-                        kind: RuntimeImportKind::Call,
-                    },
-                }
-            }
+            Self::Resource(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::resource_import(*intrinsic),
+            },
+            Self::HandleTables | Self::ScopeId if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::resource_owner_import(*self),
+            },
             _ => IntrinsicBinding::Inline {
                 local_name: self.name(),
             },
