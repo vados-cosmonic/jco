@@ -17,7 +17,8 @@ bindings are loaded or bundled.
 
 `cmRuntimeEsModule` identifies a **package or directory base**. Generated bindings
 statically import `CM_RUNTIME_API_VERSION` from the `runtime` subpath and
-`tableGet` from `intrinsics/resource`. Only implemented subpaths are published.
+`tableGet` from `intrinsics/resource` and selected conversions from
+`intrinsics/conversion`. Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
 | Base                               | Resource import                                        | Version import                             |
@@ -39,8 +40,8 @@ map each public subpath to its `.js` file. HTTP servers must serve the whole
 runtime directory tree with JavaScript MIME types.
 
 Bindings check version 2 before use. Missing subpaths or named exports fail
-through the native ES module loader. The current externalized operation is
-`tableGet`; other intrinsics remain inline during migration.
+through the native ES module loader. The current externalized set is resource `tableGet` and all 19 conversion
+operations (20/274 logical intrinsic variants); other families remain inline during migration.
 
 ```js
 import { tableGet } from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
@@ -73,7 +74,8 @@ const conformance: ResourceModule = resource;
 ```
 
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
-and `./intrinsics/resource` in your package's `exports` map, with their matching
+and the implemented `./intrinsics/resource` and `./intrinsics/conversion` subpaths
+in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
 Function-property signatures support strict parameter checking. Type-only
@@ -85,7 +87,7 @@ Test the installed package and its behavior, especially traps and shared state.
 Providers may re-export selected default functions. Those functions retain their
 own statically imported dependencies: overriding a sibling export does not
 intercept its calls. There is no mutable namespace receiver or implicit override
-registry. Context-free operations, when added, will take no dummy context argument.
+registry. Context-free operations take no dummy context argument.
 
 ### Resource table contract
 
@@ -111,3 +113,36 @@ at `runtime`, and use the supplied trap capability instead of `this` or ambient
 WebAssembly. The v1 provider/factory types and bootstrap are removed. Existing
 resource data types remain exported at root and `runtime`. Generated v1 bindings
 need to be regenerated for API-v2 runtimes; there is no dynamic legacy fallback.
+
+## Conversion contract
+
+Conversion functions are named exports at `intrinsics/conversion` and satisfy
+`ConversionModule`. The eight integer coercions take `StrictNumericContext`
+(`{ strict: boolean }`) followed by the value. Context-free character, string,
+JSON/result-string, numeric validation and i64 split/merge helpers take operands
+only. Strict 32-bit validation precedes coercion; 64-bit conversions first apply
+`BigInt`, then validate the converted range. Historical `i32ToChar` fromCharCode
+and signed-low-word `mergeInt64` behavior are preserved.
+
+`initializeBitcast32()` returns aliased mutable i32/f32 views;
+`initializeBitcast64()` returns aliased i64/f64 views. They return storage, with no
+operation table. Generated bindings call only selected initializers, once per
+instantiation, and pass the same capability to both conversion directions.
+Different instantiations never share scratch storage. Assignment/read sequencing
+preserves reentrant coercion. Importing scalar helpers allocates no scratch arrays,
+codecs or scheduler state.
+
+```js
+import { initializeBitcast32, i32ToF32, toUint32 } from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
+
+const scratch = initializeBitcast32();
+const one = i32ToF32(scratch, 0x3f800000);
+const wrapped = toUint32({ strict: false }, -1);
+```
+
+Custom runtimes implementing earlier v2 resource-only output must publish the new
+conversion subpath when adopting this compiler. They may re-export defaults or
+supply matching named operations with the documented structural capabilities.
+A selected override of `requireValidNumericPrimitive` does not intercept default
+`toUint32`'s own static dependency; interception must be explicit in an overriding
+`toUint32` implementation.

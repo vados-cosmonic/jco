@@ -52,7 +52,12 @@ test('packed exports, standalone declarations, and independent provider conforma
         const contract = await readFile(join(installed, 'dist/runtime.d.ts'), 'utf8');
         expect(contract).not.toMatch(/\b(?:import|from)\s*['"({]/);
         const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
-        expect(Object.keys(manifest.exports).sort()).toEqual(['.', './intrinsics/resource', './runtime']);
+        expect(Object.keys(manifest.exports).sort()).toEqual([
+            '.',
+            './intrinsics/conversion',
+            './intrinsics/resource',
+            './runtime',
+        ]);
         expect(manifest.sideEffects).toBe(false);
         const rust = await readFile(
             new URL('../../../crates/js-component-bindgen/src/intrinsics/runtime.rs', import.meta.url),
@@ -65,7 +70,11 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule } from './contract.js';
+            import type { ResourceModule, ConversionModule } from './contract.js';
+            export const toUint32: ConversionModule['toUint32'] = (context, value) => {
+                if (context.strict && (typeof value !== 'number' || !Number.isInteger(value) || value < 0 || value > 0xffffffff)) throw new TypeError('invalid u32');
+                return (value as number) >>> 0;
+            };
             export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => {
                 const scope = table[2 * handle];
                 const value = table[2 * handle + 1];
@@ -81,9 +90,16 @@ test('packed exports, standalone declarations, and independent provider conforma
             import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
             import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
             import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
+            import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import * as custom from './provider.js';
-            import type { ResourceModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
+            import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
             const defaultModule: ResourceModule = resource;
+            const defaultConversions: RuntimeModuleContracts['intrinsics/conversion'] = conversion;
+            const customUint32: ConversionModule['toUint32'] = custom.toUint32;
+            if (customUint32({ strict: false }, -1) !== 0xffffffff || defaultConversions.toUint32({ strict: true }, 42) !== 42) throw new Error('numeric consumer failed');
+            const scratch32 = defaultConversions.initializeBitcast32();
+            const scratch64 = defaultConversions.initializeBitcast64();
+            if (defaultConversions.i32ToF32(scratch32, 0x3f800000) !== 1 || defaultConversions.f64ToI64(scratch64, 1) !== 0x3ff0000000000000n) throw new Error('bitcast consumer failed');
             const customModule: RuntimeModuleContracts['intrinsics/resource'] = custom;
             const version: 2 = rootVersion;
             const entry = defaultModule.tableGet({ RuntimeError: WebAssembly.RuntimeError }, [1 << 30, 0, 7, 42], 1);
@@ -92,6 +108,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         );
         const negatives = (await readFile(new URL('./contracts.ts', import.meta.url), 'utf8'))
             .replaceAll('../src/intrinsics/resource.js', '@bytecodealliance/jco-cm-runtime/intrinsics/resource')
+            .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -132,6 +149,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             }
             await import('@bytecodealliance/jco-cm-runtime/runtime');
             const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
+            const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
+            if (toUint32({ strict: false }, '42') !== 42 || toString(42) !== '42') throw new Error('scalar capability leak');
             const entry = tableGet({ RuntimeError: Error }, [1 << 30, 0, 7, 42], 1);
             if (entry.rep !== 42) throw new Error('bad entry');
         `,
