@@ -1,5 +1,6 @@
 import type { RuntimeOptions, ResourceIntrinsics } from '../types.js';
 import type { CoreIntrinsics, RepTable as RepTableType } from './core-types.js';
+import type { WaitableConstructor } from './waitable-types.js';
 import type {
     ComponentIntrinsics,
     ComponentAsyncState as ComponentAsyncStateType,
@@ -15,6 +16,7 @@ export function createComponentIntrinsics(
     options: RuntimeOptions,
     core: CoreIntrinsics,
     resource: ResourceIntrinsics,
+    Waitable: WaitableConstructor,
 ): ComponentIntrinsics {
     const { debugLog, RepTable, promiseWithResolvers, RuntimeError, symbolDispose, currentTaskMeta } = core;
     const getHandleIndexSpace = resource.getHandleIndexSpace.bind(resource);
@@ -902,10 +904,11 @@ export function createComponentIntrinsics(
         }
 
         createWaitable(args?: { target?: unknown }) {
-            if (!options.componentContext) {
-                throw new TypeError('creating waitables requires componentContext');
-            }
-            return options.componentContext.createWaitable({ target: args?.target });
+            // Older API-v1 bindings supply their inline class through this hook.
+            // Keep using it when present so those bindings retain constructor identity.
+            return options.componentContext
+                ? options.componentContext.createWaitable({ target: args?.target })
+                : new Waitable({ target: args?.target });
         }
     }
     return {

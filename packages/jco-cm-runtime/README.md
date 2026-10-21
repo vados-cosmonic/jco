@@ -62,7 +62,7 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.core`, `intrinsics.component`, `intrinsics.resource`, `intrinsics.conversion`,
-`intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
+`intrinsics.waitable`, `intrinsics.jsHelper`, `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
 continue to be generated inline.
@@ -149,12 +149,37 @@ distinguish blocked guest tasks from work that can still wake externally.
 Generated bindings pass `options.componentTrapMessages` for the compiler's
 engine-trap normalization and cannot-enter message. Direct users can supply
 the same metadata; without it, engine messages remain unchanged and the default
-cannot-enter message is used. `options.componentContext.createWaitable` lazily
-constructs the waitable class that remains inline. It is required only when
-calling `ComponentAsyncState.createWaitable`, and must not be invoked during
-runtime creation. `ComponentContext`, `ComponentWaitable`, and
-`ComponentTrapMessages` describe these options. Existing `coreContext` and
+cannot-enter message is used. `ComponentAsyncState.createWaitable` uses the
+store's `intrinsics.waitable.Waitable` constructor. Older API-v1 bindings may
+supply `options.componentContext.createWaitable`; that factory still takes
+precedence to preserve their inline constructor identity. It is never called
+during runtime creation. `ComponentContext`, `ComponentWaitable`, and
+`ComponentTrapMessages` describe these contracts. Existing `coreContext` and
 `resourceTasks` callbacks remain supported for earlier API-v1 bindings.
+
+### Waitables
+
+`intrinsics.waitable` implements all eight helpers from bindgen's `p3/waitable.rs`.
+`Waitable` and `WaitableSet` are raw constructors shared throughout a runtime
+instance. Providers that delegate default operations must retain these constructors
+and the component namespace's handle tables so membership checks use the same
+class identity. Set handles share the component's resource index allocator.
+
+Waitables consume pending events once and reset their completion promise after
+consumption. Joining moves a waitable from its previous set; joining `null`
+removes it. Empty sets can be dropped only when no tasks are waiting on them.
+Ready waits return synchronously. A built-in wait with `syncOnly` returns `-1`
+when it would suspend; other waits can return a promise. Built-in waits and polls
+do not deliver cancellation; cancellable callback waits retain task cancellation
+delivery. `Waitable`, `WaitableSet`, and `WaitableTask` describe these contracts.
+
+Generated bindings supply lazy `options.waitableContext` callbacks for current-task
+lookup and storing event payloads in guest memory. They are called only when a
+wait, poll, or drop needs them, after generated task state initializes.
+`WaitableContext` and `WaitableStoreEventOptions` describe this bridge. Creating
+waitables or sets, joining them, and calling `removeWaitableSet` need no task callbacks.
+The legacy standalone `Waitable.waitForPendingEvent` hook accepts a scheduler
+with `waitUntil`; generated bindings do not use that hook.
 
 ### Conversions
 

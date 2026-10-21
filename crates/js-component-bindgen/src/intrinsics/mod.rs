@@ -2188,7 +2188,96 @@ mod tests {
     }
 
     #[test]
-    fn component_runtime_shares_values_and_defers_waitable_creation() {
+    fn waitable_runtime_preserves_constructors_and_defers_inline_bridges() {
+        use WaitableIntrinsic::*;
+        let variants = [
+            WaitableClass,
+            WaitableSetClass,
+            WaitableSetNew,
+            WaitableSetWait,
+            WaitableSetPoll,
+            WaitableSetDrop,
+            RemoveWaitableSet,
+            WaitableJoin,
+        ];
+        let mut intrinsics = BTreeSet::from_iter(variants.map(Intrinsic::Waitable));
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        for variant in variants {
+            let intrinsic = Intrinsic::Waitable(variant);
+            let IntrinsicBinding::Runtime { path, kind, .. } = intrinsic.binding(true) else {
+                panic!("waitable must be external");
+            };
+            assert_eq!(path, variant.runtime_path());
+            if matches!(variant, WaitableClass | WaitableSetClass) {
+                assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "function"
+                    }
+                ));
+                assert!(!source.contains(&format!("class {}", variant.name())));
+            } else {
+                assert!(matches!(kind, RuntimeIntrinsicKind::Method));
+                assert!(!source.contains(&format!("function {}(", variant.name())));
+            }
+            assert!(matches!(
+                intrinsic.binding(false),
+                IntrinsicBinding::Inline { .. }
+            ));
+        }
+        assert!(source.contains(
+            "waitableContext: { getCurrentTask: componentIdx => getCurrentTask(componentIdx),"
+        ));
+        assert!(
+            source.contains(
+                "storeEventInComponentMemory: args => _storeEventInComponentMemory(args),"
+            )
+        );
+        assert!(source.contains("function getCurrentTask("));
+        assert!(source.contains("function _storeEventInComponentMemory("));
+        assert!(!source.contains("componentContext:"));
+    }
+
+    #[test]
+    fn waitable_runtime_only_requests_bridges_for_operations_that_need_them() {
+        for variant in [
+            WaitableIntrinsic::WaitableClass,
+            WaitableIntrinsic::WaitableSetNew,
+            WaitableIntrinsic::WaitableSetDrop,
+        ] {
+            let mut intrinsics = BTreeSet::from([Intrinsic::Waitable(variant)]);
+            let opts = TranspileOpts::builder()
+                .name("test".into())
+                .cm_runtime_es_module("runtime".into())
+                .build();
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            assert!(!source.contains("storeEventInComponentMemory:"));
+            assert_eq!(
+                source.contains("waitableContext:"),
+                variant == WaitableIntrinsic::WaitableSetDrop
+            );
+            if variant != WaitableIntrinsic::WaitableSetDrop {
+                assert_eq!(intrinsics.len(), 1);
+            }
+        }
+    }
+
+    #[test]
+    fn component_runtime_shares_values_without_inline_waitables() {
         let mut intrinsics = BTreeSet::from([
             Intrinsic::Component(ComponentIntrinsic::ComponentAsyncStateClass),
             Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
@@ -2207,9 +2296,7 @@ mod tests {
                 .transpile_opts(&opts)
                 .build(),
         );
-        assert!(
-            source.contains("componentContext: { createWaitable: args => new Waitable(args) }")
-        );
+        assert!(!source.contains("componentContext:"));
         assert!(source.contains("componentTrapMessages: { core:"));
         assert!(source.contains(r#"cannotEnter: "wasm trap: cannot enter component instance""#));
         assert!(
@@ -2217,13 +2304,13 @@ mod tests {
                 .contains(r#""unreachable": "wasm trap: wasm `unreachable` instruction executed""#)
         );
         assert!(source.contains("component.ComponentAsyncState must be a function"));
-        assert!(source.contains("class Waitable"));
+        assert!(!source.contains("class Waitable"));
         assert!(!source.contains("class ComponentAsyncState"));
         assert!(!source.contains("const INSTANCE_FLAGS = new Map()"));
         assert!(!source.contains("const ASYNC_STATE = new Map()"));
         assert!(!source.contains("const STORE_TRAP = { error: null }"));
         assert!(!source.contains("function getOrCreateAsyncState("));
-        assert!(intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
+        assert!(!intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
     }
 
     #[test]
@@ -2763,8 +2850,8 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 if let Intrinsic::Resource(resource) = intrinsic {
                     resource.require_runtime_dependencies(args);
                 }
-                if let Intrinsic::Component(component) = intrinsic {
-                    component.require_runtime_dependencies(args);
+                if let Intrinsic::Waitable(waitable) = intrinsic {
+                    waitable.require_runtime_dependencies(args);
                 }
                 intrinsic.require_core_runtime_dependencies(args);
                 if intrinsic.conditional_suspending_wasm().is_some() {
@@ -2816,6 +2903,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         }
         let core_options = core::runtime_options(args);
         let component_options = ComponentIntrinsic::runtime_options(args);
+        let waitable_options = WaitableIntrinsic::runtime_options(args);
         uwriteln!(
             output,
             r#"
@@ -2835,6 +2923,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     {resource_tasks}
                     {core_options}
                     {component_options}
+                    {waitable_options}
                 }});
                 if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
                     throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
@@ -3031,6 +3120,11 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::Waitable(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
+            },
             Self::Component(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),

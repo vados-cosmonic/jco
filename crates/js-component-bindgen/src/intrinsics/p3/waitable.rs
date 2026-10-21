@@ -3,7 +3,7 @@
 use super::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::component::ComponentIntrinsic;
 use crate::intrinsics::p3::host::HostIntrinsic;
-use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::source::Source;
 
 /// This enum contains intrinsics that enable waitable sets
@@ -121,6 +121,63 @@ pub enum WaitableIntrinsic {
 }
 
 impl WaitableIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::WaitableSetClass => "waitable.WaitableSet",
+            Self::WaitableClass => "waitable.Waitable",
+            Self::WaitableSetNew => "waitable.waitableSetNew",
+            Self::WaitableSetWait => "waitable.waitableSetWait",
+            Self::WaitableSetPoll => "waitable.waitableSetPoll",
+            Self::WaitableSetDrop => "waitable.waitableSetDrop",
+            Self::RemoveWaitableSet => "waitable.removeWaitableSet",
+            Self::WaitableJoin => "waitable.waitableJoin",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        match self {
+            Self::WaitableClass | Self::WaitableSetClass => RuntimeIntrinsicKind::Value {
+                value_type: "function",
+            },
+            _ => RuntimeIntrinsicKind::Method,
+        }
+    }
+
+    pub(crate) fn require_runtime_dependencies(&self, args: &RenderIntrinsicsArgs<'_>) {
+        if matches!(
+            self,
+            Self::WaitableSetWait | Self::WaitableSetPoll | Self::WaitableSetDrop
+        ) {
+            args.require_intrinsic(AsyncTaskIntrinsic::GetCurrentTask);
+        }
+        if matches!(self, Self::WaitableSetWait | Self::WaitableSetPoll) {
+            args.require_intrinsic(HostIntrinsic::StoreEventInComponentMemory);
+        }
+    }
+
+    pub(crate) fn runtime_options(args: &RenderIntrinsicsArgs<'_>) -> String {
+        let uses = |i| args.intrinsics.contains(&Intrinsic::Waitable(i));
+        let writes_events = uses(Self::WaitableSetWait) || uses(Self::WaitableSetPoll);
+        if !writes_events && !uses(Self::WaitableSetDrop) {
+            return String::new();
+        }
+        let mut options = format!(
+            "waitableContext: {{ getCurrentTask: componentIdx => {}(componentIdx),",
+            AsyncTaskIntrinsic::GetCurrentTask.name(),
+        );
+        if writes_events {
+            use std::fmt::Write as _;
+            write!(
+                options,
+                "storeEventInComponentMemory: args => {}(args),",
+                HostIntrinsic::StoreEventInComponentMemory.name()
+            )
+            .unwrap();
+        }
+        options.push_str("},");
+        options
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         []
@@ -410,7 +467,7 @@ impl WaitableIntrinsic {
                                 isRemoval: waitableSet === null,
                             }});
 
-                            if (this.#waitableSet === undefined) {{
+                            if (waitableSet === undefined) {{
                                 throw new TypeError('waitable set must be not be undefined');
                             }}
 
@@ -441,11 +498,14 @@ impl WaitableIntrinsic {
                                 throw new Error("waitable is already in a set/has a sync waiter");
                             }}
                             this.#hasSyncWaiter = true;
-                            await cstate.waitUntil({{
-                                cancellable: false,
-                                readyFn: () => this.hasPendingEvent(),
-                            }});
-                            this.#hasSyncWaiter = false;
+                            try {{
+                                await cstate.waitUntil({{
+                                    cancellable: false,
+                                    readyFn: () => this.hasPendingEvent(),
+                                }});
+                            }} finally {{
+                                this.#hasSyncWaiter = false;
+                            }}
                         }}
 
                     }}
@@ -508,7 +568,7 @@ impl WaitableIntrinsic {
                         if (!task) {{ throw Error('invalid/missing async task'); }}
 
                         if (task.componentIdx() !== componentIdx) {{
-                            throw Error(`task component [${{task.componentIdx}}] !== executing component [${{componentIdx}}]`);
+                            throw Error(`task component [${{task.componentIdx()}}] !== executing component [${{componentIdx}}]`);
                         }}
 
                         const memory = getMemoryFn();
@@ -568,7 +628,7 @@ impl WaitableIntrinsic {
                         const taskMeta = {current_task_get_fn}(componentIdx);
                         if (!taskMeta) {{ throw Error('invalid/missing current task meta'); }}
                         if (taskMeta.componentIdx !== componentIdx) {{
-                            throw Error('task component idx [' + task.componentIdx + '] != component instance ID [' + componentIdx + ']');
+                            throw Error('task component idx [' + taskMeta.componentIdx + '] != component instance ID [' + componentIdx + ']');
                         }}
 
                         const task = taskMeta.task;

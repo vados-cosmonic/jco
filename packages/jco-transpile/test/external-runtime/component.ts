@@ -53,7 +53,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'const ASYNC_STATE = new Map()');
                     assert.notInclude(source, 'function _recordTrap(');
                     assert.include(source, 'componentTrapMessages:');
-                    assert.include(source, 'createWaitable: args => new Waitable(args)');
+                    assert.notInclude(source, 'componentContext:');
+                    assert.notInclude(source, 'class Waitable');
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'component.js')).href);
                 const instantiate = () =>

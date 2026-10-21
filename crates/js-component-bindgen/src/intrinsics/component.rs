@@ -145,16 +145,6 @@ impl ComponentIntrinsic {
         }
     }
 
-    pub(crate) fn require_runtime_dependencies(&self, args: &RenderIntrinsicsArgs<'_>) {
-        if matches!(
-            self,
-            Self::ComponentAsyncStateClass | Self::GetOrCreateAsyncState
-        ) {
-            // Component state exposes a waitable factory; its constructor still lives inline.
-            args.require_intrinsic(WaitableIntrinsic::WaitableClass);
-        }
-    }
-
     pub(crate) fn runtime_options(args: &RenderIntrinsicsArgs<'_>) -> String {
         if !args
             .intrinsics
@@ -163,27 +153,11 @@ impl ComponentIntrinsic {
         {
             return String::new();
         }
-        let mut options = format!(
+        format!(
             "componentTrapMessages: {{ core: {}, cannotEnter: {:?} }},",
             core_trap_messages_js(),
             Trap::CannotEnterComponent.to_string(),
-        );
-        if args
-            .intrinsics
-            .contains(&Intrinsic::Component(Self::ComponentAsyncStateClass))
-            || args
-                .intrinsics
-                .contains(&Intrinsic::Component(Self::GetOrCreateAsyncState))
-        {
-            use std::fmt::Write as _;
-            write!(
-                options,
-                "componentContext: {{ createWaitable: args => new {}(args) }},",
-                WaitableIntrinsic::WaitableClass.name()
-            )
-            .unwrap();
-        }
-        options
+        )
     }
 
     /// Retrieve global names for

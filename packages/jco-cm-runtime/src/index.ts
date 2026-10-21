@@ -1,5 +1,18 @@
 export { runtime } from './runtime.js';
 export type {
+    Waitable,
+    WaitableConstructor,
+    WaitableContext,
+    WaitableIntrinsics,
+    WaitableMemoryContext,
+    WaitableSet,
+    WaitableSetConstructor,
+    WaitableStoreEventOptions,
+    WaitableSuspendOptions,
+    WaitableTask,
+    WaitableWaitOptions,
+} from './intrinsics/waitable-types.js';
+export type {
     AdmissionTicket,
     ComponentAsyncState,
     ComponentAsyncStateConstructor,

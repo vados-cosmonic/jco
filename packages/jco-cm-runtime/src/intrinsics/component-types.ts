@@ -41,7 +41,7 @@ export interface WaitableEvent {
     payload0: number;
     payload1: number;
 }
-/** Structural contract for the waitables produced by the transitional factory. */
+/** Shared waitable contract, also accepted from older bindings' inline factories. */
 export interface ComponentWaitable {
     target: unknown;
     componentIdx(): number | undefined;

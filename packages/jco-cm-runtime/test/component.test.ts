@@ -181,7 +181,8 @@ test.concurrent('waitable creation is lazy and setAllError marks every existing 
     expect(a.errored()).toBe(true);
     expect(b.errored()).toBe(true);
     expect(a.isTrapped()).toBe(false);
-    expect(() => create().component.getOrCreateAsyncState(0).createWaitable()).toThrow('requires componentContext');
+    const defaults = create();
+    expect(defaults.component.getOrCreateAsyncState(0).createWaitable()).toBeInstanceOf(defaults.waitable.Waitable);
 });
 
 test.concurrent.each([false, true])(

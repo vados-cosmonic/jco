@@ -4,6 +4,7 @@ import type { StringIntrinsics } from './intrinsics/string.js';
 import type { WebIdlIntrinsics } from './intrinsics/webidl.js';
 import type { CoreContext, CoreIntrinsics } from './intrinsics/core-types.js';
 import type { ComponentContext, ComponentIntrinsics, ComponentTrapMessages } from './intrinsics/component-types.js';
+import type { WaitableContext, WaitableIntrinsics } from './intrinsics/waitable-types.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -43,8 +44,10 @@ export interface RuntimeOptions {
     readonly factTrapMessages?: Readonly<Record<number, string>>;
     /** Lazy access to the generated module's selected component/task operations. */
     readonly coreContext?: CoreContext;
-    /** Lazy factory for waitables that remain in generated bindings. */
+    /** Legacy factory used by older API-v1 bindings with inline waitables. */
     readonly componentContext?: ComponentContext;
+    /** Lazy access to task lookup and event storage in generated bindings. */
+    readonly waitableContext?: WaitableContext;
     /** Trap messages supplied by the compiler's Wasmtime version. */
     readonly componentTrapMessages?: ComponentTrapMessages;
 }
@@ -127,6 +130,7 @@ export interface ResourceTaskContext {
 }
 
 export interface RuntimeIntrinsics {
+    readonly waitable: WaitableIntrinsics;
     readonly component: ComponentIntrinsics;
     readonly core: CoreIntrinsics;
     readonly webidl: WebIdlIntrinsics;

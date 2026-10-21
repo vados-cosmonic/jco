@@ -5,6 +5,8 @@ import { createStringIntrinsics } from './intrinsics/string.js';
 import { createWebIdlIntrinsics } from './intrinsics/webidl.js';
 import { createCoreIntrinsics } from './intrinsics/core.js';
 import { createComponentIntrinsics } from './intrinsics/component.js';
+import { createWaitableClasses } from './intrinsics/waitable-classes.js';
+import { createWaitableIntrinsics } from './intrinsics/waitable.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -31,11 +33,14 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
 
     const resource = createResourceIntrinsics(platform.WebAssembly.RuntimeError, options.resourceTasks);
     const core = createCoreIntrinsics(options, platform, resource);
+    const waitableClasses = createWaitableClasses(core);
+    const component = createComponentIntrinsics(options, core, resource, waitableClasses.Waitable);
     return {
         apiVersion: CM_RUNTIME_API_VERSION,
         intrinsics: {
             core,
-            component: createComponentIntrinsics(options, core, resource),
+            component,
+            waitable: createWaitableIntrinsics(options, core, component, waitableClasses),
             webidl: createWebIdlIntrinsics(),
             string: createStringIntrinsics(),
             jsHelper: createJsHelperIntrinsics(),
