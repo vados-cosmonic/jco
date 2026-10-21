@@ -15,6 +15,8 @@ export default defineConfig({
         include: ['test/**/*.ts'],
         exclude: [
             'test/transpilation.ts',
+            'test/runtime-metrics/**',
+            'test/vitest.runtime-metrics.ts',
             'test/helpers.ts',
             'test/common.ts',
             'test/output',

@@ -1,0 +1,660 @@
+{
+    "schema": 1,
+    "description": "Observed baselines, not parity claims. Update only after reviewing per-axis deltas and summary.json.",
+    "environment": {
+        "node": "v24.21.0",
+        "platform": "linux",
+        "arch": "x64",
+        "bundlers": {
+            "rolldown": "1.2.13",
+            "rollup": "4.64.1",
+            "oxc-minify": "0.151.0"
+        }
+    },
+    "entries": {
+        "performance--rolldown--adder": {
+            "inline": {
+                "parse": 1256625.999999983,
+                "evaluate": 44065.000000045984,
+                "instantiate": 201966.9999999678,
+                "call": 14648.059814453163
+            },
+            "external": {
+                "parse": 2610323.9999999916,
+                "evaluate": 56697.00000021294,
+                "instantiate": 423974.9999999276,
+                "call": 14897.730712890634
+            }
+        },
+        "performance--rolldown--async": {
+            "inline": {
+                "parse": 1550336.0000000156,
+                "evaluate": 45606.000000020686,
+                "instantiate": 304839.0000000154,
+                "call": 1779090.7499999946
+            },
+            "external": {
+                "parse": 2413788.9999999516,
+                "evaluate": 52991.000000019994,
+                "instantiate": 549704.0000000198,
+                "call": 1719265.0625
+            }
+        },
+        "performance--rolldown--events": {
+            "inline": {
+                "parse": 3347455.9999999655,
+                "evaluate": 66853.00000003735,
+                "instantiate": 480889.9999999312,
+                "call": 91423.86718750029
+            },
+            "external": {
+                "parse": 4480065.000000024,
+                "evaluate": 74378.00000002426,
+                "instantiate": 805819.0000000423,
+                "call": 93152.60156250016
+            }
+        },
+        "performance--rolldown--flavorful": {
+            "inline": {
+                "parse": 4415068.00000002,
+                "evaluate": 54652.000000032785,
+                "instantiate": 1066032.0000001774,
+                "call": 20457.07666015617
+            },
+            "external": {
+                "parse": 5640862.999999967,
+                "evaluate": 59700.999999904525,
+                "instantiate": 1309622.000000104,
+                "call": 21022.9619140625
+            }
+        },
+        "performance--rolldown--futures": {
+            "inline": {
+                "parse": 10488745.999999993,
+                "evaluate": 59896.00000009432,
+                "instantiate": 3061842.00000007,
+                "call": 1333103.0000000012
+            },
+            "external": {
+                "parse": 10592399,
+                "evaluate": 72898.00000000923,
+                "instantiate": 3396808.0000000214,
+                "call": 1318576.4999999988
+            }
+        },
+        "performance--rolldown--lists": {
+            "inline": {
+                "parse": 5005946.999999992,
+                "evaluate": 54309.99999998676,
+                "instantiate": 1122414.9999998189,
+                "call": 22374.123046874916
+            },
+            "external": {
+                "parse": 5827089.000000115,
+                "evaluate": 62223.00000001724,
+                "instantiate": 1441275.0000000186,
+                "call": 21153.208496093757
+            }
+        },
+        "performance--rolldown--numbers": {
+            "inline": {
+                "parse": 4377710.999999977,
+                "evaluate": 48647.000000016764,
+                "instantiate": 911355.9999999552,
+                "call": 17306.051757812496
+            },
+            "external": {
+                "parse": 5583282.999999938,
+                "evaluate": 60252.99999998879,
+                "instantiate": 1224655.9999999818,
+                "call": 17605.62304687502
+            }
+        },
+        "performance--rolldown--records": {
+            "inline": {
+                "parse": 3869042.9999999194,
+                "evaluate": 51937.00000006629,
+                "instantiate": 958787.9999999132,
+                "call": 23408.186523437456
+            },
+            "external": {
+                "parse": 5229767.000000038,
+                "evaluate": 71327.00000011027,
+                "instantiate": 1229959.000000008,
+                "call": 21717.587402343754
+            }
+        },
+        "performance--rolldown--resources": {
+            "inline": {
+                "parse": 2010945.99999999,
+                "evaluate": 57971.99999994973,
+                "instantiate": 443823.0000000658,
+                "call": 88242.42968749996
+            },
+            "external": {
+                "parse": 3599205.9999998673,
+                "evaluate": 73487.00000000009,
+                "instantiate": 886327.9999999917,
+                "call": 82266.11914062499
+            }
+        },
+        "performance--rolldown--streams": {
+            "inline": {
+                "parse": 2864583.9999999795,
+                "evaluate": 56223.99999998606,
+                "instantiate": 435792.99999998964
+            },
+            "external": {
+                "parse": 3976652.0000000014,
+                "evaluate": 70695.00000000061,
+                "instantiate": 729699.9999999799
+            }
+        },
+        "performance--rolldown--strings": {
+            "inline": {
+                "parse": 3275842.999999895,
+                "evaluate": 50002.00000006316,
+                "instantiate": 896307.0000000926,
+                "call": 20153.67968749998
+            },
+            "external": {
+                "parse": 4851730.999999972,
+                "evaluate": 65876.00000000294,
+                "instantiate": 1065128.9999999562,
+                "call": 20259.14355468744
+            }
+        },
+        "performance--rolldown--variants": {
+            "inline": {
+                "parse": 3937801.000000036,
+                "evaluate": 47795.999999948435,
+                "instantiate": 949420.0000000319,
+                "call": 19767.97460937499
+            },
+            "external": {
+                "parse": 5107698.000000028,
+                "evaluate": 59132.999999974345,
+                "instantiate": 1205897.00000005,
+                "call": 18192.63623046874
+            }
+        },
+        "performance--rollup--adder": {
+            "inline": {
+                "parse": 1246655.0000000326,
+                "evaluate": 47331.999999983054,
+                "instantiate": 222415.99999995288,
+                "call": 15054.040039062465
+            },
+            "external": {
+                "parse": 2695229.999999981,
+                "evaluate": 60409.99999999031,
+                "instantiate": 477406.99999997107,
+                "call": 15388.776855468745
+            }
+        },
+        "performance--rollup--async": {
+            "inline": {
+                "parse": 1625333.9999999525,
+                "evaluate": 39674.99999998836,
+                "instantiate": 312815.0000000005,
+                "call": 1776724.5625
+            },
+            "external": {
+                "parse": 2422906.0000000116,
+                "evaluate": 49702.99999990857,
+                "instantiate": 468103.99999992567,
+                "call": 1785276.5625000019
+            }
+        },
+        "performance--rollup--events": {
+            "inline": {
+                "parse": 2048678.9999999928,
+                "evaluate": 46374.00000001435,
+                "instantiate": 320688.0000000183,
+                "call": 54121.39453124975
+            },
+            "external": {
+                "parse": 2968187.0000000573,
+                "evaluate": 59331.99999998351,
+                "instantiate": 570732.0000000208,
+                "call": 53567.25390624994
+            }
+        },
+        "performance--rollup--flavorful": {
+            "inline": {
+                "parse": 3920849.999999973,
+                "evaluate": 47496.00000002374,
+                "instantiate": 942962.9999999633,
+                "call": 18800.04833984372
+            },
+            "external": {
+                "parse": 5287135.000000034,
+                "evaluate": 58178.99999999554,
+                "instantiate": 1174035.0000000035,
+                "call": 19057.83544921874
+            }
+        },
+        "performance--rollup--futures": {
+            "inline": {
+                "parse": 8610361.000000011,
+                "evaluate": 47246.999999970285,
+                "instantiate": 2494567.0000000745,
+                "call": 1306353.3750000005
+            },
+            "external": {
+                "parse": 9384880.000000067,
+                "evaluate": 57645.99999997699,
+                "instantiate": 2779602.999999952,
+                "call": 1293626.3124999988
+            }
+        },
+        "performance--rollup--lists": {
+            "inline": {
+                "parse": 6339612.0000001015,
+                "evaluate": 56900.99999992526,
+                "instantiate": 1363629.9999999437,
+                "call": 26269.64941406251
+            },
+            "external": {
+                "parse": 7702153.000000067,
+                "evaluate": 67739.00000007416,
+                "instantiate": 1528189.999999995,
+                "call": 27162.85937500007
+            }
+        },
+        "performance--rollup--numbers": {
+            "inline": {
+                "parse": 4801996.000000031,
+                "evaluate": 56909.00000013244,
+                "instantiate": 1125751.0000000366,
+                "call": 19006.170898437478
+            },
+            "external": {
+                "parse": 6077497.999999992,
+                "evaluate": 70129.99999994918,
+                "instantiate": 1496923.9999999786,
+                "call": 20192.179687499978
+            }
+        },
+        "performance--rollup--records": {
+            "inline": {
+                "parse": 3926753.000000019,
+                "evaluate": 49969.99999991658,
+                "instantiate": 928019.000000063,
+                "call": 17091.35839843745
+            },
+            "external": {
+                "parse": 5263166.999999953,
+                "evaluate": 63150.00000000736,
+                "instantiate": 1191225.999999915,
+                "call": 18515.017578125015
+            }
+        },
+        "performance--rollup--resources": {
+            "inline": {
+                "parse": 1585413.9999999006,
+                "evaluate": 50398.00000008654,
+                "instantiate": 409810.99999999057,
+                "call": 71971.19921875017
+            },
+            "external": {
+                "parse": 3008243.999999877,
+                "evaluate": 62654.99999994972,
+                "instantiate": 656997.9999999305,
+                "call": 74844.43749999991
+            }
+        },
+        "performance--rollup--streams": {
+            "inline": {
+                "parse": 2653673.9999999953,
+                "evaluate": 47536.00000000802,
+                "instantiate": 420891.0000000117
+            },
+            "external": {
+                "parse": 3901627.999999988,
+                "evaluate": 60218.99999996094,
+                "instantiate": 631091.9999999953
+            }
+        },
+        "performance--rollup--strings": {
+            "inline": {
+                "parse": 4059040.999999979,
+                "evaluate": 53838.000000041575,
+                "instantiate": 960651.9999999818,
+                "call": 22403.340820312507
+            },
+            "external": {
+                "parse": 5343029.0000001155,
+                "evaluate": 61052.99999990166,
+                "instantiate": 1334493.000000066,
+                "call": 22173.542968750015
+            }
+        },
+        "performance--rollup--variants": {
+            "inline": {
+                "parse": 4626824.999999826,
+                "evaluate": 56914.000000006126,
+                "instantiate": 1068763.9999999874,
+                "call": 21945.193847656254
+            },
+            "external": {
+                "parse": 5830626.000000052,
+                "evaluate": 75318.00000003842,
+                "instantiate": 1366347.0000000189,
+                "call": 23747.208496093743
+            }
+        },
+        "size--rolldown--adder": {
+            "inline": {
+                "raw": 40671,
+                "gzip": 11413,
+                "brotli": 10303
+            },
+            "external": {
+                "raw": 102064,
+                "gzip": 28356,
+                "brotli": 24879
+            }
+        },
+        "size--rolldown--async": {
+            "inline": {
+                "raw": 58067,
+                "gzip": 16090,
+                "brotli": 14449
+            },
+            "external": {
+                "raw": 107969,
+                "gzip": 29562,
+                "brotli": 25870
+            }
+        },
+        "size--rolldown--events": {
+            "inline": {
+                "raw": 76142,
+                "gzip": 19421,
+                "brotli": 17340
+            },
+            "external": {
+                "raw": 123984,
+                "gzip": 32398,
+                "brotli": 28254
+            }
+        },
+        "size--rolldown--flavorful": {
+            "inline": {
+                "raw": 182293,
+                "gzip": 29107,
+                "brotli": 23887
+            },
+            "external": {
+                "raw": 242156,
+                "gzip": 44185,
+                "brotli": 36610
+            }
+        },
+        "size--rolldown--futures": {
+            "inline": {
+                "raw": 405021,
+                "gzip": 51678,
+                "brotli": 41139
+            },
+            "external": {
+                "raw": 452978,
+                "gzip": 62883,
+                "brotli": 50362
+            }
+        },
+        "size--rolldown--lists": {
+            "inline": {
+                "raw": 223408,
+                "gzip": 30306,
+                "brotli": 24339
+            },
+            "external": {
+                "raw": 283399,
+                "gzip": 45376,
+                "brotli": 37034
+            }
+        },
+        "size--rolldown--numbers": {
+            "inline": {
+                "raw": 172321,
+                "gzip": 25429,
+                "brotli": 21055
+            },
+            "external": {
+                "raw": 233490,
+                "gzip": 40599,
+                "brotli": 33873
+            }
+        },
+        "size--rolldown--portfolio": {
+            "inline": {
+                "raw": 1143089,
+                "gzip": 185571,
+                "brotli": 51758
+            },
+            "external": {
+                "raw": 946857,
+                "gzip": 124330,
+                "brotli": 60428
+            }
+        },
+        "size--rolldown--records": {
+            "inline": {
+                "raw": 160525,
+                "gzip": 27044,
+                "brotli": 22212
+            },
+            "external": {
+                "raw": 221039,
+                "gzip": 42310,
+                "brotli": 35138
+            }
+        },
+        "size--rolldown--resources": {
+            "inline": {
+                "raw": 47879,
+                "gzip": 12944,
+                "brotli": 11642
+            },
+            "external": {
+                "raw": 108413,
+                "gzip": 29238,
+                "brotli": 25594
+            }
+        },
+        "size--rolldown--streams": {
+            "inline": {
+                "raw": 89885,
+                "gzip": 21959,
+                "brotli": 19364
+            },
+            "external": {
+                "raw": 140995,
+                "gzip": 35647,
+                "brotli": 30791
+            }
+        },
+        "size--rolldown--strings": {
+            "inline": {
+                "raw": 132765,
+                "gzip": 23326,
+                "brotli": 19827
+            },
+            "external": {
+                "raw": 193194,
+                "gzip": 38616,
+                "brotli": 32757
+            }
+        },
+        "size--rolldown--variants": {
+            "inline": {
+                "raw": 181903,
+                "gzip": 28600,
+                "brotli": 23659
+            },
+            "external": {
+                "raw": 243132,
+                "gzip": 43799,
+                "brotli": 36444
+            }
+        },
+        "size--rollup--adder": {
+            "inline": {
+                "raw": 40405,
+                "gzip": 11312,
+                "brotli": 10216
+            },
+            "external": {
+                "raw": 101396,
+                "gzip": 28259,
+                "brotli": 24801
+            }
+        },
+        "size--rollup--async": {
+            "inline": {
+                "raw": 57883,
+                "gzip": 16033,
+                "brotli": 14417
+            },
+            "external": {
+                "raw": 107285,
+                "gzip": 29463,
+                "brotli": 25794
+            }
+        },
+        "size--rollup--events": {
+            "inline": {
+                "raw": 75803,
+                "gzip": 19328,
+                "brotli": 17284
+            },
+            "external": {
+                "raw": 123288,
+                "gzip": 32263,
+                "brotli": 28156
+            }
+        },
+        "size--rollup--flavorful": {
+            "inline": {
+                "raw": 180354,
+                "gzip": 28967,
+                "brotli": 23784
+            },
+            "external": {
+                "raw": 239892,
+                "gzip": 43923,
+                "brotli": 36454
+            }
+        },
+        "size--rollup--futures": {
+            "inline": {
+                "raw": 402657,
+                "gzip": 51524,
+                "brotli": 40906
+            },
+            "external": {
+                "raw": 450328,
+                "gzip": 62748,
+                "brotli": 50313
+            }
+        },
+        "size--rollup--lists": {
+            "inline": {
+                "raw": 221555,
+                "gzip": 30122,
+                "brotli": 24221
+            },
+            "external": {
+                "raw": 281263,
+                "gzip": 45166,
+                "brotli": 36897
+            }
+        },
+        "size--rollup--numbers": {
+            "inline": {
+                "raw": 170592,
+                "gzip": 25258,
+                "brotli": 20981
+            },
+            "external": {
+                "raw": 231455,
+                "gzip": 40427,
+                "brotli": 33730
+            }
+        },
+        "size--rollup--portfolio": {
+            "inline": {
+                "raw": 1131399,
+                "gzip": 184360,
+                "brotli": 51484
+            },
+            "external": {
+                "raw": 935207,
+                "gzip": 123150,
+                "brotli": 60283
+            }
+        },
+        "size--rollup--records": {
+            "inline": {
+                "raw": 158838,
+                "gzip": 26870,
+                "brotli": 22096
+            },
+            "external": {
+                "raw": 219048,
+                "gzip": 42148,
+                "brotli": 34961
+            }
+        },
+        "size--rollup--resources": {
+            "inline": {
+                "raw": 47545,
+                "gzip": 12830,
+                "brotli": 11544
+            },
+            "external": {
+                "raw": 107729,
+                "gzip": 29141,
+                "brotli": 25512
+            }
+        },
+        "size--rollup--streams": {
+            "inline": {
+                "raw": 89549,
+                "gzip": 21869,
+                "brotli": 19296
+            },
+            "external": {
+                "raw": 140300,
+                "gzip": 35537,
+                "brotli": 30711
+            }
+        },
+        "size--rollup--strings": {
+            "inline": {
+                "raw": 131222,
+                "gzip": 23178,
+                "brotli": 19719
+            },
+            "external": {
+                "raw": 191330,
+                "gzip": 38447,
+                "brotli": 32591
+            }
+        },
+        "size--rollup--variants": {
+            "inline": {
+                "raw": 179620,
+                "gzip": 28434,
+                "brotli": 23504
+            },
+            "external": {
+                "raw": 240570,
+                "gzip": 43628,
+                "brotli": 36320
+            }
+        }
+    }
+}
