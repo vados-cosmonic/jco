@@ -190,8 +190,17 @@ export function setAllError(states) {
     }
 }
 export function initializeComponentAsyncStateClass(context) {
-    const { RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, cannotEnter, deadlock } =
-        context;
+    const {
+        RuntimeError,
+        RepTable,
+        indexSpaces,
+        instanceFlags,
+        storeTrap,
+        normalization,
+        cannotEnter,
+        deadlock,
+        Waitable,
+    } = context;
     class ComponentAsyncState {
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
         static TickResult = {
@@ -808,10 +817,7 @@ export function initializeComponentAsyncStateClass(context) {
             return idle ? ComponentAsyncState.TickResult.IDLE : ComponentAsyncState.TickResult.DONE;
         }
         createWaitable(args) {
-            if (!context.createWaitable) {
-                throw new TypeError('creating waitables requires createWaitable');
-            }
-            return context.createWaitable({ target: args?.target });
+            return new Waitable({ target: args?.target });
         }
     }
     return ComponentAsyncState;
