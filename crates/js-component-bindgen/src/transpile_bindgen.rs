@@ -936,6 +936,13 @@ impl JsBindgen<'_> {
             .bind_callback(operands)
     }
 
+    fn intrinsic_callback_reference(&mut self, intrinsic: Intrinsic) -> String {
+        self.all_intrinsics.insert(intrinsic);
+        intrinsic
+            .binding(self.cm_runtime_es_module.is_some())
+            .callback_reference()
+    }
+
     /// Write out utility helpers/objects (available via esModule._util)
     fn write_util_export(&mut self, output: &mut source::Source) {
         // Future` class that can be used by external consumers (e.g. host code) to build nested future values
@@ -2044,7 +2051,9 @@ impl<'a> Instantiator<'a, '_> {
         instance: u32,
     ) {
         let concede_fn = self.bindgen.intrinsic(Intrinsic::AsyncTask(intrinsic));
-        let suspending_wrap_fn = self.bindgen.intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
+        let suspending_wrap_fn = self
+            .bindgen
+            .intrinsic_call_prefix(Intrinsic::SuspendingImportWrapperFn);
         uwriteln!(
             self.src.js,
             r#"
@@ -2852,22 +2861,12 @@ impl<'a> Instantiator<'a, '_> {
                     }}"
                 );
 
-                let err_ctx_new_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew));
-                // Store the options associated with this new error context for later use in the global array
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {err_ctx_new_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_idx},
-                             localTableIdx: {local_err_tbl_idx},
-                             readStrFn: trampoline{i}InputStr,
-                         }}
-                     );
-                    "
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextNew),
+                    &format!("{{ componentIdx: {component_idx}, localTableIdx: {local_err_tbl_idx}, readStrFn: trampoline{i}InputStr }}"),
                 );
+                // Store the options associated with this new error context for later use in the global array
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};");
             }
 
             Trampoline::ErrorContextDebugMessage {
@@ -2889,10 +2888,6 @@ impl<'a> Instantiator<'a, '_> {
                 else {
                     panic!("unexpected memory data model during error-context.debug-message");
                 };
-
-                let debug_message_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDebugMessage));
 
                 let realloc_fn_idx = realloc
                     .expect("missing realloc fn idx for error-context.debug-message")
@@ -2953,40 +2948,34 @@ impl<'a> Instantiator<'a, '_> {
                 );
 
                 let component_idx = instance.as_u32();
-                uwriteln!(
-                    self.src.js,
-                    "const trampoline{i} = {debug_message_fn}.bind(
-                         null,
-                         {{
-                             componentIdx: {component_idx},
-                             options: {options_obj},
-                             writeStrFn: trampoline{i}OutputStr,
-                         }}
-                     );"
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDebugMessage),
+                    &format!("{{ componentIdx: {component_idx}, options: {options_obj}, writeStrFn: trampoline{i}OutputStr }}"),
                 );
+                uwriteln!(self.src.js, "const trampoline{i} = {callback};");
             }
 
             Trampoline::ErrorContextDrop { instance, ty } => {
-                let drop_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop));
                 let local_err_tbl_idx = ty.as_u32();
                 let component_idx = instance.as_u32();
+                let callback = self.bindgen.intrinsic_bind_callback(
+                    Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextDrop),
+                    &format!(
+                        "{{ componentIdx: {component_idx}, localTableIdx: {local_err_tbl_idx} }}"
+                    ),
+                );
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const trampoline{i} = {drop_fn}.bind(
-                          null,
-                          {{ componentIdx: {component_idx}, localTableIdx: {local_err_tbl_idx} }},
-                      );
+                      const trampoline{i} = {callback};
                     "#
                 );
             }
 
             Trampoline::ErrorContextTransfer => {
-                let transfer_fn = self
-                    .bindgen
-                    .intrinsic(Intrinsic::ErrCtx(ErrCtxIntrinsic::ErrorContextTransfer));
+                let transfer_fn = self.bindgen.intrinsic_callback_reference(Intrinsic::ErrCtx(
+                    ErrCtxIntrinsic::ErrorContextTransfer,
+                ));
                 uwriteln!(self.src.js, "const trampoline{i} = {transfer_fn};");
             }
 

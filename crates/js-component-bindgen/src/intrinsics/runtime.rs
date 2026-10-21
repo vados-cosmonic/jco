@@ -9,10 +9,12 @@ use std::fmt::Write;
 
 mod component;
 mod core;
+mod error_context;
 mod waitable;
 pub(crate) use self::component::{ComponentContext, import as component_import};
 pub(crate) use self::core::CoreContext;
 pub(crate) use self::core::import as core_import;
+pub(crate) use self::error_context::{ErrCtxContext, import as err_ctx_import};
 pub(crate) use self::waitable::{WaitableContext, import as waitable_import};
 
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
@@ -24,6 +26,7 @@ pub(crate) enum RuntimeContext {
     Core(CoreContext),
     Component(ComponentContext),
     Waitable(WaitableContext),
+    ErrCtx(ErrCtxContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -88,6 +91,7 @@ impl RuntimeContext {
         .chain(CoreContext::get_global_names())
         .chain(ComponentContext::get_global_names())
         .chain(WaitableContext::get_global_names())
+        .chain(ErrCtxContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -95,6 +99,7 @@ impl RuntimeContext {
             Self::Core(context) => context.local_name(),
             Self::Component(context) => context.local_name(),
             Self::Waitable(context) => context.local_name(),
+            Self::ErrCtx(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -125,6 +130,7 @@ impl RuntimeContext {
             Self::Core(context) => return context.initializer(),
             Self::Component(context) => return context.initializer(),
             Self::Waitable(context) => return context.initializer(),
+            Self::ErrCtx(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -214,6 +220,7 @@ impl RuntimeContext {
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
+            Self::ErrCtx(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -249,6 +256,7 @@ impl RuntimeContext {
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
+            Self::ErrCtx(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"

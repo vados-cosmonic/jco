@@ -309,6 +309,33 @@ impl IntrinsicBinding {
         format!("{}{})", self.call_prefix(!operands.is_empty()), operands)
     }
 
+    /// A host callback with no pre-existing partial application. Inline keeps
+    /// its original identity; named calls bind only their capability context.
+    pub(crate) fn callback_reference(self) -> String {
+        match self {
+            Self::Runtime {
+                local_name,
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::Call,
+                        context: Some(context),
+                        ..
+                    },
+            } => format!("{local_name}.bind(void 0, {})", context.local_name()),
+            Self::Inline { local_name }
+            | Self::Runtime {
+                local_name,
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::Call,
+                        context: None,
+                        ..
+                    },
+            } => local_name.to_owned(),
+            _ => panic!("runtime values and constructors are not operation callbacks"),
+        }
+    }
+
     /// Partially apply a real callback, including its selected capability owner.
     pub(crate) fn bind_callback(self, operands: &str) -> String {
         let name = self.local_name();
@@ -3150,6 +3177,10 @@ impl Intrinsic {
             };
         }
         match self {
+            Self::ErrCtx(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::err_ctx_import(*intrinsic),
+            },
             Self::Waitable(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::waitable_import(*intrinsic),
