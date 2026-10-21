@@ -82,7 +82,7 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
 }
 
 test.concurrent.each([
-    { mutation: 'waitable.WaitableSet = undefined;', error: 'waitable.WaitableSet must be a function' },
+    { mutation: 'waitable.waitableSetNew = undefined;', error: 'waitable.waitableSetNew must be a function' },
     { mutation: 'waitable.waitableSetPoll = null;', error: 'waitable.waitableSetPoll must be a function' },
 ])('rejects invalid waitable providers: $error', async ({ mutation, error }) => {
     const dir = await getTmpDir();
@@ -114,20 +114,23 @@ test.concurrent.each([false, true])(
             files['waitable.js'] = new TextEncoder().encode(
                 new TextDecoder().decode(files['waitable.js']) +
                     `
-export { Waitable, WaitableSet };
+${external ? 'export const TestWaitable = _jcoIntrinsics.waitable.Waitable; export const TestWaitableSet = _jcoIntrinsics.waitable.WaitableSet;' : 'export { Waitable as TestWaitable, WaitableSet as TestWaitableSet };'}
 export function testPollMismatch() {
- const previous = getCurrentTask;
- getCurrentTask = () => ({ componentIdx: 77 });
+ const tasks = ${external ? '_jcoIntrinsics.asyncTask.tasksByComponent' : 'ASYNC_TASKS_BY_COMPONENT_IDX'};
+ const previous = tasks.get(0);
+ tasks.set(0, [{ id: 1n, componentIdx: 77, task: { id: () => 1n } }]);
  try { return waitableSetPoll({ componentIdx: 0 }, 1, 0); }
- finally { getCurrentTask = previous; }
+ finally { if (previous) tasks.set(0, previous); else tasks.delete(0); }
 }
 `,
             );
             await writeFile(join(dir, 'package.json'), JSON.stringify({ type: 'module' }));
             await writeFiles(files, { baseDir: dir });
-            const { Waitable, WaitableSet, testPollMismatch } = await import(
-                pathToFileURL(join(dir, 'waitable.js')).href
-            );
+            const {
+                TestWaitable: Waitable,
+                TestWaitableSet: WaitableSet,
+                testPollMismatch,
+            } = await import(pathToFileURL(join(dir, 'waitable.js')).href);
             assert.throws(testPollMismatch, 'task component idx [77] != component instance ID [0]');
             const w = new Waitable({});
             const set = new WaitableSet(0);

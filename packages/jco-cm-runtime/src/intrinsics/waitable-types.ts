@@ -5,7 +5,7 @@ export interface WaitableSuspendOptions {
     readyFn(): boolean;
     cancellable: boolean;
 }
-/** Task operations used by waitable sets while tasks remain generated inline. */
+/** Task operations used by waitable sets, including older bindings' inline tasks. */
 export interface WaitableTask {
     componentIdx(): number;
     deliverPendingCancel(options: { cancellable: boolean }): boolean;

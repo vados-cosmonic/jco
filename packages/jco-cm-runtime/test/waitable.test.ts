@@ -297,5 +297,8 @@ test.concurrent('invalid handles trap in the selected realm and mismatched task 
     componentIdx = 3;
     expect(() => waitable.waitableSetPoll(ctx, w, 0)).toThrow('task component idx [3] != component instance ID [0]');
     expect(() => waitable.waitableSetDrop(0, w)).toThrow('task component idx [3]');
-    expect(() => create().waitable.waitableSetDrop(0, w)).toThrow('waitableContext.getCurrentTask');
+    expect(() => create().waitable.waitableSetDrop(0, w)).toThrow('invalid/missing async task');
+    expect(() => create({ waitableContext: {} }).waitable.waitableSetDrop(0, w)).toThrow(
+        'waitableContext.getCurrentTask',
+    );
 });

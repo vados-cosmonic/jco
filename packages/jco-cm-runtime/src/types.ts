@@ -6,6 +6,7 @@ import type { CoreContext, CoreIntrinsics } from './intrinsics/core-types.js';
 import type { ComponentContext, ComponentIntrinsics, ComponentTrapMessages } from './intrinsics/component-types.js';
 import type { WaitableContext, WaitableIntrinsics } from './intrinsics/waitable-types.js';
 import type { ErrorContextIntrinsics } from './intrinsics/error-context-types.js';
+import type { AsyncTaskContext, AsyncTaskIntrinsics } from './intrinsics/async-task-types.js';
 
 export const CM_RUNTIME_API_VERSION = 1 as const;
 
@@ -28,6 +29,7 @@ export interface RuntimePlatform {
         readonly compileStreaming?: typeof WebAssembly.compileStreaming;
         readonly instantiate?: typeof WebAssembly.instantiate;
         readonly Instance?: typeof WebAssembly.Instance;
+        readonly Global?: typeof WebAssembly.Global;
         readonly Suspending?: new (fn: (...args: number[]) => unknown) => WebAssembly.ImportValue;
     };
 }
@@ -39,7 +41,7 @@ export interface RuntimeOptions {
     readonly nodejsCompat: boolean;
     readonly asyncDeterminism: AsyncDeterminism;
     readonly platform?: Partial<RuntimePlatform>;
-    /** Lazy access to task intrinsics that are still generated inline. */
+    /** Overrides for task lookup/factories, including older bindings' inline tasks. */
     readonly resourceTasks?: ResourceTaskContext;
     /** Compiler-owned FACT trap discriminants and their messages. */
     readonly factTrapMessages?: Readonly<Record<number, string>>;
@@ -51,6 +53,8 @@ export interface RuntimeOptions {
     readonly waitableContext?: WaitableContext;
     /** Trap messages supplied by the compiler's Wasmtime version. */
     readonly componentTrapMessages?: ComponentTrapMessages;
+    /** Lazy recognition of future values whose implementation is still generated inline. */
+    readonly asyncTaskContext?: AsyncTaskContext;
 }
 
 export interface ResourceTableEntry {
@@ -131,6 +135,7 @@ export interface ResourceTaskContext {
 }
 
 export interface RuntimeIntrinsics {
+    readonly asyncTask: AsyncTaskIntrinsics;
     readonly errorContext: ErrorContextIntrinsics;
     readonly waitable: WaitableIntrinsics;
     readonly component: ComponentIntrinsics;

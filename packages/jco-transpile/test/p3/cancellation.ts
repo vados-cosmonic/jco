@@ -241,12 +241,18 @@ suite('subtask cancellation', () => {
 
         try {
             const source = await readFile(setup.esModuleOutputPath, 'utf8');
-            const taskMapDeclaration = 'const ASYNC_TASKS_BY_COMPONENT_IDX = new Map();';
+            const usesExternalTasks = source.includes('const _jcoIntrinsics =');
+            const taskMapDeclaration = usesExternalTasks
+                ? 'const _jcoIntrinsics = _jcoRuntime.intrinsics;'
+                : 'const ASYNC_TASKS_BY_COMPONENT_IDX = new Map();';
+            const taskMap = usesExternalTasks
+                ? '_jcoIntrinsics.asyncTask.tasksByComponent'
+                : 'ASYNC_TASKS_BY_COMPONENT_IDX';
             const instrumented = source.replace(
                 taskMapDeclaration,
                 `${taskMapDeclaration}\n` +
                     `globalThis.${taskCountKey} = () => ` +
-                    'Array.from(ASYNC_TASKS_BY_COMPONENT_IDX.values(), tasks => tasks.length)' +
+                    `Array.from(${taskMap}.values(), tasks => tasks.length)` +
                     '.reduce((total, count) => total + count, 0);',
             );
             assert.notEqual(instrumented, source, 'failed to install the runtime task-count probe');

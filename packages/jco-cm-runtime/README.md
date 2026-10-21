@@ -62,7 +62,7 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.core`, `intrinsics.component`, `intrinsics.resource`, `intrinsics.conversion`,
-`intrinsics.waitable`, `intrinsics.errorContext`, `intrinsics.jsHelper`,
+`intrinsics.asyncTask`, `intrinsics.waitable`, `intrinsics.errorContext`, `intrinsics.jsHelper`,
 `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
@@ -114,8 +114,8 @@ arrive through `options.factTrapMessages`.
 the enclosing registers; asynchronous scopes clear the completing task while
 preserving another component's active task. During migration, suspending imports
 use lazy `options.coreContext` callbacks to consult the generated module's
-component and task helpers. Component helpers now use the external runtime;
-task helpers remain inline. Providers must defer these callbacks until an import runs,
+component and task helpers. Both namespaces now use the external runtime.
+Providers must defer these callbacks until an import runs,
 after generated task state has initialized. `CoreContext`, `TaskMeta`, and
 `TaskRegisters` describe this contract. The existing `resourceTasks` bridge
 remains supported for bindings generated before core helpers moved into the
@@ -137,7 +137,7 @@ index allocator. Synchronous release callbacks run before lock handoff, and each
 scheduler tick resumes at most one task, preserving JSPI task-register ordering.
 Backpressure waiters resolve when the counter reaches zero and remove their
 handlers. `ComponentTask`, `SuspendedTask`, and `AdmissionTicket` describe the
-structural scheduler contracts while task implementations remain inline.
+structural scheduler contracts shared with task implementations.
 
 `guardMayLeave` and `guardTrap` preserve the wrapped function's receiver and
 return value. Trap recording uses the selected `WebAssembly.RuntimeError` and
@@ -181,6 +181,40 @@ wait, poll, or drop needs them, after generated task state initializes.
 waitables or sets, joining them, and calling `removeWaitableSet` need no task callbacks.
 The legacy standalone `Waitable.waitForPendingEvent` hook accepts a scheduler
 with `waitUntil`; generated bindings do not use that hook.
+
+### Async tasks
+
+`intrinsics.asyncTask` implements all 25 helpers from bindgen's `p3/async_task.rs`.
+`AsyncTask` and `AsyncSubtask` are raw constructors with per-store IDs. The
+`tasksByComponent` map, current-task ID/component arrays, and symmetric-call
+stack share that store. Providers delegating default methods must preserve
+these objects and constructors, alongside the core task register, component
+state, resource scopes and waitable classes.
+
+`currentTaskMayBlock` and `asyncBlockingCallDepth` expose mutable
+`WebAssembly.Global` objects, created lazily using the selected platform's
+`Global` constructor. Runtime creation does not require that constructor until
+a task register is accessed. Alternative providers can preserve lazy properties
+with `Object.getOwnPropertyDescriptors` when cloning the namespace.
+
+Task helpers manage context slots, call entry, suspension, callbacks, result
+publication, cancellation and exit. Ready entry and callback paths remain
+synchronous; queued entry respects backpressure and FIFO admission. Cancellation
+before entry retires the task, while entered tasks deliver cancellation only
+at cancellable waits. Subtasks use the component handle table and retain host
+pending results for disposal when cancelled. Symmetric guest calls restore the
+caller register and may-block value when they exit.
+
+Generated bindings supply `options.asyncTaskContext.isFutureValue` as a lazy
+check against their remaining inline Future class. It is consulted only when
+publishing a result whose future layer must be preserved. Other task operations
+need no future callback. The runtime supplies shared task defaults for core,
+resource and waitable operations; explicitly supplied legacy `coreContext`,
+`resourceTasks` and `waitableContext` objects retain precedence. Event storage
+still uses the generated host callback until those helpers move into the package.
+
+`AsyncTask`, `AsyncSubtask`, `AsyncTaskIntrinsics`, the task options, call
+metadata, lift/lower callback contexts, and scheduler contracts describe this API.
 
 ### Error contexts
 
@@ -292,19 +326,20 @@ Freed indices are reused in LIFO order.
 `resource.state` holds per-store handle tables, allocator maps, scope counters,
 scope-to-task mappings, and borrow lists. Generated code accesses mutable fields
 directly, so replacing a borrow list or incrementing a counter remains visible
-to both runtime methods and inline task helpers. Providers that delegate methods
+to both runtime methods and generated bindings. Providers that delegate methods
 to this implementation must preserve its state object. `ResourceState`,
 `HandleIndexSpace`, and `ResourceBorrowTask` describe these shared structures.
 
-During this migration, generated bindings pass lazy callbacks through
-`options.resourceTasks` when resource transfers or destructors need task helpers
-that remain inline. `getCurrentTask` returns the destination component's active
+Generated bindings can pass lazy callbacks through `options.resourceTasks` to
+select their task helpers, including the inline tasks of older API-v1 bindings.
+`getCurrentTask` returns the destination component's active
 borrow task; `createTask` and `withTask` supply the destructor's task lifecycle
 and scoped task register. Providers must defer these callbacks until a resource
 operation runs: generated task state initializes after runtime creation.
 `ResourceTaskContext` and `ResourceDestructorTask` describe this bridge.
-Direct users can allocate and transfer resources without a task context;
-calling a destructor requires `createTask` and `withTask`.
+Direct users get the runtime's shared task factory and register when no override
+is supplied. An explicit override must provide `createTask` and `withTask` to
+call destructors.
 
 Incompatible changes to this table encoding or these method contracts require
 a new JavaScript CM runtime API version, independently of the npm package version.

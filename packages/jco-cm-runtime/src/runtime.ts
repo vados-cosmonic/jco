@@ -8,6 +8,9 @@ import { createComponentIntrinsics } from './intrinsics/component.js';
 import { createWaitableClasses } from './intrinsics/waitable-classes.js';
 import { createWaitableIntrinsics } from './intrinsics/waitable.js';
 import { createErrorContextIntrinsics } from './intrinsics/error-context.js';
+import { createAsyncTaskIntrinsics } from './intrinsics/async-task.js';
+import type { AsyncTaskIntrinsics } from './intrinsics/async-task-types.js';
+import type { CoreIntrinsics } from './intrinsics/core-types.js';
 import {
     CM_RUNTIME_API_VERSION,
     type ComponentModelRuntime,
@@ -32,21 +35,62 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
         throw new TypeError('Jco Component Model runtime requires WebAssembly.RuntimeError');
     }
 
-    const resource = createResourceIntrinsics(platform.WebAssembly.RuntimeError, options.resourceTasks);
-    const core = createCoreIntrinsics(options, platform, resource);
+    let asyncTask: AsyncTaskIntrinsics;
+    let core: CoreIntrinsics;
+    // Resolve these only when an operation runs, after every namespace is ready.
+    // Older bindings' callbacks still take precedence over the shared runtime tasks.
+    const resource = createResourceIntrinsics(
+        platform.WebAssembly.RuntimeError,
+        options.resourceTasks ?? {
+            getCurrentTask(componentIdx) {
+                const meta = core.getCurrentTaskMeta(componentIdx);
+                return meta ? asyncTask.getCurrentTask(componentIdx, meta.taskID)?.task : undefined;
+            },
+            createTask: (args) => asyncTask.createNewCurrentTask(args)[0],
+            withTask: (args) => core.withCurrentTaskMeta(args),
+        },
+    );
+    core = createCoreIntrinsics(
+        {
+            ...options,
+            coreContext: options.coreContext ?? {
+                checkMayLeave: (idx) => component.checkMayLeave(idx),
+                recordTrap: (idx, err, converts) => component.recordTrap(idx, err, converts),
+                throwIfInterrupted: (idx) => component.getOrCreateAsyncState(idx).throwIfInterrupted(),
+                getCurrentTask: (idx, id) => asyncTask.getCurrentTask(idx, id)?.task,
+                currentTaskMayBlock: () => asyncTask.currentTaskMayBlock.value,
+            },
+        },
+        platform,
+        resource,
+    );
     const waitableClasses = createWaitableClasses(core);
     const component = createComponentIntrinsics(options, core, resource, waitableClasses.Waitable);
+    const conversion = createConversionIntrinsics(options.strict);
+    asyncTask = createAsyncTaskIntrinsics(options, platform, core, component, resource, waitableClasses, conversion);
+    const waitable = createWaitableIntrinsics(
+        {
+            ...options,
+            waitableContext: options.waitableContext ?? {
+                getCurrentTask: (idx) => asyncTask.getCurrentTask(idx),
+            },
+        },
+        core,
+        component,
+        waitableClasses,
+    );
     return {
         apiVersion: CM_RUNTIME_API_VERSION,
         intrinsics: {
             core,
+            asyncTask,
             component,
             errorContext: createErrorContextIntrinsics(core, component),
-            waitable: createWaitableIntrinsics(options, core, component, waitableClasses),
+            waitable,
             webidl: createWebIdlIntrinsics(),
             string: createStringIntrinsics(),
             jsHelper: createJsHelperIntrinsics(),
-            conversion: createConversionIntrinsics(options.strict),
+            conversion,
             resource,
         },
     };

@@ -1,6 +1,6 @@
 import type { RepTable } from './core-types.js';
 
-/** The task operations used by component scheduling; tasks may still be generated inline. */
+/** Task operations shared by runtime scheduling and older bindings' inline tasks. */
 export interface ComponentTask {
     id(): bigint;
     componentIdx(): number;

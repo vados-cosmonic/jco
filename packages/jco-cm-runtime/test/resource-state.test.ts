@@ -317,7 +317,7 @@ test.concurrent.each(['success', 'throw', 'exit-throw', 'already-exited'] as con
 );
 
 test.concurrent('destructors report a missing task bridge before invoking the guest', () => {
-    const resource = createResource();
+    const resource = createResource({});
     let called = false;
     expect(() =>
         resource.callDestructor({

@@ -1683,10 +1683,10 @@ mod tests {
         assert!(source.contains("getCurrentTask: componentIdx =>"));
         assert!(source.contains("createTask: args => createNewCurrentTask(args)[0]"));
         assert!(source.contains("withTask: args => _withGlobalCurrentTaskMeta(args)"));
-        // Task scopes and the external resource implementation share one state.
-        assert!(source.contains("++_jcoIntrinsics.resource.state.scopeCounter"));
-        assert!(source.contains("_jcoIntrinsics.resource.state.scopeTasks.set("));
-        assert!(source.contains("_jcoIntrinsics.resource.state.scopeTasks.delete("));
+        // Task scopes now live in the runtime with the resource implementation.
+        assert!(source.contains("asyncTask.createNewCurrentTask must be a function"));
+        assert!(!source.contains("++_jcoIntrinsics.resource.state.scopeCounter"));
+        assert!(!source.contains("class AsyncTask"));
         for name in [
             "RESOURCE_SCOPE_ID",
             "RESOURCE_CALL_BORROWS",
@@ -2188,6 +2188,121 @@ mod tests {
     }
 
     #[test]
+    fn async_task_runtime_preserves_values_and_discovers_only_the_lazy_future_bridge() {
+        use AsyncTaskIntrinsic::*;
+        let variants = [
+            CurrentTaskMayBlock,
+            AsyncBlockingCallDepth,
+            AsyncBlockedConstant,
+            AsyncSubtaskClass,
+            AsyncTaskClass,
+            ContextGet,
+            ContextSet,
+            GetCurrentTask,
+            CreateNewCurrentTask,
+            ClearCurrentTask,
+            GlobalAsyncCurrentTaskMap,
+            GlobalAsyncCurrentTaskIds,
+            GlobalAsyncCurrentComponentIdxs,
+            SubtaskCancel,
+            SubtaskDrop,
+            TaskCancel,
+            TaskReturn,
+            Yield,
+            UnpackCallbackResult,
+            DriverLoop,
+            LowerImport,
+            LowerImportBackwardsCompat,
+            EnterSymmetricSyncGuestCall,
+            ExitSymmetricSyncGuestCall,
+            SymmetricSyncGuestCallStack,
+        ];
+        let mut intrinsics = BTreeSet::from_iter(variants.map(Intrinsic::AsyncTask));
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        for variant in variants {
+            let intrinsic = Intrinsic::AsyncTask(variant);
+            let IntrinsicBinding::Runtime { path, kind, .. } = intrinsic.binding(true) else {
+                panic!("async-task helper must be external");
+            };
+            assert_eq!(path, variant.runtime_path());
+            assert!(source.contains(&format!("{path} must be a ")));
+            match variant {
+                AsyncTaskClass | AsyncSubtaskClass => assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "function"
+                    }
+                )),
+                AsyncBlockedConstant => assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "number"
+                    }
+                )),
+                CurrentTaskMayBlock
+                | AsyncBlockingCallDepth
+                | GlobalAsyncCurrentTaskMap
+                | GlobalAsyncCurrentTaskIds
+                | GlobalAsyncCurrentComponentIdxs
+                | SymmetricSyncGuestCallStack => assert!(matches!(
+                    kind,
+                    RuntimeIntrinsicKind::Value {
+                        value_type: "object"
+                    }
+                )),
+                _ => assert!(matches!(kind, RuntimeIntrinsicKind::Method)),
+            }
+            assert!(matches!(
+                intrinsic.binding(false),
+                IntrinsicBinding::Inline { .. }
+            ));
+            assert!(!source.contains(&format!("function {}(", variant.name())));
+        }
+        assert!(source.contains(
+            "asyncTaskContext: { isFutureValue: value => value instanceof FutureValue }"
+        ));
+        assert!(source.contains("class FutureValue"));
+        assert!(!source.contains("class AsyncTask"));
+        assert!(!source.contains("class AsyncSubtask"));
+        assert!(!source.contains("const ASYNC_TASKS_BY_COMPONENT_IDX = new Map()"));
+        assert!(!source.contains("const CURRENT_TASK_MAY_BLOCK = typeof WebAssembly"));
+    }
+
+    #[test]
+    fn async_task_lookup_and_values_do_not_request_future_implementation() {
+        for variant in [
+            AsyncTaskIntrinsic::GetCurrentTask,
+            AsyncTaskIntrinsic::CurrentTaskMayBlock,
+            AsyncTaskIntrinsic::AsyncBlockedConstant,
+            AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+        ] {
+            let mut intrinsics = BTreeSet::from([Intrinsic::AsyncTask(variant)]);
+            let opts = TranspileOpts::builder()
+                .name("test".into())
+                .cm_runtime_es_module("runtime".into())
+                .build();
+            let source = render_intrinsics(
+                RenderIntrinsicsArgs::builder()
+                    .intrinsics(&mut intrinsics)
+                    .transpile_opts(&opts)
+                    .build(),
+            );
+            assert_eq!(intrinsics.len(), 1);
+            assert!(!source.contains("asyncTaskContext:"));
+            assert!(!source.contains("class Future"));
+        }
+    }
+
+    #[test]
     fn error_context_runtime_preserves_shared_tables_without_inline_dependencies() {
         use ErrCtxIntrinsic::*;
         let variants = [
@@ -2305,7 +2420,8 @@ mod tests {
                 "storeEventInComponentMemory: args => _storeEventInComponentMemory(args),"
             )
         );
-        assert!(source.contains("function getCurrentTask("));
+        assert!(!source.contains("function getCurrentTask("));
+        assert!(source.contains("asyncTask.getCurrentTask must be a function"));
         assert!(source.contains("function _storeEventInComponentMemory("));
         assert!(!source.contains("componentContext:"));
     }
@@ -2916,6 +3032,9 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                 if let Intrinsic::Waitable(waitable) = intrinsic {
                     waitable.require_runtime_dependencies(args);
                 }
+                if let Intrinsic::AsyncTask(task) = intrinsic {
+                    task.require_runtime_dependencies(args);
+                }
                 intrinsic.require_core_runtime_dependencies(args);
                 if intrinsic.conditional_suspending_wasm().is_some() {
                     source.push_str(&intrinsic.register_conditional_suspending_js(args));
@@ -2967,6 +3086,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
         let core_options = core::runtime_options(args);
         let component_options = ComponentIntrinsic::runtime_options(args);
         let waitable_options = WaitableIntrinsic::runtime_options(args);
+        let async_task_options = AsyncTaskIntrinsic::runtime_options(args);
         uwriteln!(
             output,
             r#"
@@ -2987,6 +3107,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
                     {core_options}
                     {component_options}
                     {waitable_options}
+                    {async_task_options}
                 }});
                 if ({CM_RUNTIME_LOCAL_NAME}?.apiVersion !== {CM_RUNTIME_API_VERSION}) {{
                     throw new Error(`incompatible Jco JavaScript Component Model runtime API instance: requested {CM_RUNTIME_API_VERSION}, received ${{{CM_RUNTIME_LOCAL_NAME}?.apiVersion}}`);
@@ -3183,6 +3304,11 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::AsyncTask(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: intrinsic.runtime_kind(),
+            },
             Self::ErrCtx(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),

@@ -7,7 +7,7 @@ use crate::intrinsics::conversion::ConversionIntrinsic;
 use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::waitable::WaitableIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
-use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs};
+use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, RuntimeIntrinsicKind};
 use crate::source::Source;
 use crate::uwriteln;
 
@@ -272,6 +272,86 @@ pub enum AsyncTaskIntrinsic {
 }
 
 impl AsyncTaskIntrinsic {
+    pub(crate) fn runtime_path(&self) -> &'static str {
+        match self {
+            Self::CurrentTaskMayBlock => "asyncTask.currentTaskMayBlock",
+            Self::AsyncBlockingCallDepth => "asyncTask.asyncBlockingCallDepth",
+            Self::AsyncBlockedConstant => "asyncTask.asyncBlockedCode",
+            Self::AsyncSubtaskClass => "asyncTask.AsyncSubtask",
+            Self::AsyncTaskClass => "asyncTask.AsyncTask",
+            Self::ContextGet => "asyncTask.contextGet",
+            Self::ContextSet => "asyncTask.contextSet",
+            Self::GetCurrentTask => "asyncTask.getCurrentTask",
+            Self::CreateNewCurrentTask => "asyncTask.createNewCurrentTask",
+            Self::ClearCurrentTask => "asyncTask.clearCurrentTask",
+            Self::GlobalAsyncCurrentTaskMap => "asyncTask.tasksByComponent",
+            Self::GlobalAsyncCurrentTaskIds => "asyncTask.currentTaskIds",
+            Self::GlobalAsyncCurrentComponentIdxs => "asyncTask.currentComponentIdxs",
+            Self::SubtaskCancel => "asyncTask.subtaskCancel",
+            Self::SubtaskDrop => "asyncTask.subtaskDrop",
+            Self::TaskCancel => "asyncTask.taskCancel",
+            Self::TaskReturn => "asyncTask.taskReturn",
+            Self::Yield => "asyncTask.asyncYield",
+            Self::UnpackCallbackResult => "asyncTask.unpackCallbackResult",
+            Self::DriverLoop => "asyncTask.driverLoop",
+            Self::LowerImport => "asyncTask.lowerImport",
+            Self::LowerImportBackwardsCompat => "asyncTask.lowerImportBackwardsCompat",
+            Self::EnterSymmetricSyncGuestCall => "asyncTask.symmetricSyncGuestCallEnter",
+            Self::ExitSymmetricSyncGuestCall => "asyncTask.symmetricSyncGuestCallExit",
+            Self::SymmetricSyncGuestCallStack => "asyncTask.symmetricSyncGuestCallStack",
+        }
+    }
+
+    pub(crate) fn runtime_kind(&self) -> RuntimeIntrinsicKind {
+        match self {
+            Self::AsyncSubtaskClass | Self::AsyncTaskClass => RuntimeIntrinsicKind::Value {
+                value_type: "function",
+            },
+            Self::AsyncBlockedConstant => RuntimeIntrinsicKind::Value {
+                value_type: "number",
+            },
+            Self::CurrentTaskMayBlock
+            | Self::AsyncBlockingCallDepth
+            | Self::GlobalAsyncCurrentTaskMap
+            | Self::GlobalAsyncCurrentTaskIds
+            | Self::GlobalAsyncCurrentComponentIdxs
+            | Self::SymmetricSyncGuestCallStack => RuntimeIntrinsicKind::Value {
+                value_type: "object",
+            },
+            _ => RuntimeIntrinsicKind::Method,
+        }
+    }
+
+    fn needs_future_bridge(&self) -> bool {
+        matches!(
+            self,
+            Self::AsyncTaskClass
+                | Self::CreateNewCurrentTask
+                | Self::LowerImportBackwardsCompat
+                | Self::EnterSymmetricSyncGuestCall
+        )
+    }
+
+    pub(crate) fn require_runtime_dependencies(&self, args: &RenderIntrinsicsArgs<'_>) {
+        if self.needs_future_bridge() {
+            args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
+        }
+    }
+
+    pub(crate) fn runtime_options(args: &RenderIntrinsicsArgs<'_>) -> String {
+        if !args
+            .intrinsics
+            .iter()
+            .any(|i| matches!(i, Intrinsic::AsyncTask(task) if task.needs_future_bridge()))
+        {
+            return String::new();
+        }
+        format!(
+            "asyncTaskContext: {{ isFutureValue: value => value instanceof {} }},",
+            AsyncFutureIntrinsic::FutureValueClass.name()
+        )
+    }
+
     /// Retrieve global names for this intrinsic
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         [
@@ -2436,7 +2516,7 @@ impl AsyncTaskIntrinsic {
 
                             // TODO(fix): we should be able to easily have the caller's meomry
                             // to lower into here, but it's not present in PrepareCall
-                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0];
+                            const memory = callMetadata.memory ?? this.#parentTask?.getReturnMemory() ?? {lookup_memories_for_component}({{ componentIdx: this.#parentTask?.componentIdx() }})[0]?.memory;
                             // NOTE: cancelled resolutions carry no value, so nothing is lowered
                             const returned = this.#state === {subtask_class}.State.RETURNED;
                             if (returned && callMetadata && !callMetadata.returnFn && (this.isAsync || callMetadata.funcTypeIsAsync) && callMetadata.resultPtr && memory) {{
@@ -2494,9 +2574,9 @@ impl AsyncTaskIntrinsic {
 
                         addLender(handle) {{
                             {debug_log_fn}('[{subtask_class}#addLender()] args', {{ handle }});
-                            if (!Number.isNumber(handle)) {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
+                            if (!handle || typeof handle.lends !== 'number') {{ throw new Error('missing/invalid lender handle [' + handle + ']'); }}
 
-                            if (this.#lenders.length === 0 || this.isResolved()) {{
+                            if (this.#lenders === null || this.isResolved()) {{
                                 throw new Error('subtask has no lendors or has already been resolved');
                             }}
 
@@ -2554,7 +2634,7 @@ impl AsyncTaskIntrinsic {
                         #getComponentState() {{
                             const state = {get_or_create_async_state_fn}(this.#componentIdx);
                             if (!state) {{
-                                throw new Error('invalid/missing async state for component [' + componentIdx + ']');
+                                throw new Error('invalid/missing async state for component [' + this.#componentIdx + ']');
                             }}
                             return state;
                         }}
@@ -3269,7 +3349,10 @@ impl AsyncTaskIntrinsic {
                             }}
 
                             const syncRes = subtask.getResult();
-                            if (createdTask) {{ createdTask.resolve([syncRes]); }}
+                            if (createdTask) {{
+                                createdTask.resolve([syncRes]);
+                                createdTask.exit();
+                            }}
 
                             return syncRes;
                         }}

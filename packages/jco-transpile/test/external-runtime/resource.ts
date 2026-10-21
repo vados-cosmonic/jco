@@ -55,7 +55,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
                     assert.notInclude(source, 'function callResourceDestructor(');
                     assert.notInclude(source, 'const HANDLE_TABLES =');
                     assert.notInclude(source, 'let RESOURCE_SCOPE_ID =');
-                    assert.include(source, '++_jcoIntrinsics.resource.state.scopeCounter');
+                    assert.notInclude(source, '++_jcoIntrinsics.resource.state.scopeCounter');
+                    assert.include(source, 'asyncTask.createNewCurrentTask must be a function');
                 }
                 const bindings = await import(pathToFileURL(join(dir, 'resources.js')).href);
                 const provider = await import(pathToFileURL(join(dir, 'provider.js')).href);
@@ -98,8 +99,8 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
 test.concurrent.each([
     { mutate: 'resource.tableFlag = null;', path: 'resource.tableFlag', type: 'number' },
     { mutate: 'resource.state.handleTables = null;', path: 'resource.state.handleTables', type: 'object' },
-    { mutate: 'delete resource.state;', path: 'resource.state.scopeCounter', type: 'number' },
-    { mutate: 'resource.state.scopeCounter = "0";', path: 'resource.state.scopeCounter', type: 'number' },
+    { mutate: 'delete resource.state;', path: 'resource.state.handleTables', type: 'object' },
+    { mutate: 'resource.callDestructor = null;', path: 'resource.callDestructor', type: 'function' },
 ])('rejects invalid $path before guest initialization', async ({ mutate, path, type }) => {
     const dir = await getTmpDir();
     try {
