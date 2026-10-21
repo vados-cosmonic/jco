@@ -9,6 +9,16 @@ pub enum WebIdlIntrinsic {
 }
 
 impl WebIdlIntrinsic {
+    pub(crate) fn runtime_import(&self) -> super::runtime::RuntimeImport {
+        use super::runtime::{RuntimeContext, RuntimeImport, RuntimeImportKind};
+        RuntimeImport {
+            suffix: "intrinsics/webidl",
+            export: self.name(),
+            context: Some(RuntimeContext::WebIdlProxyCache),
+            kind: RuntimeImportKind::Call,
+        }
+    }
+
     /// Retrieve global names for
     pub fn get_global_names() -> impl IntoIterator<Item = &'static str> {
         ["globalThisIdlProxy"]
@@ -86,6 +96,50 @@ impl WebIdlIntrinsic {
                     return (idlProxy = proxy(globalThis));
                 };
             "#),
+        }
+    }
+}
+
+#[cfg(all(test, feature = "external-runtime"))]
+mod tests {
+    use super::*;
+    use crate::TranspileOpts;
+    use crate::intrinsics::{Intrinsic, RenderIntrinsicsArgs, render_intrinsics, runtime};
+    use std::collections::BTreeSet;
+
+    #[test]
+    fn named_proxy_selects_only_its_cache_and_contextual_call() {
+        let intrinsic = Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy);
+        let mut intrinsics = BTreeSet::from([intrinsic]);
+        let opts = TranspileOpts::default();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .external_runtime(true)
+                .build(),
+        );
+        let mut imports = Source::default();
+        runtime::render_imports(&mut imports, &intrinsics, "custom-runtime");
+        assert!(
+            source
+                .contains("const _jcoWebIdlProxyCacheContext = _jcoInitializeWebIdlProxyCache();")
+        );
+        assert!(imports.contains("globalThisIdlProxy as globalThisIdlProxy"));
+        assert!(imports.contains("initializeWebIdlProxyCache as _jcoInitializeWebIdlProxyCache"));
+        assert_eq!(
+            intrinsic.binding(true).call(""),
+            "globalThisIdlProxy(_jcoWebIdlProxyCacheContext)"
+        );
+        for unrelated in [
+            "function globalThisIdlProxy",
+            "var idlProxy",
+            "new Map",
+            "TextEncoder",
+            "new Proxy",
+            "Symbol('",
+        ] {
+            assert!(!source.contains(unrelated), "{unrelated}");
         }
     }
 }

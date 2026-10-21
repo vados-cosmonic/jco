@@ -22,6 +22,7 @@ pub(crate) enum RuntimeContext {
     Utf16Decoder,
     Utf8Encoder,
     Utf16Encoding,
+    WebIdlProxyCache,
 }
 
 impl RuntimeContext {
@@ -40,6 +41,8 @@ impl RuntimeContext {
             "_jcoInitializeUtf8Encoder",
             "_jcoInitializeUtf16Encoding",
             "_jcoUtf16EncodingContext",
+            "_jcoWebIdlProxyCacheContext",
+            "_jcoInitializeWebIdlProxyCache",
         ]
     }
 
@@ -54,6 +57,7 @@ impl RuntimeContext {
             Self::Utf16Decoder => "utf16Decoder",
             Self::Utf8Encoder => "TEXT_ENCODER_UTF8",
             Self::Utf16Encoding => "_jcoUtf16EncodingContext",
+            Self::WebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
         }
     }
 
@@ -95,6 +99,11 @@ impl RuntimeContext {
                 "initializeUtf16Encoding",
                 "_jcoInitializeUtf16Encoding",
             ),
+            Self::WebIdlProxyCache => (
+                "intrinsics/webidl",
+                "initializeWebIdlProxyCache",
+                "_jcoInitializeWebIdlProxyCache",
+            ),
             _ => return None,
         };
         Some(RuntimeInitializer {
@@ -120,7 +129,8 @@ impl RuntimeContext {
             | Self::Utf8Decoder
             | Self::Utf16Decoder
             | Self::Utf8Encoder
-            | Self::Utf16Encoding => {
+            | Self::Utf16Encoding
+            | Self::WebIdlProxyCache => {
                 let initialize = self.initializer().unwrap().local_name;
                 uwriteln!(output, "const {local} = {initialize}();")
             }
