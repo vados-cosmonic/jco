@@ -21,7 +21,8 @@ resource operations and storage initializers from `intrinsics/resource`, selecte
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
-from `intrinsics/core`, and component state/scheduling from `intrinsics/component`.
+from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
+and waitable constructors/operations from `intrinsics/waitable`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -47,7 +48,7 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(118/274 logical intrinsic variants, including all 16 component variants);
+(126/274 logical intrinsic variants, including all 16 component and eight waitable variants);
 other families remain inline during migration.
 
 ```js
@@ -287,8 +288,8 @@ and forwards disposal with the host value's receiver.
 `initializeComponentAsyncStateClass(context)` returns a per-instantiation class,
 with its own statics and identity. It receives the selected representation-table
 constructor, shared handle allocator and flag/trap owners, narrow normalization
-and deadlock contexts, and a lazy `createWaitable` capability while waitables remain
-inline. State lookup receives the selected class and actual state Map. Handles
+and deadlock contexts, and the actual selected `Waitable` constructor. State
+lookup receives the selected class and actual state Map. Handles
 share the component allocator with resources; subtasks keep their own table.
 The class preserves FIFO lock handoff and admission, one resumption per tick,
 backpressure accounting and trap interruption. Backpressure waiters resolve only
@@ -302,3 +303,31 @@ replace the earlier core `checkMayLeave`, `recordTrap` and `throwIfInterrupted`
 callbacks with these actual contexts. Defaults use their own static operation
 dependencies; overriding a sibling export does not implicitly intercept them.
 Importing the module creates no state, timers, classes or waitables.
+
+## Waitable contract
+
+`intrinsics/waitable` satisfies `WaitableModule`. `initializeWaitableClass()`
+takes no context and returns a fresh constructor for the instantiation.
+`initializeWaitableSetClass(events)` captures only the selected live
+`TASK_CANCELLED` code. Component state receives the same selected waitable
+constructor, preserving class identity across tasks, component handles and
+`instanceof` checks without a factory callback or constructor dependency cycle.
+
+New-set operations receive the actual component lookup and selected set
+constructor. Wait/poll also receive the selected trap constructor, a narrow
+task lookup and host event-writer capability; poll alone receives `NONE`.
+Drop needs lookup, task metadata and the trap constructor. Join needs lookup
+and the trap constructor. Removal needs only the trap constructor and its
+per-call state/handle operand. Memory and canonical options remain per-call
+operands rather than shared runtime state.
+
+Task lookup and event writing remain lazy while those families are inline.
+Lookup preserves the generated helper's current-task fallback behavior. Waits
+retain their synchronous fast path, cancellation rules, waiter counts and live
+memory buffer; pending events are consumed once. Default operations call their
+own static dependencies, so overriding a sibling export does not intercept
+those calls. Required customization uses the explicit selected capabilities.
+
+Custom providers must publish the waitable subpath and replace the component
+constructor's earlier `createWaitable` callback with `Waitable`. Importing the
+subpath allocates no store state and reads no optional platform facilities.

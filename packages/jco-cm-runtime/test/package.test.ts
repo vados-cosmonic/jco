@@ -60,6 +60,7 @@ test('packed exports, standalone declarations, and independent provider conforma
                 'WebIdlModule',
                 'CoreModule',
                 'ComponentModule',
+                'WaitableModule',
             ].map((name) => {
                 const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                 expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -77,6 +78,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/js-helper',
             './intrinsics/resource',
             './intrinsics/string',
+            './intrinsics/waitable',
             './intrinsics/webidl',
             './runtime',
         ]);
@@ -129,12 +131,13 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
             import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
+            import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
-            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component };
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable };
             const expectedExports = ${JSON.stringify(contractExports)};
             const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max']);
             for (const [name, exports] of Object.entries(expectedExports)) {
@@ -171,8 +174,19 @@ test('packed exports, standalone declarations, and independent provider conforma
             const asyncState = components.initializeComponentAsyncStates();
             const normalization = { RuntimeError: Error, messages: components.initializeCoreTrapMessages({ unreachable: 'compiler unreachable' }) };
             const deadlock = { RuntimeError: Error, storeTrap, storeAsyncState, asyncState };
-            const State = components.initializeComponentAsyncStateClass({ RuntimeError: Error, RepTable: Rep, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: 'cannot enter' });
+            const waitables: RuntimeModuleContracts['intrinsics/waitable'] = waitable;
+            const Waitable = waitables.initializeWaitableClass();
+            const WaitableSet = waitables.initializeWaitableSetClass(core.initializeAsyncEventCodes());
+            const State = components.initializeComponentAsyncStateClass({ RuntimeError: Error, RepTable: Rep, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: 'cannot enter', Waitable });
             const state = components.getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);
+            const waitableContext = { RuntimeError: Error, lookup: { asyncState, ComponentAsyncState: State }, WaitableSet };
+            const setRep = waitables.waitableSetNew(waitableContext, 0);
+            const w = state.createWaitable({ target: 'packed' });
+            const wRep = state.handles.insert(w);
+            waitables.waitableJoin(waitableContext, 0, wRep, setRep);
+            if (!(w instanceof Waitable) || !(state.handles.get(setRep) instanceof WaitableSet) || !w.isInSet()) throw new Error('waitable constructor consumer failed');
+            w.drop();
+            waitables.removeWaitableSet({ RuntimeError: Error }, { state, waitableSetRep: setRep });
             instanceFlags.set(0, { value: 1 });
             custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
             const receiver = { answer: 42 };
@@ -222,6 +236,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
             .replaceAll('../src/intrinsics/core.js', '@bytecodealliance/jco-cm-runtime/intrinsics/core')
             .replaceAll('../src/intrinsics/component.js', '@bytecodealliance/jco-cm-runtime/intrinsics/component')
+            .replaceAll('../src/intrinsics/waitable.js', '@bytecodealliance/jco-cm-runtime/intrinsics/waitable')
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
@@ -271,6 +286,11 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
             const { clampGuest, typeCheckValidI32, initializeTaskRegisters } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
             const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
+            const { initializeWaitableClass, initializeWaitableSetClass } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
+            const Waitable = initializeWaitableClass(), WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
+            const w = new Waitable({}), set = new WaitableSet(0);
+            w.join(set); w.drop();
+            if (set.numWaitables() !== 0 || initializeWaitableClass() === Waitable) throw new Error('waitable capability leak');
             if (initializeStoreTrap().error !== null || checkMayLeave({ RuntimeError: Error, instanceFlags: { get: () => ({ value: 1 }) } }, 0) !== undefined) throw new Error('component capability leak');
             if (clampGuest(42, 0, 100) !== 42 || !typeCheckValidI32(42) || Object.keys(initializeTaskRegisters()).length) throw new Error('core capability leak');
             if (initializeWebIdlProxyCache().proxy !== undefined) throw new Error('eager WebIDL proxy');

@@ -71,3 +71,18 @@ const RepTable = initializeRepTableClass({ RuntimeError: WebAssembly.RuntimeErro
 const reps = new RepTable();
 assert.equal(reps.get(reps.insert(42)), 42);
 assert.notEqual(RepTable.FREE, initializeRepTableClass({ RuntimeError: Error }).FREE);
+
+const { initializeWaitableClass, initializeWaitableSetClass } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
+const Waitable = initializeWaitableClass();
+const WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
+const waitable = new Waitable({ target: 42 });
+const set = new WaitableSet(0);
+waitable.join(set);
+assert.deepEqual(set.targets(), [42]);
+waitable.setPendingEvent(() => ({ code: 1, payload0: 17, payload1: 23 }));
+assert.deepEqual(set.getPendingEvent(), { code: 1, payload0: 17, payload1: 23 });
+assert.equal(waitable.getPendingEvent(), null);
+waitable.drop();
+assert.equal(set.numWaitables(), 0);
+assert.notEqual(Waitable, initializeWaitableClass());

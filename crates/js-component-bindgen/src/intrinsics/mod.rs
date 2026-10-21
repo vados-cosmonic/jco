@@ -2805,6 +2805,10 @@ impl Intrinsic {
             };
         }
         match self {
+            Self::Waitable(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::waitable_import(*intrinsic),
+            },
             Self::Component(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::component_import(*intrinsic),

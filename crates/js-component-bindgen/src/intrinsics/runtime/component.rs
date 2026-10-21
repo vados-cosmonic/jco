@@ -1,9 +1,9 @@
 //! Central metadata for named component operations and their actual state owners.
-use super::super::{
-    Intrinsic, IntrinsicBinding, RenderIntrinsicsArgs, component::ComponentIntrinsic,
-    p3::waitable::WaitableIntrinsic,
+use super::super::{RenderIntrinsicsArgs, component::ComponentIntrinsic};
+use super::{
+    CoreContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
+    WaitableContext,
 };
-use super::{CoreContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer};
 use crate::{source::Source, uwriteln};
 use std::fmt::Write;
 use wasmtime_environ::Trap;
@@ -107,6 +107,7 @@ impl ComponentContext {
                 C(Self::StateLookup),
             ],
             Self::AsyncStateClass => &[
+                RuntimeContext::Waitable(WaitableContext::Class),
                 Core(CoreContext::RepTableClass),
                 RuntimeContext::HandleIndexSpaces,
                 C(Self::InstanceFlags),
@@ -124,7 +125,7 @@ impl ComponentContext {
             let arguments = match self {
                 Self::CoreTrapMessages => core_trap_messages_js(),
                 Self::AsyncStateClass => format!(
-                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, createWaitable: args => new Waitable(args) }}",
+                    "{{ RuntimeError: WebAssembly.RuntimeError, RepTable, indexSpaces: HANDLE_INDEX_SPACES, instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP, normalization: _jcoComponentNormalizeTrapContext, cannotEnter: {:?}, deadlock: _jcoComponentDeadlockContext, Waitable }}",
                     Trap::CannotEnterComponent.to_string()
                 ),
                 _ => String::new(),
@@ -225,24 +226,13 @@ pub(crate) fn import(intrinsic: ComponentIntrinsic) -> RuntimeImport {
         kind,
     }
 }
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    if let IntrinsicBinding::Runtime { import, .. } = intrinsic.binding(true)
-        && let Some(context) = import.context
-    {
-        let mut contexts = Vec::new();
-        context.collect(&mut contexts);
-        if contexts.contains(&RuntimeContext::Component(
-            ComponentContext::AsyncStateClass,
-        )) {
-            args.require_intrinsic(WaitableIntrinsic::WaitableClass);
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TranspileOpts, intrinsics::render_intrinsics};
+    use crate::{
+        TranspileOpts,
+        intrinsics::{Intrinsic, p3::waitable::WaitableIntrinsic, render_intrinsics},
+    };
     use std::collections::BTreeSet;
 
     fn generated(
@@ -269,7 +259,7 @@ mod tests {
     }
 
     #[test]
-    fn component_owners_select_one_class_and_defer_inline_waitables() {
+    fn component_owners_select_one_class_and_the_actual_waitable_constructor() {
         let (source, intrinsics) = generated([
             ComponentIntrinsic::ComponentAsyncStateClass,
             ComponentIntrinsic::GetOrCreateAsyncState,
@@ -290,15 +280,17 @@ mod tests {
                 .count(),
             1
         );
-        assert!(source.contains("createWaitable: args => new Waitable(args)"));
+        assert!(source.contains("deadlock: _jcoComponentDeadlockContext, Waitable"));
         assert!(source.contains("instanceFlags: INSTANCE_FLAGS, storeTrap: STORE_TRAP"));
         assert!(source.contains("asyncState: ASYNC_STATE, ComponentAsyncState"));
         assert!(source.contains("wasm trap: cannot enter component instance"));
         assert!(source.contains("wasm trap: wasm `unreachable` instruction executed"));
-        assert!(source.contains("class Waitable"));
+        assert!(source.contains("const Waitable = _jcoInitializeWaitableClass();"));
+        assert!(!source.contains("class Waitable"));
+        assert!(!source.contains("createWaitable: args =>"));
         assert!(!source.contains("class ComponentAsyncState"));
         assert!(!source.contains("function getOrCreateAsyncState("));
-        assert!(intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
+        assert!(!intrinsics.contains(&Intrinsic::Waitable(WaitableIntrinsic::WaitableClass)));
     }
 
     #[test]

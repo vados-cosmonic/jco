@@ -119,6 +119,14 @@
         "Component(GetOrCreateAsyncState)",
         "Component(BackpressureInc)",
         "Component(BackpressureDec)",
-        "Component(ComponentStateSetAllError)"
+        "Component(ComponentStateSetAllError)",
+        "Waitable(WaitableClass)",
+        "Waitable(WaitableSetClass)",
+        "Waitable(WaitableSetNew)",
+        "Waitable(WaitableSetWait)",
+        "Waitable(WaitableSetPoll)",
+        "Waitable(WaitableSetDrop)",
+        "Waitable(RemoveWaitableSet)",
+        "Waitable(WaitableJoin)"
     ]
 }
