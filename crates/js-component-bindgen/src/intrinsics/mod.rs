@@ -308,6 +308,41 @@ impl IntrinsicBinding {
     pub(crate) fn call(self, operands: &str) -> String {
         format!("{}{})", self.call_prefix(!operands.is_empty()), operands)
     }
+
+    /// Partially apply a real callback, including its selected capability owner.
+    pub(crate) fn bind_callback(self, operands: &str) -> String {
+        let name = self.local_name();
+        let arguments = match self {
+            Self::Runtime {
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::Call,
+                        context: Some(context),
+                        ..
+                    },
+                ..
+            } => {
+                let separator = if operands.is_empty() { "" } else { ", " };
+                format!("{}{separator}{operands}", context.local_name())
+            }
+            Self::Inline { .. }
+            | Self::Runtime {
+                import:
+                    RuntimeImport {
+                        kind: RuntimeImportKind::Call,
+                        context: None,
+                        ..
+                    },
+                ..
+            } => operands.to_owned(),
+            _ => panic!("runtime values and constructors cannot be bound as operations"),
+        };
+        if arguments.is_empty() {
+            format!("{name}.bind(null)")
+        } else {
+            format!("{name}.bind(null, {arguments})")
+        }
+    }
 }
 
 macro_rules! impl_from_intrinsic {
@@ -1439,16 +1474,17 @@ impl Intrinsic {
             // suspended stack resumes. EnterSyncCall instead leaves the newly
             // entered callee current (switchesTask), including after lock contention.
             Self::SuspendingImportWrapperFn => {
-                let get_or_create_async_state_fn = args.require_intrinsic(Intrinsic::Component(
-                    ComponentIntrinsic::GetOrCreateAsyncState,
-                ));
-                let record_trap_fn =
-                    args.require_intrinsic(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
+                let get_or_create_async_state_fn = args.intrinsic_call_prefix(
+                    Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
+                );
+                let record_trap_fn = args
+                    .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::RecordTrap));
                 let suspending_import_wrapper_fn =
                     args.require_intrinsic(Self::SuspendingImportWrapperFn);
                 let global_current_thread_meta_obj =
                     args.require_intrinsic(Self::GlobalCurrentThreadMeta);
-                let check_may_leave_fn = args.require_intrinsic(ComponentIntrinsic::CheckMayLeave);
+                let check_may_leave_fn =
+                    args.intrinsic_call_prefix(ComponentIntrinsic::CheckMayLeave);
                 let current_task_may_block =
                     args.require_intrinsic(p3::async_task::AsyncTaskIntrinsic::CurrentTaskMayBlock);
                 let get_current_thread =
@@ -1460,7 +1496,7 @@ impl Intrinsic {
                     r#"
                       function {suspending_import_wrapper_fn}(componentIdx, fn, syncOnly = false, switchesTask = false, convertsRangeErrors = true, callsHost = false) {{
                           return function (...args) {{
-                              {check_may_leave_fn}(componentIdx);
+                              {check_may_leave_fn}componentIdx);
                               const saved = {global_current_thread_meta_obj}[componentIdx] ?? null;
 
                               const savedThread = saved
@@ -1482,7 +1518,7 @@ impl Intrinsic {
                                       if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
                                       // A trap is recorded before it propagates: nothing else in
                                       // the store may run after it, not even a queued call.
-                                      throw {record_trap_fn}(componentIdx, err, convertsRangeErrors);
+                                      throw {record_trap_fn}componentIdx, err, convertsRangeErrors);
                                   }}
 
                                   {global_current_thread_meta_obj}[componentIdx] = saved;
@@ -1505,10 +1541,10 @@ impl Intrinsic {
                                       const result = await fn.apply(null, args);
                                       // The instance trapped while this stack was suspended: it
                                       // must not resume into guest code (Canonical ABI).
-                                      {get_or_create_async_state_fn}(componentIdx).throwIfInterrupted();
+                                      {get_or_create_async_state_fn}componentIdx).throwIfInterrupted();
                                       return result;
                                   }} catch (err) {{
-                                      throw {record_trap_fn}(componentIdx, err, convertsRangeErrors);
+                                      throw {record_trap_fn}componentIdx, err, convertsRangeErrors);
                                   }} finally {{
                                       {global_current_thread_meta_obj}[componentIdx] = saved;
                                       if (!switchesTask) {{ {global_current_thread_meta_obj}.current = saved; }}
@@ -3102,6 +3138,10 @@ impl Intrinsic {
             };
         }
         match self {
+            Self::Component(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::component_import(*intrinsic),
+            },
             Self::WebIdl(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: intrinsic.runtime_import(),

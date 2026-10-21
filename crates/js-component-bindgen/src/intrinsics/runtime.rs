@@ -7,7 +7,9 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod component;
 mod core;
+pub(crate) use self::component::{ComponentContext, import as component_import};
 pub(crate) use self::core::CoreContext;
 pub(crate) use self::core::import as core_import;
 
@@ -18,6 +20,7 @@ pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeContext {
     Core(CoreContext),
+    Component(ComponentContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -80,11 +83,13 @@ impl RuntimeContext {
         ]
         .into_iter()
         .chain(CoreContext::get_global_names())
+        .chain(ComponentContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
         match self {
             Self::Core(context) => context.local_name(),
+            Self::Component(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -113,6 +118,7 @@ impl RuntimeContext {
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (suffix, export, local_name) = match self {
             Self::Core(context) => return context.initializer(),
+            Self::Component(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -200,6 +206,7 @@ impl RuntimeContext {
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
             Self::Core(context) => context.dependencies(),
+            Self::Component(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -233,6 +240,7 @@ impl RuntimeContext {
         let local = self.local_name();
         match self {
             Self::Core(context) => context.render(output, args),
+            Self::Component(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -497,6 +505,7 @@ pub(crate) fn discover_inline_dependencies(
 ) {
     use super::{p3::async_task::AsyncTaskIntrinsic as T, resource::ResourceIntrinsic as R};
     core::discover(intrinsic, args);
+    component::discover(intrinsic, args);
     match intrinsic {
         Intrinsic::Resource(R::ResourceTransferBorrow | R::ResourceTransferBorrowValidLifting) => {
             args.require_intrinsic(Intrinsic::AsyncTask(T::GetCurrentTask));
