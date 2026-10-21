@@ -308,7 +308,8 @@ test.concurrent('selected event codes stay live and cancellation does not consum
     w.setPendingEvent(() => event);
     const t = task();
     t.cancel();
-    core.asyncEventCode.TASK_CANCELLED = 77;
+    // Deliberately exercise a JavaScript mutation outside the canonical literal type.
+    expect(Reflect.set(core.asyncEventCode, 'TASK_CANCELLED', 77)).toBe(true);
     expect(set.tryWait({ readyFn: () => true, task: t.value, cancellable: true })).toEqual({
         code: 77,
         payload0: 0,
