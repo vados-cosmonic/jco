@@ -42,8 +42,9 @@ Generated code reads and replaces their members directly, so operations observe
 the live values rather than captured snapshots. Every selected owner is created
 once per instantiation; importing the module creates no map or task.
 
-Borrow transfer accepts a lazy current-task lookup while tasks remain inline.
-Destructors receive only lazy `createTask` and `withTask` capabilities. Each
+Borrow transfer receives the actual task registers and a lazy task lookup while
+tasks remain inline. Destructors receive only lazy `createTask` and the actual
+`registers` owner. Each
 destructor creates a synchronous task with fresh context slots and restores the
 enclosing task after success or failure. Explicit disposal releases the handle
 before invoking a destructor and becomes a no-op on repeated disposal.

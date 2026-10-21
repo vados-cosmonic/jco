@@ -22,6 +22,10 @@ const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/in
 const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');
 const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
 const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
+const { clampGuest, typeCheckValidI32, initializeTaskRegisters } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
+if (clampGuest(42, 0, 100) !== 42 || !typeCheckValidI32(42) || Object.keys(initializeTaskRegisters()).length)
+    throw new Error('core capability leak');
 if (initializeWebIdlProxyCache().proxy !== undefined) throw new Error('eager WebIDL proxy');
 if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1)))
     throw new Error('string capability leak');

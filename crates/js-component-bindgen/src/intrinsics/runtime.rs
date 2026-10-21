@@ -7,12 +7,17 @@ use crate::{names::js_string_literal, source::Source, uwriteln};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write;
 
+mod core;
+pub(crate) use self::core::CoreContext;
+pub(crate) use self::core::import as core_import;
+
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 1;
 pub(crate) const VERSION_LOCAL: &str = "_jcoRuntimeApiVersion";
 pub(crate) const TABLE_GET_CONTEXT: &str = "_jcoResourceTableGetContext";
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
 pub(crate) enum RuntimeContext {
+    Core(CoreContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -73,10 +78,13 @@ impl RuntimeContext {
             "_jcoWebIdlProxyCacheContext",
             "_jcoInitializeWebIdlProxyCache",
         ]
+        .into_iter()
+        .chain(CoreContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
         match self {
+            Self::Core(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -104,6 +112,7 @@ impl RuntimeContext {
     /// Initializers return narrow state, never operation tables.
     pub(crate) fn initializer(self) -> Option<RuntimeInitializer> {
         let (suffix, export, local_name) = match self {
+            Self::Core(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -190,6 +199,7 @@ impl RuntimeContext {
 
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
+            Self::Core(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -201,8 +211,9 @@ impl RuntimeContext {
                 Self::HandleTables,
                 Self::ScopeId,
                 Self::CallBorrows,
+                Self::Core(CoreContext::GlobalCurrentTaskMeta),
             ],
-            Self::ResourceDestructor => &[],
+            Self::ResourceDestructor => &[Self::Core(CoreContext::GlobalCurrentTaskMeta)],
             _ => &[],
         }
     }
@@ -217,9 +228,11 @@ impl RuntimeContext {
         contexts.push(self);
     }
 
-    pub(crate) fn render(self, output: &mut Source, strict: bool) {
+    pub(crate) fn render(self, output: &mut Source, args: &super::RenderIntrinsicsArgs<'_>) {
+        let strict = args.transpile_opts.strict;
         let local = self.local_name();
         match self {
+            Self::Core(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -230,11 +243,11 @@ impl RuntimeContext {
             ),
             Self::ResourceTransferBorrow => uwriteln!(
                 output,
-                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, getCurrentTask: componentIdx => {{ const meta = _getGlobalCurrentTaskMeta(componentIdx); return meta ? getCurrentTask(componentIdx, meta.taskID)?.task : undefined; }} }};"
+                "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, tables: HANDLE_TABLES, scope: _jcoScopeIdContext, callBorrows: _jcoCallBorrowContext, registers: CURRENT_TASK_META, getTask: (componentIdx, taskID) => getCurrentTask(componentIdx, taskID)?.task }};"
             ),
             Self::ResourceDestructor => uwriteln!(
                 output,
-                "const {local} = {{ createTask: args => createNewCurrentTask(args)[0], withTask: args => _withGlobalCurrentTaskMeta(args) }};"
+                "const {local} = {{ registers: CURRENT_TASK_META, createTask: args => createNewCurrentTask(args)[0] }};"
             ),
             Self::ResourceTableGet => uwriteln!(
                 output,
@@ -281,6 +294,8 @@ pub(crate) enum RuntimeImportKind {
     },
     /// The binding refers to the selected context initializer's returned value.
     InitializedValue,
+    /// Selected class or native constructor; preserve new/instanceof/statics.
+    InitializedConstructor,
 }
 
 /// A named operation or initialized value, with separately selected capabilities.
@@ -481,14 +496,13 @@ pub(crate) fn discover_inline_dependencies(
     args: &super::RenderIntrinsicsArgs<'_>,
 ) {
     use super::{p3::async_task::AsyncTaskIntrinsic as T, resource::ResourceIntrinsic as R};
+    core::discover(intrinsic, args);
     match intrinsic {
         Intrinsic::Resource(R::ResourceTransferBorrow | R::ResourceTransferBorrowValidLifting) => {
-            args.require_intrinsic(Intrinsic::GetGlobalCurrentTaskMetaFn);
             args.require_intrinsic(Intrinsic::AsyncTask(T::GetCurrentTask));
         }
         Intrinsic::Resource(R::ResourceDestructorCall) => {
             args.require_intrinsic(Intrinsic::AsyncTask(T::CreateNewCurrentImplicitThread));
-            args.require_intrinsic(Intrinsic::WithGlobalCurrentTaskMetaFn);
         }
         _ => {}
     }
@@ -513,7 +527,8 @@ mod tests {
                 .external_runtime(true)
                 .build(),
         );
-        assert!(source.contains("getCurrentTask: componentIdx =>"));
+        assert!(source.contains("getTask: (componentIdx, taskID) =>"));
+        assert!(source.contains("const CURRENT_TASK_META = _jcoInitializeTaskRegisters();"));
         assert!(source.contains("function getCurrentTask("));
         assert!(!source.contains("function rscTableCreateBorrow("));
         assert!(source.contains("const HANDLE_TABLES"));

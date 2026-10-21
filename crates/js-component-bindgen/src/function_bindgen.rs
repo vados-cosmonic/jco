@@ -440,6 +440,19 @@ impl FunctionBindgen<'_> {
         intrinsic.binding(self.external_runtime).call(operands)
     }
 
+    fn intrinsic_call_prefix(&mut self, intrinsic: Intrinsic) -> String {
+        self.intrinsics.insert(intrinsic);
+        intrinsic.binding(self.external_runtime).call_prefix(true)
+    }
+
+    fn task_intrinsic_call_prefix(&mut self, intrinsic: Intrinsic) -> String {
+        if !self.skip_fn_call_task_management {
+            self.intrinsic_call_prefix(intrinsic)
+        } else {
+            intrinsic.binding(false).call_prefix(true)
+        }
+    }
+
     // Task-only templates may be built unconditionally, but must only be emitted
     // when task management is enabled.
     fn task_intrinsic(&mut self, intrinsic: Intrinsic) -> String {
@@ -925,7 +938,7 @@ impl FunctionBindgen<'_> {
                       }}
                       return {return_task_res};
                   }};
-                  const body = {wrapper}({{
+                  const body = {wrapper}{{
                       taskID: task.id(),
                       threadID,
                       componentIdx: task.componentIdx(),
@@ -939,7 +952,7 @@ impl FunctionBindgen<'_> {
             uwriteln!(
                 self.src,
                 r#"
-                  return {await_}{wrapper}({{
+                  return {await_}{wrapper}{{
                       taskID: task.id(),
                       threadID,
                       componentIdx: task.componentIdx(),
@@ -2265,14 +2278,14 @@ impl Bindgen for FunctionBindgen<'_> {
                 // whatever the component's ambient register names: another task's
                 // async wrapper may have overwritten and then cleared that register
                 // while this call was suspended in argument lowering.
-                let call_wrapper = self.task_intrinsic(Intrinsic::WithGlobalCurrentThreadMetaFn);
+                let call_wrapper = self.task_intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
                 if task_managed {
                     uwriteln!(
                         self.src,
                         r#"
                       {vars_init}
                       try {{
-                           {assignment_lhs} {call_prefix}{call_wrapper}({{
+                           {assignment_lhs} {call_prefix}{call_wrapper}{{
                                taskID: task.id(),
                                threadID,
                                componentIdx: task.componentIdx(),
@@ -2332,7 +2345,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 // At first, use the global current thread metadata, in case we are executing from
                 // inside a with-global-current-thread wrapper
                 let get_global_current_thread_meta_fn =
-                    self.task_intrinsic(Intrinsic::GetGlobalCurrentThreadMetaFn);
+                    self.task_intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 uwriteln!(
                     self.src,
@@ -2407,7 +2420,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     taskCreation: {{
                         parentTask = {current_task_get_fn}(
                             {component_idx_expr},
-                            {get_global_current_thread_meta_fn}({component_idx_expr})?.taskID,
+                            {get_global_current_thread_meta_fn}{component_idx_expr})?.taskID,
                         )?.task;
 
                         if (!parentTask) {{
@@ -2520,7 +2533,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     // Hand the raw host return value to the subtask, so it can be disposed
                     // if the guest cancels the call and discards the result
                     format!(
-                        r#"{call_prefix} {call_wrapper}({{
+                        r#"{call_prefix} {call_wrapper}{{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               threadID,
@@ -2534,7 +2547,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     )
                 } else if task_managed {
                     format!(
-                        r#"{call_prefix} {call_wrapper}({{
+                        r#"{call_prefix} {call_wrapper}{{
                               componentIdx: task.componentIdx(),
                               taskID: task.id(),
                               threadID,
@@ -2609,12 +2622,12 @@ impl Bindgen for FunctionBindgen<'_> {
                         {
                             match &self.resolve.types[*err_ty].kind {
                                 TypeDefKind::Type(Type::String) => {
-                                    self.intrinsic(Intrinsic::GetErrorPayloadString)
+                                    self.intrinsic_call_prefix(Intrinsic::GetErrorPayloadString)
                                 }
-                                _ => self.intrinsic(Intrinsic::GetErrorPayload),
+                                _ => self.intrinsic_call_prefix(Intrinsic::GetErrorPayload),
                             }
                         } else {
-                            self.intrinsic(Intrinsic::GetErrorPayload)
+                            self.intrinsic_call_prefix(Intrinsic::GetErrorPayload)
                         };
                         let trap_check = task_managed.then(|| format!(
                             "if ({get_component_state}({component_idx_expr}).markTrapped(e)) {{ throw e; }}"
@@ -2629,7 +2642,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                     : {{ tag: 'ok', val: {host_ret} }};
                             }} catch (e) {{
                                 {trap_check}
-                                ret = {{ tag: 'err', val: {err_payload}(e) }};
+                                ret = {{ tag: 'err', val: {err_payload}e) }};
                             }}
                             "#,
                             trap_check = trap_check.as_deref().unwrap_or_default(),

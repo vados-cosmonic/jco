@@ -274,8 +274,8 @@ impl IntrinsicBinding {
         }
     }
 
-    /// Render a call, inserting only the context required by this operation.
-    pub(crate) fn call(self, operands: &str) -> String {
+    /// Direct call opening for emitted argument blocks; never a JS wrapper.
+    pub(crate) fn call_prefix(self, has_operands: bool) -> String {
         let name = self.local_name();
         match self {
             Self::Runtime {
@@ -283,14 +283,13 @@ impl IntrinsicBinding {
                     RuntimeImport {
                         kind:
                             RuntimeImportKind::InitializedValue
+                            | RuntimeImportKind::InitializedConstructor
                             | RuntimeImportKind::Value
                             | RuntimeImportKind::LiveReference { .. },
                         ..
                     },
                 ..
-            } => {
-                panic!("initialized runtime values must be used as values")
-            }
+            } => panic!("runtime values and constructors must be used as values"),
             Self::Runtime {
                 import:
                     RuntimeImport {
@@ -300,11 +299,14 @@ impl IntrinsicBinding {
                 ..
             } => {
                 let context = context.local_name();
-                let separator = if operands.is_empty() { "" } else { ", " };
-                format!("{name}({context}{separator}{operands})")
+                let separator = if has_operands { ", " } else { "" };
+                format!("{name}({context}{separator}")
             }
-            _ => format!("{name}({operands})"),
+            _ => format!("{name}("),
         }
+    }
+    pub(crate) fn call(self, operands: &str) -> String {
+        format!("{}{})", self.call_prefix(!operands.is_empty()), operands)
     }
 }
 
@@ -2873,6 +2875,14 @@ impl RenderIntrinsicsArgs<'_> {
         }
     }
 
+    pub(crate) fn intrinsic_call_prefix(&self, intrinsic: impl Into<Intrinsic>) -> String {
+        let intrinsic = intrinsic.into();
+        self.require_intrinsic(intrinsic);
+        intrinsic
+            .binding(self.external_runtime_enabled())
+            .call_prefix(true)
+    }
+
     pub(crate) fn intrinsic_call(&self, intrinsic: impl Into<Intrinsic>, operands: &str) -> String {
         let intrinsic = intrinsic.into();
         self.require_intrinsic(intrinsic);
@@ -2929,6 +2939,9 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             intrinsic.render(&mut source, args);
         } else {
             runtime::discover_inline_dependencies(intrinsic, args);
+            if intrinsic.conditional_suspending_wasm().is_some() {
+                source.push_str(&intrinsic.register_conditional_suspending_js(args));
+            }
         }
         let discovered = args.take_discovered_intrinsics();
         for dependency in &discovered {
@@ -2966,7 +2979,7 @@ fn render_intrinsics_discovered(args: &mut RenderIntrinsicsArgs<'_>) -> Source {
             }
         }
         for context in contexts {
-            context.render(&mut output, args.transpile_opts.strict);
+            context.render(&mut output, args);
         }
     }
     let inline_conversion = |intrinsic| {
@@ -3082,6 +3095,12 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
+        if external_runtime && let Some(import) = runtime::core_import(*self) {
+            return IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import,
+            };
+        }
         match self {
             Self::WebIdl(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
