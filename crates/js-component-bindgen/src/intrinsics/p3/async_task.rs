@@ -611,7 +611,7 @@ impl AsyncTaskIntrinsic {
             Self::SubtaskDrop => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let subtask_drop_fn = render_args.require_intrinsic(Self::SubtaskDrop);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 uwriteln!(
@@ -620,7 +620,7 @@ impl AsyncTaskIntrinsic {
                     function {subtask_drop_fn}(componentIdx, subtaskWaitableRep) {{
                         {debug_log_fn}('[{subtask_drop_fn}()] args', {{ componentIdx, subtaskWaitableRep }});
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
                         if (!cstate.mayLeave) {{ throw new Error('component is not marked as may leave, cannot be cancelled'); }}
 
                         const subtask = cstate.handles.remove(subtaskWaitableRep);
@@ -673,7 +673,7 @@ impl AsyncTaskIntrinsic {
                 let subtask_cancel_fn = render_args.require_intrinsic(Self::SubtaskCancel);
                 let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let get_global_current_task_meta_fn =
@@ -688,7 +688,7 @@ impl AsyncTaskIntrinsic {
                     function {subtask_cancel_fn}(componentIdx, isAsync, subtaskRep, slowOnly = false) {{
                         {debug_log_fn}('[{subtask_cancel_fn}()] args', {{ componentIdx, isAsync, subtaskRep }});
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot cancel subtask'); }}
 
                         const subtask = state.handles.get(subtaskRep);
@@ -755,7 +755,7 @@ impl AsyncTaskIntrinsic {
                                 // parked cancellably in its event loop. No other ready
                                 // thread in the component instance may run here.
                                 if (childTask?.hasCallback()) {{
-                                    const childState = {get_or_create_async_state_fn}(childTask.componentIdx());
+                                    const childState = {get_or_create_async_state_fn}childTask.componentIdx());
                                     if (childState.suspendedTaskCancellable(childTask.id()) &&
                                         childState.suspendedTaskReady(childTask.id())) {{
                                         const progress = childTask.waitForProgress();
@@ -805,7 +805,7 @@ impl AsyncTaskIntrinsic {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let task_cancel_fn = render_args.require_intrinsic(Self::TaskCancel);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let get_global_current_task_meta_fn =
@@ -815,7 +815,7 @@ impl AsyncTaskIntrinsic {
                     function {task_cancel_fn}(componentIdx) {{
                         {debug_log_fn}('[{task_cancel_fn}()] args', {{ componentIdx }});
 
-                        const state = {get_or_create_async_state_fn}(componentIdx);
+                        const state = {get_or_create_async_state_fn}componentIdx);
                         if (!state.mayLeave) {{ throw new Error('component instance is not marked as may leave, cannot be cancelled'); }}
 
                         const {{ taskID }} = {get_global_current_task_meta_fn}componentIdx);
@@ -1001,7 +1001,7 @@ impl AsyncTaskIntrinsic {
             // `immediate<original function>` -- i.e. `Thread#suspendUntil` becomes `AsyncTask#immediateSuspendUntil`
             Self::AsyncTaskClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let event_code_enum = render_args.require_intrinsic(Intrinsic::AsyncEventCodeEnum);
@@ -1363,7 +1363,7 @@ impl AsyncTaskIntrinsic {
                         returnResultTypeIdx() {{ return this.#returnResultTypeIdx; }}
 
                         mayEnter(task) {{
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             if (cstate.hasBackpressure()) {{
                                 {debug_log_fn}('[{task_class}#mayEnter()] disallowed due to backpressure', {{ taskID: this.#id }});
                                 return false;
@@ -1382,7 +1382,7 @@ impl AsyncTaskIntrinsic {
 
                         enterSync() {{
                             if (this.needsExclusiveLock()) {{
-                                const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                                 if (!cstate.isExclusivelyLocked()) {{
                                     cstate.exclusiveLock(this.#id);
                                 }} else {{
@@ -1412,7 +1412,7 @@ impl AsyncTaskIntrinsic {
                                 return false;
                             }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             if (this.isSync()) {{
                                 this.#entered = true;
                                 return true;
@@ -1455,7 +1455,7 @@ impl AsyncTaskIntrinsic {
                                 return false;
                             }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
 
                             if (opts?.isHost) {{
                                 this.#entered = true;
@@ -1520,7 +1520,7 @@ impl AsyncTaskIntrinsic {
                             const ticket = this.#admissionTicket;
                             if (ticket === null) {{ return; }}
                             this.#admissionTicket = null;
-                            {get_or_create_async_state_fn}(this.#componentIdx).releaseAdmissionTicket(ticket);
+                            {get_or_create_async_state_fn}this.#componentIdx).releaseAdmissionTicket(ticket);
                         }}
 
                         async #enterQueued(cstate, ticket) {{
@@ -1672,7 +1672,7 @@ impl AsyncTaskIntrinsic {
                                 return;
                             }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             cstate.suspendTask({{
                                 task: this,
                                 cancellable,
@@ -1725,7 +1725,7 @@ impl AsyncTaskIntrinsic {
                             const pendingCancelled = this.deliverPendingCancel({{ cancellable }});
                             if (pendingCancelled) {{ return false; }}
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             const keepGoing = await cstate.suspendTask({{
                                 task: this,
                                 cancellable,
@@ -1786,7 +1786,7 @@ impl AsyncTaskIntrinsic {
                                     this.deliverPendingCancel({{ cancellable: true }});
                                     this.cancel();
 
-                                    const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                                    const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                                     // `enter()` may already be parked either in the scheduler's
                                     // explicit-backpressure wait or in the exclusive-lock FIFO.
                                     // Wake/remove that entry work now so it cannot retain a timer,
@@ -1802,7 +1802,7 @@ impl AsyncTaskIntrinsic {
                             }}
                             // Nudge the component's tick loop so that any suspended cancellable
                             // wait observes the pending cancellation promptly
-                            {get_or_create_async_state_fn}(this.#componentIdx).runTickLoop();
+                            {get_or_create_async_state_fn}this.#componentIdx).runTickLoop();
                         }}
 
                         cancel(args) {{
@@ -1994,7 +1994,7 @@ impl AsyncTaskIntrinsic {
 
                             this.validateResourceBorrowScope();
 
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const state = {get_or_create_async_state_fn}this.#componentIdx);
                             if (!state) {{ throw new Error('missing async state for component [' + this.#componentIdx + ']'); }}
 
                             // Exempt the host from exclusive lock check
@@ -2042,7 +2042,7 @@ impl AsyncTaskIntrinsic {
                             {debug_log_fn}('[{task_class}#createSubtask()] args', args);
                             const {{ componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync }} = args;
 
-                            const cstate = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const cstate = {get_or_create_async_state_fn}this.#componentIdx);
                             if (!cstate) {{
                                 throw new Error(`invalid/missing async state for component idx [${{componentIdx}}]`);
                             }}
@@ -2098,7 +2098,7 @@ impl AsyncTaskIntrinsic {
             Self::AsyncSubtaskClass => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let subtask_class = render_args.require_intrinsic(Self::AsyncSubtaskClass);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let lookup_memories_for_component =
@@ -2553,7 +2553,7 @@ impl AsyncTaskIntrinsic {
                         }}
 
                         #getComponentState() {{
-                            const state = {get_or_create_async_state_fn}(this.#componentIdx);
+                            const state = {get_or_create_async_state_fn}this.#componentIdx);
                             if (!state) {{
                                 throw new Error('invalid/missing async state for component [' + componentIdx + ']');
                             }}
@@ -2602,7 +2602,7 @@ impl AsyncTaskIntrinsic {
                 let result_i32 = to_int32("result");
                 let unpack_callback_result_fn =
                     render_args.require_intrinsic(Self::UnpackCallbackResult);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let waitable_set_class = render_args
@@ -2650,7 +2650,7 @@ impl AsyncTaskIntrinsic {
                             }}
                         }};
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         let eventCode;
                         let index;
@@ -2864,7 +2864,7 @@ impl AsyncTaskIntrinsic {
                 let task_class = render_args.require_intrinsic(Self::AsyncTaskClass);
                 let lower_import_fn = render_args.require_intrinsic(Self::LowerImport);
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let async_event_code_enum =
@@ -2876,7 +2876,7 @@ impl AsyncTaskIntrinsic {
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
-                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
+                    .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
 
                 output.push_str(&format!(
                     r#"
@@ -2900,7 +2900,7 @@ impl AsyncTaskIntrinsic {
                             importFn,
                         }} = args;
 
-                        {check_may_leave_fn}(componentIdx);
+                        {check_may_leave_fn}componentIdx);
 
                         const {{ taskID }} = {get_global_current_task_meta_fn}componentIdx);
 
@@ -2910,7 +2910,7 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
                             throw new Error("non async exports cannot synchronously call async functions");
@@ -3134,7 +3134,7 @@ impl AsyncTaskIntrinsic {
                 let current_task_get_fn = render_args.require_intrinsic(Self::GetCurrentTask);
                 let create_new_current_task_fn =
                     render_args.require_intrinsic(Self::CreateNewCurrentTask);
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let async_event_code_enum =
@@ -3148,7 +3148,7 @@ impl AsyncTaskIntrinsic {
                 let promise_with_resolvers_fn =
                     render_args.require_intrinsic(Intrinsic::PromiseWithResolversPonyfill);
                 let check_may_leave_fn = render_args
-                    .require_intrinsic(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
+                    .intrinsic_call_prefix(Intrinsic::Component(ComponentIntrinsic::CheckMayLeave));
 
                 output.push_str(&format!(
                     r#"
@@ -3172,7 +3172,7 @@ impl AsyncTaskIntrinsic {
                             stringEncoding,
                         }} = args;
 
-                        {check_may_leave_fn}(componentIdx);
+                        {check_may_leave_fn}componentIdx);
 
                         const meta = {get_global_current_task_meta_fn}componentIdx);
                         let taskMeta = meta && {current_task_get_fn}(componentIdx, meta.taskID);
@@ -3223,7 +3223,7 @@ impl AsyncTaskIntrinsic {
                         const task = taskMeta.task;
                         if (!task) {{ throw new Error('invalid/missing async task'); }}
 
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {{
                             throw new Error("non async exports cannot synchronously call async functions");
@@ -3405,7 +3405,7 @@ impl AsyncTaskIntrinsic {
                 let create_new_current_task_fn = render_args.require_intrinsic(
                     Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentTask),
                 );
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let set_global_current_task_meta_fn =
@@ -3427,7 +3427,7 @@ impl AsyncTaskIntrinsic {
                             calleeComponentIdx
                         }});
 
-                        const cstate = {get_or_create_async_state_fn}(calleeComponentIdx);
+                        const cstate = {get_or_create_async_state_fn}calleeComponentIdx);
 
                         // The conditional JSPI trampoline probes this path before
                         // invoking its Suspending fallback. Avoid creating either
@@ -3524,7 +3524,7 @@ impl AsyncTaskIntrinsic {
             Self::ExitSymmetricSyncGuestCall => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let exit_symmetric_sync_guest_call_fn = self.name();
-                let get_or_create_async_state_fn = render_args.require_intrinsic(
+                let get_or_create_async_state_fn = render_args.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
                 let get_current_task_fn = render_args
@@ -3544,7 +3544,7 @@ impl AsyncTaskIntrinsic {
                     r#"
                     function {exit_symmetric_sync_guest_call_fn}() {{
                         const {{ componentIdx, previousTaskMayBlock }} = {symmetric_sync_guest_call_stack}.pop();
-                        const cstate = {get_or_create_async_state_fn}(componentIdx);
+                        const cstate = {get_or_create_async_state_fn}componentIdx);
 
                         const taskMeta = {get_current_task_fn}(componentIdx);
                         if (!taskMeta) {{ throw new Error('missing current caller task metadata'); }}

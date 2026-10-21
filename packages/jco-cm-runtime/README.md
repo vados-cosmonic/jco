@@ -21,7 +21,7 @@ resource operations and storage initializers from `intrinsics/resource`, selecte
 `intrinsics/conversion`, JavaScript helpers from `intrinsics/js-helper` and
 string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
-from `intrinsics/core`.
+from `intrinsics/core`, and component state/scheduling from `intrinsics/component`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -47,7 +47,7 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(102/274 logical intrinsic variants);
+(118/274 logical intrinsic variants, including all 16 component variants);
 other families remain inline during migration.
 
 ```js
@@ -83,7 +83,7 @@ const conformance: ResourceModule = resource;
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
 `./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
-`./intrinsics/core` subpaths
+`./intrinsics/core` and `./intrinsics/component` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -268,3 +268,37 @@ Custom providers adopting this compiler must publish the core subpath and update
 resource borrow/destructor contexts to receive `registers`; the earlier v2
 `getCurrentTask`/`withTask` bridge shapes are replaced by shared state and the
 remaining narrowly named task capability.
+
+## Component contract
+
+`intrinsics/component` satisfies `ComponentModule`. Separate selected initializers
+return the actual instance-flag Map, store-trap error cell, store scheduling owner
+and component async-state Map. Trap-message initialization receives only the
+compiler's message record. Generated bindings share these owners with inline
+tasks and waitables; no universal options object or operation registry is needed.
+
+`checkMayLeave` and its receiver-preserving guard need only instance flags and the
+selected trap constructor. Trap normalization receives that constructor and the
+actual message lookup. Deadlock checking uses the shared trap, scheduling and
+async-state owners; host-operation tracking also receives the selected disposal
+symbol. It preserves synchronous results, counts pending asynchronous wake sources
+and forwards disposal with the host value's receiver.
+
+`initializeComponentAsyncStateClass(context)` returns a per-instantiation class,
+with its own statics and identity. It receives the selected representation-table
+constructor, shared handle allocator and flag/trap owners, narrow normalization
+and deadlock contexts, and a lazy `createWaitable` capability while waitables remain
+inline. State lookup receives the selected class and actual state Map. Handles
+share the component allocator with resources; subtasks keep their own table.
+The class preserves FIFO lock handoff and admission, one resumption per tick,
+backpressure accounting and trap interruption. Backpressure waiters resolve only
+at zero, once each, including under reentrant handlers; both inline and named
+implementations use the same corrected event-driven algorithm.
+
+Core suspending-import contexts now receive `mayLeave`, `traps` and `states`
+component contexts. Only their remaining task capabilities are lazy bridges.
+Custom providers adopting this compiler must publish the component subpath and
+replace the earlier core `checkMayLeave`, `recordTrap` and `throwIfInterrupted`
+callbacks with these actual contexts. Defaults use their own static operation
+dependencies; overriding a sibling export does not implicitly intercept them.
+Importing the module creates no state, timers, classes or waitables.

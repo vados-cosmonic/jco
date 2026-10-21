@@ -51,9 +51,27 @@ test('packed exports, standalone declarations, and independent provider conforma
         const installed = join(consumer, 'node_modules/@bytecodealliance/jco-cm-runtime');
         const contract = await readFile(join(installed, 'dist/runtime.d.ts'), 'utf8');
         expect(contract).not.toMatch(/\b(?:import|from)\s*['"({]/);
+        const contractExports = Object.fromEntries(
+            [
+                'ResourceModule',
+                'ConversionModule',
+                'JsHelperModule',
+                'StringModule',
+                'WebIdlModule',
+                'CoreModule',
+                'ComponentModule',
+            ].map((name) => {
+                const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
+                expect(body, `${name} must remain a public standalone interface`).toBeDefined();
+                const names = [...body!.matchAll(/^    readonly (\w+):/gm)].map((match) => match[1]);
+                expect(names.length).toBeGreaterThan(0);
+                return [name, names];
+            }),
+        );
         const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
         expect(Object.keys(manifest.exports).sort()).toEqual([
             '.',
+            './intrinsics/component',
             './intrinsics/conversion',
             './intrinsics/core',
             './intrinsics/js-helper',
@@ -74,7 +92,11 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule } from './contract.js';
+            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule, ComponentModule } from './contract.js';
+            export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({ error: null });
+            export const checkMayLeave: ComponentModule['checkMayLeave'] = (context, componentIdx) => {
+                if (context.instanceFlags.get(componentIdx)?.value !== 1) throw new context.RuntimeError('cannot leave component instance');
+            };
             export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
             export const clampGuest: CoreModule['clampGuest'] = (value, min, max) => {
                 if (value < min || value > max) throw new TypeError('out of range');
@@ -106,11 +128,22 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
             import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
+            import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component };
+            const expectedExports = ${JSON.stringify(contractExports)};
+            const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max']);
+            for (const [name, exports] of Object.entries(expectedExports)) {
+                const actual = publicModules[name];
+                if (Object.keys(actual).sort().join() !== [...exports].sort().join()) throw new Error(name + ' JS/type exports differ');
+                for (const key of exports) {
+                    if (typeof actual[key] !== (constants.has(name + '.' + key) ? 'number' : 'function')) throw new Error(name + '.' + key + ' has the wrong JavaScript export kind');
+                }
+            }
             const defaultModule: ResourceModule = resource;
             const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
             const registers = custom.initializeTaskRegisters();
@@ -131,6 +164,20 @@ test('packed exports, standalone declarations, and independent provider conforma
             const indexSpaces = defaultModule.initializeHandleIndexSpaces();
             const scopeTasks = defaultModule.initializeResourceScopeTasks();
             const removal = { RuntimeError: Error, indexSpaces, scopeTasks };
+            const components: RuntimeModuleContracts['intrinsics/component'] = component;
+            const instanceFlags = components.initializeInstanceFlags();
+            const storeTrap = custom.initializeStoreTrap();
+            const storeAsyncState = components.initializeStoreAsyncState();
+            const asyncState = components.initializeComponentAsyncStates();
+            const normalization = { RuntimeError: Error, messages: components.initializeCoreTrapMessages({ unreachable: 'compiler unreachable' }) };
+            const deadlock = { RuntimeError: Error, storeTrap, storeAsyncState, asyncState };
+            const State = components.initializeComponentAsyncStateClass({ RuntimeError: Error, RepTable: Rep, indexSpaces, instanceFlags, storeTrap, normalization, deadlock, cannotEnter: 'cannot enter' });
+            const state = components.getOrCreateAsyncState({ asyncState, ComponentAsyncState: State }, 0);
+            instanceFlags.set(0, { value: 1 });
+            custom.checkMayLeave({ RuntimeError: Error, instanceFlags }, 0);
+            const receiver = { answer: 42 };
+            const guarded = components.guardMayLeave({ RuntimeError: Error, instanceFlags }, 0, function (this: typeof receiver) { return this.answer; });
+            if (!(state instanceof State) || !(state.handles instanceof Rep) || guarded.call(receiver) !== 42 || storeTrap.error !== null || storeAsyncState.pendingHostOperations !== 0 || components.trackHostOperation({ ...deadlock, symbolDispose: core.initializeSymbolDispose() }, () => 42) !== 42) throw new Error('component consumer failed');
             const table = Object.assign([defaultModule.tableFlag, 0], { _componentIdx: 0, _createdReps: new Set<number>() });
             const handle = defaultModule.tableCreateOwn(indexSpaces, table, 42);
             if (handle !== 1 || defaultModule.tableRemove(removal, table, handle).rep !== 42 || defaultModule.getHandleIndexSpace(indexSpaces, 0).alloc() !== handle) throw new Error('allocator consumer failed');
@@ -174,6 +221,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/resource.js', '@bytecodealliance/jco-cm-runtime/intrinsics/resource')
             .replaceAll('../src/intrinsics/conversion.js', '@bytecodealliance/jco-cm-runtime/intrinsics/conversion')
             .replaceAll('../src/intrinsics/core.js', '@bytecodealliance/jco-cm-runtime/intrinsics/core')
+            .replaceAll('../src/intrinsics/component.js', '@bytecodealliance/jco-cm-runtime/intrinsics/component')
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
@@ -222,6 +270,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { validateGuestChar, utf16ValidatingCopy } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/string');
             const { initializeWebIdlProxyCache } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/webidl');
             const { clampGuest, typeCheckValidI32, initializeTaskRegisters } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/core');
+            const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
+            if (initializeStoreTrap().error !== null || checkMayLeave({ RuntimeError: Error, instanceFlags: { get: () => ({ value: 1 }) } }, 0) !== undefined) throw new Error('component capability leak');
             if (clampGuest(42, 0, 100) !== 42 || !typeCheckValidI32(42) || Object.keys(initializeTaskRegisters()).length) throw new Error('core capability leak');
             if (initializeWebIdlProxyCache().proxy !== undefined) throw new Error('eager WebIDL proxy');
             if (validateGuestChar(0x1f680) !== '🚀' || !utf16ValidatingCopy(new Uint16Array([97]), new Uint16Array(1))) throw new Error('string capability leak');
