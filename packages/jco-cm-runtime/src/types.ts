@@ -1,3 +1,4 @@
+import type { HostIntrinsics } from './intrinsics/host-types.js';
 import type { ConversionIntrinsics } from './intrinsics/conversion.js';
 import type { JsHelperIntrinsics } from './intrinsics/js-helper.js';
 import type { StringIntrinsics } from './intrinsics/string.js';
@@ -29,6 +30,7 @@ export interface RuntimePlatform {
         readonly compileStreaming?: typeof WebAssembly.compileStreaming;
         readonly instantiate?: typeof WebAssembly.instantiate;
         readonly Instance?: typeof WebAssembly.Instance;
+        readonly promising?: (fn: (...params: unknown[]) => unknown) => (...params: unknown[]) => Promise<unknown>;
         readonly Global?: typeof WebAssembly.Global;
         readonly Suspending?: new (fn: (...args: number[]) => unknown) => WebAssembly.ImportValue;
     };
@@ -136,6 +138,7 @@ export interface ResourceTaskContext {
 
 export interface RuntimeIntrinsics {
     readonly asyncTask: AsyncTaskIntrinsics;
+    readonly host: HostIntrinsics;
     readonly errorContext: ErrorContextIntrinsics;
     readonly waitable: WaitableIntrinsics;
     readonly component: ComponentIntrinsics;

@@ -1,3 +1,10 @@
+export type {
+    HostIntrinsics,
+    HostStartOptions,
+    HostSyncStartOptions,
+    HostCallee,
+    StoreEventOptions,
+} from './intrinsics/host-types.js';
 export { runtime } from './runtime.js';
 export type {
     AsyncTask,

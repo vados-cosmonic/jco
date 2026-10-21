@@ -1,3 +1,4 @@
+import { createHostIntrinsics } from './intrinsics/host.js';
 import { createResourceIntrinsics } from './intrinsics/resource.js';
 import { createConversionIntrinsics } from './intrinsics/conversion.js';
 import { createJsHelperIntrinsics } from './intrinsics/js-helper.js';
@@ -68,11 +69,13 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
     const component = createComponentIntrinsics(options, core, resource, waitableClasses.Waitable);
     const conversion = createConversionIntrinsics(options.strict);
     asyncTask = createAsyncTaskIntrinsics(options, platform, core, component, resource, waitableClasses, conversion);
+    const host = createHostIntrinsics(platform, core, component, asyncTask);
     const waitable = createWaitableIntrinsics(
         {
             ...options,
             waitableContext: options.waitableContext ?? {
                 getCurrentTask: (idx) => asyncTask.getCurrentTask(idx),
+                storeEventInComponentMemory: (args) => host.storeEventInComponentMemory(args),
             },
         },
         core,
@@ -84,6 +87,7 @@ function createRuntime(options: RuntimeOptions): ComponentModelRuntime {
         intrinsics: {
             core,
             asyncTask,
+            host,
             component,
             errorContext: createErrorContextIntrinsics(core, component),
             waitable,

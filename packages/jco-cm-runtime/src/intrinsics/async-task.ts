@@ -2543,7 +2543,7 @@ export function createAsyncTaskIntrinsics(
             }
         };
 
-        const drive = () => {
+        const drive = (): void | Promise<void> => {
             try {
                 if (callbackCode !== 0) {
                     componentState.exclusiveRelease(task.id());
@@ -2626,7 +2626,7 @@ export function createAsyncTaskIntrinsics(
             }
         };
 
-        const continueWithCallbackResult = (callbackRes: number) => {
+        const continueWithCallbackResult = (callbackRes: number): void | Promise<void> => {
             try {
                 unpackCallback(callbackRes);
 
@@ -2644,7 +2644,7 @@ export function createAsyncTaskIntrinsics(
             }
         };
 
-        const runCallback = () => {
+        const runCallback = (): void | Promise<void> => {
             try {
                 // No callback runs once the component instance has trapped.
                 if (!task.isRejected()) {
@@ -2698,7 +2698,7 @@ export function createAsyncTaskIntrinsics(
             }
         };
 
-        function continueWithEvent(event: WaitableEvent | null) {
+        function continueWithEvent(event: WaitableEvent | null): void | Promise<void> {
             asyncRes = event;
             const lock = componentState.acquireExclusiveLock(task.id());
             if (lock && typeof lock.then === 'function') {

@@ -2278,6 +2278,45 @@ mod tests {
     }
 
     #[test]
+    fn host_helpers_use_external_methods_without_inline_dependencies() {
+        let variants = [
+            HostIntrinsic::PrepareCall,
+            HostIntrinsic::AsyncStartCall,
+            HostIntrinsic::SyncStartCall,
+            HostIntrinsic::StoreEventInComponentMemory,
+        ];
+        let mut intrinsics = BTreeSet::from_iter(variants.map(Intrinsic::Host));
+        let opts = TranspileOpts::builder()
+            .name("test".into())
+            .cm_runtime_es_module("runtime".into())
+            .build();
+        let source = render_intrinsics(
+            RenderIntrinsicsArgs::builder()
+                .intrinsics(&mut intrinsics)
+                .transpile_opts(&opts)
+                .build(),
+        );
+        assert_eq!(intrinsics.len(), 4);
+        for variant in variants {
+            let intrinsic = Intrinsic::Host(variant);
+            let IntrinsicBinding::Runtime { path, kind, .. } = intrinsic.binding(true) else {
+                panic!("host helper must be external");
+            };
+            assert_eq!(path, variant.runtime_path());
+            assert!(matches!(kind, RuntimeIntrinsicKind::Method));
+            assert!(source.contains(&format!("{path} must be a function")));
+            assert!(!source.contains(&format!("function {}(", variant.name())));
+            assert!(matches!(
+                intrinsic.binding(false),
+                IntrinsicBinding::Inline { .. }
+            ));
+        }
+        assert!(!source.contains("class AsyncTask"));
+        assert!(!source.contains("class FutureValue"));
+        assert!(!source.contains("asyncTaskContext:"));
+    }
+
+    #[test]
     fn async_task_lookup_and_values_do_not_request_future_implementation() {
         for variant in [
             AsyncTaskIntrinsic::GetCurrentTask,
@@ -2422,7 +2461,8 @@ mod tests {
         );
         assert!(!source.contains("function getCurrentTask("));
         assert!(source.contains("asyncTask.getCurrentTask must be a function"));
-        assert!(source.contains("function _storeEventInComponentMemory("));
+        assert!(!source.contains("function _storeEventInComponentMemory("));
+        assert!(source.contains("host.storeEventInComponentMemory must be a function"));
         assert!(!source.contains("componentContext:"));
     }
 
@@ -2536,6 +2576,8 @@ mod tests {
         let source = render_intrinsic_body(Intrinsic::Host(HostIntrinsic::PrepareCall));
 
         assert!(source.contains("if (!isAsync && CURRENT_TASK_MAY_BLOCK.value === 0) {"));
+        assert!(source.contains("stringEncoding: encoding,"));
+        assert!(source.contains("newTask.setReturnMemory(getMemoryFn());"));
         assert!(source.contains(
             "new WebAssemblyRuntimeError('cannot block a synchronous task before returning')"
         ));
@@ -3304,6 +3346,11 @@ const CONDITIONAL_SUSPENDING_3_I32_TO_VOID: &[u8] = &[
 impl Intrinsic {
     pub(crate) fn binding(&self, external_runtime: bool) -> IntrinsicBinding {
         match self {
+            Self::Host(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                path: intrinsic.runtime_path(),
+                kind: RuntimeIntrinsicKind::Method,
+            },
             Self::AsyncTask(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 path: intrinsic.runtime_path(),

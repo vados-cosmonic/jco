@@ -62,7 +62,7 @@ API is versioned independently from the npm package version.
 The selected module exports a `runtime` object with `apiVersion: 1` and a
 synchronous `create(options)` method. The method returns a runtime instance
 with `apiVersion: 1`, `intrinsics.core`, `intrinsics.component`, `intrinsics.resource`, `intrinsics.conversion`,
-`intrinsics.asyncTask`, `intrinsics.waitable`, `intrinsics.errorContext`, `intrinsics.jsHelper`,
+`intrinsics.asyncTask`, `intrinsics.host`, `intrinsics.waitable`, `intrinsics.errorContext`, `intrinsics.jsHelper`,
 `intrinsics.string`, and `intrinsics.webidl`.
 Generated bindings pass `requestedApiVersion: 1` to `create`, check both API
 versions, and verify the required intrinsic methods. Other runtime intrinsics
@@ -182,6 +182,25 @@ waitables or sets, joining them, and calling `removeWaitableSet` need no task ca
 The legacy standalone `Waitable.waitForPendingEvent` hook accepts a scheduler
 with `waitUntil`; generated bindings do not use that hook.
 
+### Host calls
+
+`intrinsics.host` implements all four helpers from bindgen's `p3/host.rs`.
+`prepareCall` captures caller parameters, result pointers, memory and fused
+start/return adapters, then installs the child task. `asyncStartCall` enters
+ready callees eagerly and returns a packed subtask handle/status; contended
+starts queue with component backpressure. `syncStartCall` blocks until
+`task.return` publishes the fused result and restores the caller's task register.
+Direct callees remain synchronous; JSPI paths lazily use the selected platform's
+`WebAssembly.promising` and cache the wrapper on the callee.
+
+`storeEventInComponentMemory` writes two little-endian u32 payloads and returns
+the event code. Direct runtime waits and polls use this writer by default.
+Explicit legacy `waitableContext` objects retain precedence; generated bindings
+can use their callbacks to select a custom provider's host writer.
+`HostIntrinsics`, `HostStartOptions`, `HostCallee` and `StoreEventOptions`
+describe these operations. Shared task/component state and lazy task globals
+must be retained when delegating host methods to the default implementation.
+
 ### Async tasks
 
 `intrinsics.asyncTask` implements all 25 helpers from bindgen's `p3/async_task.rs`.
@@ -210,8 +229,8 @@ check against their remaining inline Future class. It is consulted only when
 publishing a result whose future layer must be preserved. Other task operations
 need no future callback. The runtime supplies shared task defaults for core,
 resource and waitable operations; explicitly supplied legacy `coreContext`,
-`resourceTasks` and `waitableContext` objects retain precedence. Event storage
-still uses the generated host callback until those helpers move into the package.
+`resourceTasks` and `waitableContext` objects retain precedence. Without an
+override, waitable events use the shared host event writer.
 
 `AsyncTask`, `AsyncSubtask`, `AsyncTaskIntrinsics`, the task options, call
 metadata, lift/lower callback contexts, and scheduler contracts describe this API.

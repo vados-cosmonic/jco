@@ -39,11 +39,12 @@ export interface TaskLowerContext {
 }
 export type TaskLowerFn = (ctx: TaskLowerContext) => unknown;
 export interface TaskCallMetadata {
+    getMemoryFn?: () => RuntimeMemory | null | undefined;
     startFn?: (...args: unknown[]) => unknown;
     returnFn?: (...args: unknown[]) => unknown;
     returnFnCalled?: boolean;
     returnFnResult?: unknown;
-    resultPtr?: number;
+    resultPtr?: number | null;
     memoryIdx?: number | null;
     memory?: RuntimeMemory | null;
     realloc?: StringRealloc | null;
@@ -91,6 +92,14 @@ export interface SubtaskLender {
     lends: number;
 }
 export interface AsyncTask extends ComponentTask, WaitableTask {
+    subtaskMeta?: {
+        subtask: AsyncSubtask;
+        calleeComponentIdx: number;
+        callerComponentIdx: number;
+        getCalleeParamsFn: () => unknown[];
+        stringEncoding: string;
+        isAsync: boolean;
+    };
     cancelled: boolean;
     cancelRequested: boolean;
     alwaysTaskReturn: boolean;
@@ -294,7 +303,7 @@ export interface AsyncTaskIntrinsics {
         fnName?: string;
         isAsync?: boolean;
         callbackResult: unknown;
-    }): unknown;
+    }): void | Promise<void>;
     lowerImport(args: LowerImportContext, ...params: unknown[]): Promise<unknown>;
     lowerImportBackwardsCompat(args: LowerImportContext, ...params: unknown[]): unknown;
     symmetricSyncGuestCallEnter(
