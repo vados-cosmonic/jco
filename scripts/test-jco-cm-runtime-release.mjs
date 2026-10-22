@@ -101,3 +101,21 @@ assert.deepEqual(initializeErrorContextTableRegistrations(), {});
 const reserved = errCtxReserveGlobalRep(GlobalTable, 'release', 0);
 assert.equal(errCtxGlobalRefCountAdd(GlobalTable, reserved.globalRep), 1);
 assert.equal(GlobalTable.get().get(reserved.globalRep).debugMessage, 'release');
+
+const {
+    asyncBlockedCode,
+    initializeTasksByComponent,
+    initializeCurrentTaskIds,
+    initializeCurrentComponentIdxs,
+    initializeSymmetricSyncGuestCallStack,
+    initializeCurrentTaskMayBlock,
+    initializeAsyncBlockingCallDepth,
+    getCurrentTask,
+} = await import('@bytecodealliance/jco-cm-runtime/intrinsics/async-task');
+assert.equal(asyncBlockedCode, 0xffff_ffff);
+assert.equal(getCurrentTask({ tasks: initializeTasksByComponent(), registers: {} }, 0), undefined);
+assert.deepEqual(initializeCurrentTaskIds(), []);
+assert.deepEqual(initializeCurrentComponentIdxs(), []);
+assert.deepEqual(initializeSymmetricSyncGuestCallStack(), []);
+assert.equal(initializeCurrentTaskMayBlock(false), false);
+assert.deepEqual(initializeAsyncBlockingCallDepth(false), { value: 0 });

@@ -62,6 +62,7 @@ test('packed exports, standalone declarations, and independent provider conforma
                 'ComponentModule',
                 'WaitableModule',
                 'ErrorContextModule',
+                'AsyncTaskModule',
             ].map((name) => {
                 const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                 expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -73,6 +74,7 @@ test('packed exports, standalone declarations, and independent provider conforma
         const manifest = JSON.parse(await readFile(join(installed, 'package.json'), 'utf8'));
         expect(Object.keys(manifest.exports).sort()).toEqual([
             '.',
+            './intrinsics/async-task',
             './intrinsics/component',
             './intrinsics/conversion',
             './intrinsics/core',
@@ -96,7 +98,16 @@ test('packed exports, standalone declarations, and independent provider conforma
         await writeFile(
             join(consumer, 'provider.ts'),
             `
-            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule, ComponentModule } from './contract.js';
+            import type { ResourceModule, ConversionModule, StringModule, WebIdlModule, CoreModule, ComponentModule, AsyncTaskModule } from './contract.js';
+            export const initializeTasksByComponent: AsyncTaskModule['initializeTasksByComponent'] = () => new Map();
+            export const getCurrentTask: AsyncTaskModule['getCurrentTask'] = ({ tasks, registers }, componentIdx, taskID) => {
+                const entries = tasks.get(componentIdx);
+                if (!entries?.length) return undefined;
+                if (taskID) return entries.find(meta => meta.task.id() === taskID);
+                const current = registers[componentIdx];
+                const executing = current && entries.find(meta => meta.task.id() === current.taskID);
+                return executing || entries.at(-1);
+            };
             export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = () => ({ error: null });
             export const checkMayLeave: ComponentModule['checkMayLeave'] = (context, componentIdx) => {
                 if (context.instanceFlags.get(componentIdx)?.value !== 1) throw new context.RuntimeError('cannot leave component instance');
@@ -135,14 +146,15 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as component from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
             import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
             import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
+            import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
-            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext };
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext, AsyncTaskModule: asyncTask };
             const expectedExports = ${JSON.stringify(contractExports)};
-            const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max']);
+            const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max', 'AsyncTaskModule.asyncBlockedCode']);
             for (const [name, exports] of Object.entries(expectedExports)) {
                 const actual = publicModules[name];
                 if (Object.keys(actual).sort().join() !== [...exports].sort().join()) throw new Error(name + ' JS/type exports differ');
@@ -152,6 +164,10 @@ test('packed exports, standalone declarations, and independent provider conforma
             }
             const defaultModule: ResourceModule = resource;
             const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
+            const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+            if (custom.getCurrentTask({ tasks: custom.initializeTasksByComponent(), registers: {} }, 0) !== undefined) throw new Error('copied task contract consumer failed');
+            const taskOwners = defaultTasks.initializeTasksByComponent();
+            if (defaultTasks.asyncBlockedCode !== 0xffffffff || defaultTasks.getCurrentTask({ tasks: taskOwners, registers: {} }, 0) !== undefined || defaultTasks.initializeCurrentTaskMayBlock(false) !== false || defaultTasks.initializeAsyncBlockingCallDepth(false).value !== 0) throw new Error('task owner/register consumer failed');
             const registers = custom.initializeTaskRegisters();
             defaultCore.setCurrentTaskMeta(registers, { componentIdx: 0, taskID: 1n });
             if (defaultCore.withCurrentTaskMeta(registers, { componentIdx: 1, taskID: 2n, fn: () => defaultCore.getCurrentTaskMeta(registers)?.taskID }) !== 2n || defaultCore.getCurrentTaskMeta(registers)?.taskID !== 1n) throw new Error('task register consumer failed');
@@ -261,6 +277,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/js-helper.js', '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper')
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
+            .replaceAll('../src/intrinsics/async-task.js', '@bytecodealliance/jco-cm-runtime/intrinsics/async-task')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -309,6 +326,8 @@ test('packed exports, standalone declarations, and independent provider conforma
             const { initializeStoreTrap, checkMayLeave } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/component');
             const { initializeWaitableClass, initializeWaitableSetClass } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
             const { initializeLocalErrorContextTables, initializeErrorContextTableRegistrations } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/error-context');
+            const { initializeTasksByComponent, getCurrentTask, initializeCurrentTaskMayBlock, initializeAsyncBlockingCallDepth } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/async-task');
+            if (getCurrentTask({ tasks: initializeTasksByComponent(), registers: {} }, 0) !== undefined || initializeCurrentTaskMayBlock(false) !== false || initializeAsyncBlockingCallDepth(false).value !== 0) throw new Error('task optional capability leak');
             if (initializeLocalErrorContextTables().size || Object.keys(initializeErrorContextTableRegistrations()).length) throw new Error('error-context capability leak');
             const Waitable = initializeWaitableClass(), WaitableSet = initializeWaitableSetClass({ TASK_CANCELLED: 3 });
             const w = new Waitable({}), set = new WaitableSet(0);

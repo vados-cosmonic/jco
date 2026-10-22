@@ -1,5 +1,5 @@
 //! Central metadata for named core operations and selected state/constructor owners.
-use super::super::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic};
+use super::super::{Intrinsic, RenderIntrinsicsArgs};
 use super::{
     ComponentContext, RuntimeContext, RuntimeImport, RuntimeImportKind, RuntimeInitializer,
 };
@@ -204,6 +204,8 @@ impl CoreContext {
             Self::GlobalBufferManager => &[RuntimeContext::Core(Self::BufferManagerClass)],
             Self::FetchCompile => &[RuntimeContext::Core(Self::FileCompileCache)],
             Self::SuspendingImport => &[
+                RuntimeContext::Task(super::TaskContext::Lookup),
+                RuntimeContext::Task(super::TaskContext::MayBlock),
                 RuntimeContext::Core(Self::GlobalCurrentTaskMeta),
                 RuntimeContext::Component(ComponentContext::MayLeave),
                 RuntimeContext::Component(ComponentContext::RecordTrap),
@@ -247,20 +249,10 @@ impl CoreContext {
                 output,
                 "const {local} = {{ WebAssembly, modules: CONDITIONAL_SUSPENDING_WASM }};"
             ),
-            Self::SuspendingImport => {
-                let call = |intrinsic: Intrinsic, operands| intrinsic.binding(true).call(operands);
-                let task = call(
-                    AsyncTaskIntrinsic::GetCurrentTask.into(),
-                    "componentIdx, taskID",
-                );
-                let block = Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock)
-                    .binding(true)
-                    .reference();
-                uwriteln!(
-                    output,
-                    "const {local} = {{ registers: CURRENT_TASK_META, RuntimeError: WebAssembly.RuntimeError, mayLeave: _jcoComponentMayLeaveContext, traps: _jcoComponentRecordTrapContext, states: _jcoComponentStateLookupContext, getCurrentTask: (componentIdx, taskID) => {task}?.task, currentTaskMayBlock: () => {block}.value }};"
-                );
-            }
+            Self::SuspendingImport => uwriteln!(
+                output,
+                "const {local} = {{ registers: CURRENT_TASK_META, RuntimeError: WebAssembly.RuntimeError, mayLeave: _jcoComponentMayLeaveContext, traps: _jcoComponentRecordTrapContext, states: _jcoComponentStateLookupContext, taskLookup: _jcoTaskLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK }};"
+            ),
             _ => unreachable!("all other core contexts have selected initializers"),
         }
     }
@@ -494,13 +486,5 @@ pub(crate) fn import(intrinsic: Intrinsic) -> Option<RuntimeImport> {
 pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
     if intrinsic.conditional_suspending_wasm().is_some() {
         args.require_intrinsic(Intrinsic::ConditionalSuspendingWasm);
-    }
-    if intrinsic == Intrinsic::SuspendingImportWrapperFn {
-        for dependency in [
-            Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask),
-            Intrinsic::AsyncTask(AsyncTaskIntrinsic::CurrentTaskMayBlock),
-        ] {
-            args.require_intrinsic(dependency);
-        }
     }
 }

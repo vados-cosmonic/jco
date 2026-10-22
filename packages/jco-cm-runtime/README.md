@@ -23,7 +23,8 @@ string operations/codecs from `intrinsics/string` and the global WebIDL adapter
 from `intrinsics/webidl`, with core operations, constructors and state owners
 from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
-Error-context storage and operations use `intrinsics/error-context`.
+Error-context storage and operations use `intrinsics/error-context`;
+tasks, subtasks and their state use `intrinsics/async-task`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -49,7 +50,8 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(137/274 logical intrinsic variants, including all 16 component, eight waitable and eleven error-context variants);
+(162/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context and 25 async-task variants);
 other families remain inline during migration.
 
 ```js
@@ -124,9 +126,9 @@ Generated code reads and replaces their members directly, so operations observe
 the live values rather than captured snapshots. Every selected owner is created
 once per instantiation; importing the module creates no map or task.
 
-Borrow transfer receives the actual task registers and a lazy task lookup while
-tasks remain inline. Destructors receive only lazy `createTask` and the actual
-`registers` owner. Each
+Borrow transfer receives `taskLookup`, containing the actual task Map and registers.
+Destructors receive `creation`, containing the selected task constructor, actual
+task Map and ID arrays, plus the actual `registers` owner. Each
 destructor creates a synchronous task with fresh context slots and restores the
 enclosing task after success or failure. Explicit disposal releases the handle
 before invoking a destructor and becomes a no-op on repeated disposal.
@@ -267,16 +269,16 @@ The explicit host `instantiateCore` callback retains its existing two-argument
 signature and takes precedence over the default named core operation.
 
 Custom providers adopting this compiler must publish the core subpath and update
-resource borrow/destructor contexts to receive `registers`; the earlier v2
-`getCurrentTask`/`withTask` bridge shapes are replaced by shared state and the
-remaining narrowly named task capability.
+resource borrow/destructor contexts to receive actual `taskLookup`/`creation`
+owners. Core suspending imports receive `taskLookup` and the raw `mayBlock`
+register; earlier task callback bridges are removed.
 
 ## Component contract
 
 `intrinsics/component` satisfies `ComponentModule`. Separate selected initializers
 return the actual instance-flag Map, store-trap error cell, store scheduling owner
 and component async-state Map. Trap-message initialization receives only the
-compiler's message record. Generated bindings share these owners with inline
+compiler's message record. Generated bindings share these owners with
 tasks and waitables; no universal options object or operation registry is needed.
 
 `checkMayLeave` and its receiver-preserving guard need only instance flags and the
@@ -298,7 +300,7 @@ at zero, once each, including under reentrant handlers; both inline and named
 implementations use the same corrected event-driven algorithm.
 
 Core suspending-import contexts now receive `mayLeave`, `traps` and `states`
-component contexts. Only their remaining task capabilities are lazy bridges.
+component contexts, the actual task lookup owner and selected may-block register.
 Custom providers adopting this compiler must publish the component subpath and
 replace the earlier core `checkMayLeave`, `recordTrap` and `throwIfInterrupted`
 callbacks with these actual contexts. Defaults use their own static operation
@@ -316,13 +318,14 @@ constructor, preserving class identity across tasks, component handles and
 
 New-set operations receive the actual component lookup and selected set
 constructor. Wait/poll also receive the selected trap constructor, a narrow
-task lookup and host event-writer capability; poll alone receives `NONE`.
+task Map/register view and host event-writer capability; poll alone receives `NONE`.
 Drop needs lookup, task metadata and the trap constructor. Join needs lookup
 and the trap constructor. Removal needs only the trap constructor and its
 per-call state/handle operand. Memory and canonical options remain per-call
 operands rather than shared runtime state.
 
-Task lookup and event writing remain lazy while those families are inline.
+Task lookup uses its own static default operation and actual state owners.
+Only event writing remains a lazy bridge until host operations migrate.
 Lookup preserves the generated helper's current-task fallback behavior. Waits
 retain their synchronous fast path, cancellation rules, waiter counts and live
 memory buffer; pending events are consumed once. Default operations call their
@@ -361,3 +364,49 @@ their internal calls. Custom providers must publish this new subpath.
 The public contract is structural and self-contained. Importing this module
 creates no class, tables, maps or optional platform capabilities. State and class
 initializers are selected only when their dependency graph needs them.
+
+## Async-task contract
+
+`intrinsics/async-task` satisfies `AsyncTaskModule` with 25 named exports.
+Separate initializers return the actual task Map, task-ID array, component-index
+array and symmetric-call stack. Two register initializers return distinct selected
+native `WebAssembly.Global` instances, preserving raw Wasm imports and live
+`.value` mutation. A narrow selected platform differs from `false`, which denotes
+an absent WebAssembly implementation: may-block then returns `false`, while
+blocking depth returns `{ value: 0 }`. Pure lookup and class selection do not read
+an unused optional `Global` capability. `asyncBlockedCode` is context-free.
+The platform contract requires only construction of the mutable i32 value slot;
+providers need not implement unused native overloads or prototype methods.
+
+The subtask initializer receives component lookup, registered memories and the
+disposal symbol. The task initializer additionally receives selected subtask and
+waitable constructors, trap/event/determinism capabilities, the actual resource
+scope counter and scope-task Map, task clearing owners and registers. They return
+fresh classes once per relevant instantiation. Static IDs, `new`, `instanceof`
+and live static state remain per store. Subtasks initialize before tasks without
+a constructor-cell cycle.
+
+Lookup, creation and clearing take separate explicit contexts. Structural generic
+views let consumers require only the task methods they use. Resources, core
+suspending wrappers and waitables consume these actual owners; their generated
+task callbacks are removed. Defaults compose their own static dependencies, so
+sibling overrides do not implicitly intercept internal calls. Initializers select
+the constructors and owners shared by those defaults.
+
+Each task groups its private slots in one private record. Constructors, private
+brands, prototype methods and static state remain separate for each store;
+another store's methods cannot read that task's private state.
+
+Context get/set, cancellation, yield, return, driver and import lowering receive
+operation-specific views. Lift/lower callbacks and canonical metadata remain
+per-call operands. Existing partial callbacks preserve their null receiver and
+operand order. Direct symmetric-call callbacks bind context with `void 0` in
+named mode; the suspending wrapper's slow callback preserves its null receiver.
+Inline callbacks retain their original function identity. A narrow lazy
+future-value predicate remains until the future family migrates; selecting a
+class or owner does not invoke it. The host event writer remains until N12.
+
+Custom providers must publish this subpath and replace the old resource, core
+and waitable task callbacks with lookup/creation/register owners. The standalone
+declaration contains all structural types without private classes, factory
+options or a runtime operation registry.
