@@ -342,10 +342,10 @@ impl IntrinsicBinding {
         }
     }
 
-    /// Partially apply a real callback, including its selected capability owner.
-    pub(crate) fn bind_callback(self, operands: &str) -> String {
+    /// Open a partial application while preserving the callback's null receiver.
+    pub(crate) fn bind_callback_prefix(self, has_operands: bool) -> String {
         let name = self.local_name();
-        let arguments = match self {
+        match self {
             Self::Runtime {
                 import:
                     RuntimeImport {
@@ -355,8 +355,8 @@ impl IntrinsicBinding {
                     },
                 ..
             } => {
-                let separator = if operands.is_empty() { "" } else { ", " };
-                format!("{}{separator}{operands}", context.local_name())
+                let separator = if has_operands { ", " } else { "" };
+                format!("{name}.bind(null, {}{separator}", context.local_name())
             }
             Self::Inline { .. }
             | Self::Runtime {
@@ -367,14 +367,20 @@ impl IntrinsicBinding {
                         ..
                     },
                 ..
-            } => operands.to_owned(),
+            } => {
+                let separator = if has_operands { ", " } else { "" };
+                format!("{name}.bind(null{separator}")
+            }
             _ => panic!("runtime values and constructors cannot be bound as operations"),
-        };
-        if arguments.is_empty() {
-            format!("{name}.bind(null)")
-        } else {
-            format!("{name}.bind(null, {arguments})")
         }
+    }
+    /// Partially apply a real callback, including its selected capability owner.
+    pub(crate) fn bind_callback(self, operands: &str) -> String {
+        format!(
+            "{}{})",
+            self.bind_callback_prefix(!operands.is_empty()),
+            operands
+        )
     }
 }
 
@@ -3194,6 +3200,10 @@ impl Intrinsic {
                     },
                 }
             }
+            Self::AsyncFuture(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::future_import(*intrinsic),
+            },
             Self::Lower(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::lower_import(*intrinsic),

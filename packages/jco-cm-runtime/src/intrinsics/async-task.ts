@@ -92,7 +92,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         Waitable: _Waitable,
         events: _events,
         determinism: _determinism,
-        isFutureValue: _isFutureValue,
+        FutureValue,
         scopeCounter: _scopeCounter,
         scopeTasks: _scopeTasks,
     } = context;
@@ -246,7 +246,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                     rejectCompletionPromise(this.#fields.errored);
                 } else if (this.#fields.rejected) {
                     rejectCompletionPromise(this.#fields.completionValue);
-                } else if (this.#fields.preserveFutureResult && _isFutureValue(this.#fields.completionValue)) {
+                } else if (this.#fields.preserveFutureResult && this.#fields.completionValue instanceof FutureValue) {
                     this.#fields.completionValue.resolveAsValue(resolveCompletionPromise);
                 } else {
                     resolveCompletionPromise(this.#fields.completionValue);

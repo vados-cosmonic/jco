@@ -11,6 +11,7 @@ mod async_task;
 mod component;
 mod core;
 mod error_context;
+mod future;
 mod host;
 mod lift;
 mod lower;
@@ -20,6 +21,7 @@ pub(crate) use self::component::{ComponentContext, import as component_import};
 pub(crate) use self::core::CoreContext;
 pub(crate) use self::core::import as core_import;
 pub(crate) use self::error_context::{ErrCtxContext, import as err_ctx_import};
+pub(crate) use self::future::{FutureContext, import as future_import};
 pub(crate) use self::host::{HostContext, import as host_import};
 pub(crate) use self::lift::{LiftContext, import as lift_import};
 pub(crate) use self::lower::{LowerContext, import as lower_import};
@@ -39,6 +41,7 @@ pub(crate) enum RuntimeContext {
     Host(HostContext),
     Lift(LiftContext),
     Lower(LowerContext),
+    Future(FutureContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -108,6 +111,7 @@ impl RuntimeContext {
         .chain(HostContext::get_global_names())
         .chain(LiftContext::get_global_names())
         .chain(LowerContext::get_global_names())
+        .chain(FutureContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -120,6 +124,7 @@ impl RuntimeContext {
             Self::Host(context) => context.local_name(),
             Self::Lift(context) => context.local_name(),
             Self::Lower(context) => context.local_name(),
+            Self::Future(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -155,6 +160,7 @@ impl RuntimeContext {
             Self::Host(context) => return context.initializer(),
             Self::Lift(context) => return context.initializer(),
             Self::Lower(context) => return context.initializer(),
+            Self::Future(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -249,6 +255,7 @@ impl RuntimeContext {
             Self::Host(context) => context.dependencies(),
             Self::Lift(context) => context.dependencies(),
             Self::Lower(context) => context.dependencies(),
+            Self::Future(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -292,6 +299,7 @@ impl RuntimeContext {
             Self::Host(context) => context.render(output, args),
             Self::Lift(context) => context.render(output, args),
             Self::Lower(context) => context.render(output, args),
+            Self::Future(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -413,6 +421,25 @@ pub(crate) fn module_specifier(base: &str, suffix: &str) -> Result<String> {
         "{base}/{suffix}{}",
         if directory { ".js" } else { "" }
     ))
+}
+
+/// Query the same descriptor dependency graph used to select state and constructors.
+pub(crate) fn uses_context(intrinsics: &BTreeSet<Intrinsic>, requested: RuntimeContext) -> bool {
+    let mut contexts = Vec::new();
+    for intrinsic in intrinsics {
+        if let IntrinsicBinding::Runtime {
+            import:
+                RuntimeImport {
+                    context: Some(context),
+                    ..
+                },
+            ..
+        } = intrinsic.binding(true)
+        {
+            context.collect(&mut contexts);
+        }
+    }
+    contexts.contains(&requested)
 }
 
 /// Called after dependency discovery, so transitive inline calls also get their imports.
@@ -555,7 +582,6 @@ pub(crate) fn discover_inline_dependencies(
     args: &super::RenderIntrinsicsArgs<'_>,
 ) {
     core::discover(intrinsic, args);
-    async_task::discover(intrinsic, args);
     lift::discover(intrinsic, args);
     lower::discover(intrinsic, args);
 }

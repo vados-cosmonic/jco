@@ -4,10 +4,7 @@ use super::{
     RuntimeInitializer, WaitableContext as V,
 };
 use crate::{
-    intrinsics::{
-        Intrinsic, IntrinsicBinding, RenderIntrinsicsArgs,
-        p3::{async_future::AsyncFutureIntrinsic, async_task::AsyncTaskIntrinsic},
-    },
+    intrinsics::{RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic},
     source::Source,
     uwriteln,
 };
@@ -22,7 +19,6 @@ pub(crate) enum TaskContext {
     Stack,
     Lookup,
     Clearing,
-    FuturePredicate,
     SubtaskClass,
     TaskClass,
     Creation,
@@ -46,7 +42,6 @@ impl TaskContext {
         Self::Stack,
         Self::Lookup,
         Self::Clearing,
-        Self::FuturePredicate,
         Self::SubtaskClass,
         Self::TaskClass,
         Self::Creation,
@@ -76,7 +71,6 @@ impl TaskContext {
             Self::Stack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
             Self::Lookup => "_jcoTaskLookupContext",
             Self::Clearing => "_jcoTaskClearContext",
-            Self::FuturePredicate => "_jcoTaskFuturePredicate",
             Self::SubtaskClass => "AsyncSubtask",
             Self::TaskClass => "AsyncTask",
             Self::Creation => "_jcoTaskCreateContext",
@@ -149,7 +143,7 @@ impl TaskContext {
                 RuntimeContext::ResourceScopeTasks,
                 T(Self::Clearing),
                 Core(K::GlobalCurrentTaskMeta),
-                T(Self::FuturePredicate),
+                RuntimeContext::Future(super::FutureContext::ValueClass),
             ],
             Self::Creation => &[T(Self::TaskClass), T(Self::Clearing)],
             Self::Trap => &[Core(K::WebAssemblyRuntimeError)],
@@ -195,13 +189,6 @@ impl TaskContext {
     }
     pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
-        if self == Self::FuturePredicate {
-            uwriteln!(
-                output,
-                "const {local} = value => value instanceof FutureValue;"
-            );
-            return;
-        }
         let properties = match self {
             Self::MayBlock => {
                 "typeof WebAssembly === 'undefined' ? false : { Global: WebAssembly.Global }"
@@ -221,7 +208,7 @@ impl TaskContext {
                 "{ lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::TaskClass => {
-                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, isFutureValue: _jcoTaskFuturePredicate }"
+                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
             }
             Self::Creation => {
                 "AsyncTask, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
@@ -251,7 +238,6 @@ impl TaskContext {
             Self::SymmetricExit => {
                 "tasks: ASYNC_TASKS_BY_COMPONENT_IDX, registers: CURRENT_TASK_META, lookup: _jcoComponentStateLookupContext, mayBlock: CURRENT_TASK_MAY_BLOCK, stack: SYMMETRIC_SYNC_GUEST_CALL_STACK"
             }
-            Self::FuturePredicate => unreachable!(),
         };
         if let Some(init) = self.initializer() {
             let initialize = init.local_name;
@@ -380,20 +366,10 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         kind,
     })
 }
-pub(crate) fn discover(intrinsic: Intrinsic, args: &RenderIntrinsicsArgs<'_>) {
-    if let IntrinsicBinding::Runtime { import, .. } = intrinsic.binding(true)
-        && let Some(context) = import.context
-    {
-        let mut contexts = Vec::new();
-        context.collect(&mut contexts);
-        if contexts.contains(&RuntimeContext::Task(TaskContext::TaskClass)) {
-            args.require_intrinsic(AsyncFutureIntrinsic::FutureValueClass);
-        }
-    }
-}
 #[cfg(all(test, feature = "external-runtime"))]
 mod tests {
     use super::*;
+    use crate::intrinsics::{Intrinsic, IntrinsicBinding};
     use crate::{TranspileOpts, intrinsics::render_intrinsics};
     fn generated(selected: impl IntoIterator<Item = Intrinsic>) -> String {
         let mut intrinsics = selected.into_iter().collect();
@@ -460,8 +436,8 @@ mod tests {
         ] {
             assert_eq!(source.matches(once).count(), 1, "{once}");
         }
-        assert!(source.contains("class FutureValue"));
-        assert!(source.contains("value => value instanceof FutureValue"));
+        assert!(source.contains("const FutureValue = _jcoInitializeFutureValueClass();"));
+        assert!(!source.contains("value => value instanceof FutureValue"));
     }
     #[test]
     fn callback_binding_preserves_plain_and_suspending_receivers() {
