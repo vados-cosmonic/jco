@@ -292,6 +292,19 @@ mod tests {
                     .transpile_opts(&opts)
                     .build(),
             );
+            if external {
+                assert!(
+                    source.contains("utf8: TEXT_ENCODER_UTF8, utf16: _jcoUtf16EncodingContext")
+                );
+                assert!(!source.contains("function _lowerFlatStringAny("));
+                assert_eq!(
+                    Intrinsic::Lower(LowerIntrinsic::LowerFlatStringAny)
+                        .binding(true)
+                        .call("ctx"),
+                    "_lowerFlatStringAny(_jcoLowerStringContext, ctx)"
+                );
+                continue;
+            }
             let utf8_context = if external { "TEXT_ENCODER_UTF8, " } else { "" };
             let utf16_context = if external {
                 "_jcoUtf16EncodingContext, "

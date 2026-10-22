@@ -26,7 +26,7 @@ and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
 tasks, subtasks and their state use `intrinsics/async-task`;
 guest-to-guest host calls and event writing use `intrinsics/host`;
-flat lifting helpers use `intrinsics/lift`.
+flat lifting helpers use `intrinsics/lift` and lowering helpers use `intrinsics/lower`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -52,8 +52,8 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(195/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context, 25 async-task, four host and 29 lift variants);
+(224/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context, 25 async-task, four host, 29 lift and 29 lower variants);
 other families remain inline during migration.
 
 ```js
@@ -443,3 +443,10 @@ stream lifts temporarily receive lazy capabilities for the remaining inline tabl
 endpoints and stream class; these bridges are removed as those families migrate.
 Borrowed-resource lifting and indirect error-context lifting retain their explicit
 unsupported-operation errors.
+
+Lower helpers retain the caller's live memory/storage cursor, strict numeric policy,
+and selected string encoder. Composite callbacks receive that cursor explicitly.
+Future/stream lowering uses narrow lazy capabilities until those families migrate.
+Character helpers accept Unicode scalar values, including NUL and astral characters.
+Error-context lowering transfers host ownership to a fresh local handle and balances
+references when replacing an exhausted local entry.

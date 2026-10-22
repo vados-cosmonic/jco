@@ -348,10 +348,13 @@ mod tests {
             Intrinsic::Lower(LowerIntrinsic::LowerFlatErrorContext),
         ] {
             let (source, _) = generated_intrinsics([selected]);
+            assert!(source.contains("lookup: _jcoComponentStateLookupContext"));
+            assert!(!source.contains(&format!("function {}(", selected.name())));
             assert!(
-                source.contains(
-                    "getOrCreateAsyncState(_jcoComponentStateLookupContext, componentIdx)"
-                )
+                selected
+                    .binding(true)
+                    .callback_reference()
+                    .contains("_jcoLower")
             );
             assert!(!source.contains("getOrCreateAsyncState(componentIdx)"));
             assert!(!source.contains("getOrCreateAsyncState(globalErrCtx.componentIdx)"));

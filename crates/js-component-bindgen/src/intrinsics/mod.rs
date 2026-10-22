@@ -2842,6 +2842,10 @@ impl Intrinsic {
                 local_name: self.name(),
                 import: runtime::task_import(*intrinsic),
             },
+            Self::Lower(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::lower_import(*intrinsic),
+            },
             Self::Lift(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::lift_import(*intrinsic),
