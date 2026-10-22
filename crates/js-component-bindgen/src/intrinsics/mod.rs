@@ -2842,6 +2842,10 @@ impl Intrinsic {
                 local_name: self.name(),
                 import: runtime::task_import(*intrinsic),
             },
+            Self::Host(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::host_import(*intrinsic),
+            },
             Self::ErrCtx(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::err_ctx_import(*intrinsic),

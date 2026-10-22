@@ -104,7 +104,8 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
             `{
             __test: {
                 createTask: ${external ? 'createNewCurrentTask.bind(void 0, _jcoTaskCreateContext)' : 'createNewCurrentTask'},
-                prepare: _prepareCall, start: _asyncStartCall,
+                prepare: ${external ? '_prepareCall.bind(void 0, _jcoHostPrepareContext)' : '_prepareCall'},
+                start: ${external ? '_asyncStartCall.bind(void 0, _jcoHostAsyncStartContext)' : '_asyncStartCall'},
                 tasks: ASYNC_TASKS_BY_COMPONENT_IDX, constructorArgs: __hostTaskArgs,
                 registers: CURRENT_TASK_META, State: ComponentAsyncState, states: ASYNC_STATE,
                 memories: GLOBAL_COMPONENT_MEMORY_MAP,

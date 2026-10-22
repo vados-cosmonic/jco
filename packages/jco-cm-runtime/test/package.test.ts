@@ -63,6 +63,7 @@ test('packed exports, standalone declarations, and independent provider conforma
                 'WaitableModule',
                 'ErrorContextModule',
                 'AsyncTaskModule',
+                'HostModule',
             ].map((name) => {
                 const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                 expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -79,6 +80,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/conversion',
             './intrinsics/core',
             './intrinsics/error-context',
+            './intrinsics/host',
             './intrinsics/js-helper',
             './intrinsics/resource',
             './intrinsics/string',
@@ -147,12 +149,13 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as waitable from '@bytecodealliance/jco-cm-runtime/intrinsics/waitable';
             import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
             import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
+            import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
-            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext, AsyncTaskModule: asyncTask };
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext, AsyncTaskModule: asyncTask, HostModule: host };
             const expectedExports = ${JSON.stringify(contractExports)};
             const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max', 'AsyncTaskModule.asyncBlockedCode']);
             for (const [name, exports] of Object.entries(expectedExports)) {
@@ -165,6 +168,9 @@ test('packed exports, standalone declarations, and independent provider conforma
             const defaultModule: ResourceModule = resource;
             const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
             const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+            const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;
+            const eventMemory = { buffer: new ArrayBuffer(8) };
+            if (defaultHost.storeEventInComponentMemory({ memory: eventMemory, ptr: 0, event: { code: 1, payload0: 17, payload1: 23 } }) !== 1 || new DataView(eventMemory.buffer).getUint32(4, true) !== 23) throw new Error('host event writer consumer failed');
             if (custom.getCurrentTask({ tasks: custom.initializeTasksByComponent(), registers: {} }, 0) !== undefined) throw new Error('copied task contract consumer failed');
             const taskOwners = defaultTasks.initializeTasksByComponent();
             if (defaultTasks.asyncBlockedCode !== 0xffffffff || defaultTasks.getCurrentTask({ tasks: taskOwners, registers: {} }, 0) !== undefined || defaultTasks.initializeCurrentTaskMayBlock(false) !== false || defaultTasks.initializeAsyncBlockingCallDepth(false).value !== 0) throw new Error('task owner/register consumer failed');
@@ -278,6 +284,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/string.js', '@bytecodealliance/jco-cm-runtime/intrinsics/string')
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
             .replaceAll('../src/intrinsics/async-task.js', '@bytecodealliance/jco-cm-runtime/intrinsics/async-task')
+            .replaceAll('../src/intrinsics/host.js', '@bytecodealliance/jco-cm-runtime/intrinsics/host')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
@@ -317,6 +324,8 @@ test('packed exports, standalone declarations, and independent provider conforma
                 Object.defineProperty(globalThis, key, { get() { throw new Error('unexpected capability: ' + key); } });
             }
             await import('@bytecodealliance/jco-cm-runtime/runtime');
+            const host = await import('@bytecodealliance/jco-cm-runtime/intrinsics/host');
+            if (Object.keys(host).sort().join() !== 'asyncStartCall,prepareCall,storeEventInComponentMemory,syncStartCall') throw new Error('host metadata import failed');
             const { tableGet } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/resource');
             const { toUint32, toString } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/conversion');
             const { emptyFunc } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/js-helper');

@@ -24,7 +24,8 @@ from `intrinsics/webidl`, with core operations, constructors and state owners
 from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
-tasks, subtasks and their state use `intrinsics/async-task`.
+tasks, subtasks and their state use `intrinsics/async-task`;
+guest-to-guest host calls and event writing use `intrinsics/host`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -50,8 +51,8 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(162/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context and 25 async-task variants);
+(166/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context, 25 async-task and four host variants);
 other families remain inline during migration.
 
 ```js
@@ -87,7 +88,8 @@ const conformance: ResourceModule = resource;
 Export `CM_RUNTIME_API_VERSION = 2` from your `runtime.js`. Expose `./runtime`
 and the implemented `./intrinsics/resource`, `./intrinsics/conversion` and
 `./intrinsics/js-helper`, `./intrinsics/string`, `./intrinsics/webidl` and
-`./intrinsics/core` and `./intrinsics/component` subpaths
+`./intrinsics/core`, `./intrinsics/component`, `./intrinsics/waitable`,
+`./intrinsics/error-context`, `./intrinsics/async-task` and `./intrinsics/host` subpaths
 in your package's `exports` map, with their matching
 JavaScript and declaration targets. `RuntimeModuleContracts` is a type-only map
 of public suffixes to their interfaces; no assembled runtime object is required.
@@ -404,9 +406,31 @@ operand order. Direct symmetric-call callbacks bind context with `void 0` in
 named mode; the suspending wrapper's slow callback preserves its null receiver.
 Inline callbacks retain their original function identity. A narrow lazy
 future-value predicate remains until the future family migrates; selecting a
-class or owner does not invoke it. The host event writer remains until N12.
+class or owner does not invoke it. Waitables use their own static event writer
+without a generated callback.
 
 Custom providers must publish this subpath and replace the old resource, core
 and waitable task callbacks with lookup/creation/register owners. The standalone
 declaration contains all structural types without private classes, factory
 options or a runtime operation registry.
+
+## Host-call contract
+
+`intrinsics/host` satisfies `HostModule` with `prepareCall`, `asyncStartCall`,
+`syncStartCall` and the context-free `storeEventInComponentMemory`.
+Prepare receives task lookup, creation, may-block and trap capabilities. Start
+receives the actual task/register/component-index owners, component lookup and
+driver capabilities. Async start also receives the live blocking-depth register,
+registered memory map and event codes. These views share existing owners;
+selecting a start operation alone does not initialize task classes.
+
+Start contexts retain the selected WebAssembly namespace. Its optional
+`promising` method is read only when a callee needs a new JSPI wrapper, called
+with that namespace as receiver and cached on that callee. Direct async calls
+and cached wrappers do not read it. Metadata and lowered core arguments remain
+call operands after context binding; callbacks preserve their null receiver.
+
+The event writer validates its memory, pointer and event, writes two
+little-endian u32 payloads and returns the event code. Default wait/poll
+operations call that static dependency directly. Overriding a sibling host
+export does not intercept the default waitable implementation.
