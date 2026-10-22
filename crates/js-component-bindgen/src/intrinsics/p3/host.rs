@@ -245,7 +245,7 @@ impl HostIntrinsic {
                               resultPtr,
                               returnFn,
                               startFn,
-                              stringEncoding,
+                              stringEncoding: encoding,
                            }}
                         }});
 
@@ -260,7 +260,7 @@ impl HostIntrinsic {
                                 subtask.id(),
                                 'new-prepared-async-task'
                             ].join('/'),
-                            stringEncoding,
+                            stringEncoding: encoding,
                         }});
                         newTask.setParentSubtask(subtask);
                         // Whether the callee may block depends on the callee's function type
@@ -269,7 +269,7 @@ impl HostIntrinsic {
                         newTask.setFuncTypeIsAsync(calleeIsAsyncInt !== 0);
                         newTask.setReturnResultTypeIdx(taskReturnTypeIdx >>> 0);
                         newTask.setReturnMemoryIdx(memoryIdx);
-                        newTask.setReturnMemory(getMemoryFn);
+                        newTask.setReturnMemory(getMemoryFn());
                         subtask.setChildTask(newTask);
 
                         newTask.subtaskMeta = {{
@@ -277,7 +277,7 @@ impl HostIntrinsic {
                             calleeComponentIdx,
                             callerComponentIdx,
                             getCalleeParamsFn,
-                            stringEncoding,
+                            stringEncoding: encoding,
                             isAsync,
                         }};
 
@@ -464,7 +464,7 @@ impl HostIntrinsic {
                             }} else {{
                                 const callerMemories = {lookup_memories_for_component_fn}{{ componentIdx: callerComponentIdx }});
                                 if (callerMemories.length !== 1) {{ throw new Error(`unsupported amount of caller memories`); }}
-                                callerMemory = callerMemories[0];
+                                callerMemory = callerMemories[0]?.memory;
                             }}
 
                             if (!callerMemory) {{
