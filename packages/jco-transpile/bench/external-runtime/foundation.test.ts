@@ -85,7 +85,7 @@ test(
             package: hash(await readFile(new URL('../package.json', defaultRuntimeUrl))),
         };
         const shimDirectory = dirname(
-            createRequire(import.meta.url).resolve('@bytecodealliance/preview2-shim/instantiation'),
+            dirname(createRequire(import.meta.url).resolve('@bytecodealliance/preview2-shim/instantiation')),
         );
         const shimArtifacts: Record<string, string> = {};
         for (const name of (await readdir(shimDirectory, { recursive: true }))
@@ -113,6 +113,10 @@ test(
                     'runtime/error_context.rs',
                     'runtime/async_task.rs',
                     'runtime/host.rs',
+                    'runtime/lift.rs',
+                    'runtime/lower.rs',
+                    'runtime/future.rs',
+                    'runtime/stream.rs',
                 ].map(async (name) => [
                     name,
                     hash(

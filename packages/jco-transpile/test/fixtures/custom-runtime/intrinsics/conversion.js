@@ -53,3 +53,11 @@ export function requireValidNumericPrimitive(type, value) {
     }
     return true;
 }
+
+// Independent Unicode scalar conversion required by the flat-lift module.
+export function i32ToChar(value) {
+    if (!Number.isInteger(value) || value < 0 || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff)) {
+        throw new TypeError('invalid char value [' + value + ']');
+    }
+    return String.fromCodePoint(value);
+}

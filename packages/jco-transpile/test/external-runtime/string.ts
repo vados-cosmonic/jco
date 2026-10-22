@@ -83,7 +83,7 @@ async function writeProvider(dir: string) {
         join(dir, 'provider/intrinsics/core.js'),
         'export * from ' + JSON.stringify(new URL('intrinsics/core.js', defaultRuntimeUrl).href) + ';',
     );
-    for (const suffix of ['conversion', 'js-helper', 'resource']) {
+    for (const suffix of ['conversion', 'js-helper', 'resource', 'lift', 'lower', 'future', 'stream']) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),
             'export * from ' + JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) + ';',

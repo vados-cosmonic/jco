@@ -25,6 +25,14 @@ for (const instantiation of ['sync', 'async', undefined] as const) {
             const dir = await getTmpDir();
             try {
                 await mkdir(join(dir, 'runtime/intrinsics'), { recursive: true });
+                for (const suffix of ['lift', 'lower', 'future', 'stream']) {
+                    await writeFile(
+                        join(dir, 'runtime/intrinsics/' + suffix + '.js'),
+                        'export * from ' +
+                            JSON.stringify(new URL('intrinsics/' + suffix + '.js', defaultRuntimeUrl).href) +
+                            ';',
+                    );
+                }
                 await writeFile(join(dir, 'package.json'), '{"type":"module"}');
                 await writeFile(join(dir, 'runtime/runtime.js'), 'export const CM_RUNTIME_API_VERSION = 1;');
                 await writeFile(

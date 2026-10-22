@@ -71,6 +71,10 @@ async function writeProvider(dir: string, source: string) {
         'waitable',
         'async-task',
         'host',
+        'lift',
+        'lower',
+        'future',
+        'stream',
     ]) {
         await writeFile(
             join(dir, 'provider/intrinsics/' + suffix + '.js'),

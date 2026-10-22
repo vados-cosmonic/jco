@@ -15,6 +15,12 @@ export const components = [
     { id: 'resources', path: '../../test/fixtures/components/p3/context-resource-drop.wat' },
     { id: 'events', path: '../../test/fixtures/components/p3/waitable-set-poll-non-set.wat' },
     { id: 'async', path: '../../test/fixtures/components/p3/sync-lowered-async-callee.wat' },
+    { id: 'stream-host-payload', path: '../../test/fixtures/generated/rust-test-components/stream-lower.wasm' },
+    { id: 'stream-payload', path: 'stream-payload.wat' },
+    { id: 'stream-cancel', path: 'stream-payload.wat' },
+    { id: 'future-pending', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
+    { id: 'future-nested', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
+    { id: 'future-rejected', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
     { id: 'streams', path: '../../test/fixtures/components/p3/zero-length-same-component-stream.wat' },
     { id: 'futures', path: '../../test/fixtures/generated/rust-test-components/future-lower.wasm' },
 ] as const;
@@ -70,6 +76,7 @@ const taskClassImports = [
     },
     { suffix: 'intrinsics/waitable', names: ['initializeWaitableClass'] },
 ];
+taskClassImports.push({ suffix: 'intrinsics/future', names: ['initializeFutureValueClass'] });
 const taskClassBase = `
  const RuntimeError = Error, RepTable = initializeRepTableClass({ RuntimeError });
  const indexSpaces = initializeHandleIndexSpaces(), instanceFlags = initializeInstanceFlags();
@@ -84,6 +91,31 @@ const taskClassBase = `
 
 /** Keep selected owners/classes separate from scalar-only runtime imports. */
 export const importControls = [
+    {
+        id: 'lift-pure-bool',
+        suffix: 'intrinsics/lift',
+        names: ['liftFlatBool'],
+        setup: 'const context = {componentIdx: 0, params: [1], useDirectParams: true};',
+        answer: 'liftFlatBool(context)[0] === true && context.params.length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        id: 'stream-table-owner-only',
+        suffix: 'intrinsics/stream',
+        names: ['initializeStreamTables'],
+        setup: 'const first = initializeStreamTables(), second = initializeStreamTables();',
+        answer: 'first !== second && Object.keys(first).length === 0 && Object.keys(second).length === 0 ? 42 : 0',
+        allocations: {},
+    },
+    {
+        id: 'future-selected-value-brand',
+        suffix: 'intrinsics/future',
+        names: ['initializeFutureValueClass'],
+        setup: 'const First = initializeFutureValueClass(), Second = initializeFutureValueClass(); let starts = 0; const value = new First(() => { starts++; return {value: 42}; });',
+        answer: 'First !== Second && value instanceof First && !(value instanceof Second) && starts === 0 ? 42 : 0',
+        allocations: {},
+    },
+
     {
         suffix: 'intrinsics/host',
         id: 'host-event-memory',
@@ -187,7 +219,7 @@ export const importControls = [
             `
          const scopeCounter = initializeResourceScopeCounter(), scopeTasks = initializeResourceScopeTasks();
          const clearing = { tasks: initializeTasksByComponent(), taskIds: initializeCurrentTaskIds(), componentIdxs: initializeCurrentComponentIdxs() };
-         const Task = initializeAsyncTaskClass({ RuntimeError, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers: {}, isFutureValue: () => { throw new Error('eager future predicate'); } });
+         const Task = initializeAsyncTaskClass({ RuntimeError, AsyncSubtask, Waitable, lookup, events: initializeAsyncEventCodes(), determinism: 'deterministic', scopeCounter, scopeTasks, clearing, registers: {}, FutureValue: initializeFutureValueClass() });
          const creation = { ...clearing, AsyncTask: Task }, [a] = createNewCurrentTask(creation, { componentIdx: 0 }), [b] = createNewCurrentTask(creation, { componentIdx: 0 });
          const shared = scopeTasks.get(a.resourceScopeId()) === a && scopeTasks.get(b.resourceScopeId()) === b;
          a.validateResourceBorrowScope(); b.validateResourceBorrowScope(); clearCurrentTask(clearing, 0, a.id()); clearCurrentTask(clearing, 0, b.id());
