@@ -1,7 +1,10 @@
 # Runtime investigations
 
-N14 is in progress. The matched factory/named assessment, browser measurements,
-retention/context traces and remaining diagnostic experiments are not complete.
+The N14 replay infrastructure is available. Further performance assessment is
+deferred until the lift, lower, future and stream conversions compile and pass
+correctness checks. No optimization is adopted by this branch. The matched
+factory/named assessment, browser measurements and retention/context traces are
+not complete; interrupted collection attempts are not completed evidence.
 Clean historical repair evidence is now [published separately](../checkpoints/n14-historical-repair.md).
 The complete four-mode [input verification](../checkpoints/n14-matched-inputs.md)
 also passed; accepted matched timing and the remaining investigations are pending.
