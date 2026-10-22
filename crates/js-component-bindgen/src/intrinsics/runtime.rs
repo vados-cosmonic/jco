@@ -15,6 +15,7 @@ mod future;
 mod host;
 mod lift;
 mod lower;
+mod stream;
 mod waitable;
 pub(crate) use self::async_task::{TaskContext, import as task_import};
 pub(crate) use self::component::{ComponentContext, import as component_import};
@@ -25,6 +26,7 @@ pub(crate) use self::future::{FutureContext, import as future_import};
 pub(crate) use self::host::{HostContext, import as host_import};
 pub(crate) use self::lift::{LiftContext, import as lift_import};
 pub(crate) use self::lower::{LowerContext, import as lower_import};
+pub(crate) use self::stream::{StreamContext, import as stream_import};
 pub(crate) use self::waitable::{WaitableContext, import as waitable_import};
 
 pub(crate) const CM_RUNTIME_API_VERSION: u32 = 2;
@@ -42,6 +44,7 @@ pub(crate) enum RuntimeContext {
     Lift(LiftContext),
     Lower(LowerContext),
     Future(FutureContext),
+    Stream(StreamContext),
     ResourceTableGet,
     HandleIndexSpaces,
     HandleTables,
@@ -112,6 +115,7 @@ impl RuntimeContext {
         .chain(LiftContext::get_global_names())
         .chain(LowerContext::get_global_names())
         .chain(FutureContext::get_global_names())
+        .chain(StreamContext::get_global_names())
     }
 
     pub(crate) fn local_name(self) -> &'static str {
@@ -125,6 +129,7 @@ impl RuntimeContext {
             Self::Lift(context) => context.local_name(),
             Self::Lower(context) => context.local_name(),
             Self::Future(context) => context.local_name(),
+            Self::Stream(context) => context.local_name(),
             Self::ResourceTableGet => TABLE_GET_CONTEXT,
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::HandleTables => "HANDLE_TABLES",
@@ -161,6 +166,7 @@ impl RuntimeContext {
             Self::Lift(context) => return context.initializer(),
             Self::Lower(context) => return context.initializer(),
             Self::Future(context) => return context.initializer(),
+            Self::Stream(context) => return context.initializer(),
             Self::HandleIndexSpaces => (
                 "intrinsics/resource",
                 "initializeHandleIndexSpaces",
@@ -256,6 +262,7 @@ impl RuntimeContext {
             Self::Lift(context) => context.dependencies(),
             Self::Lower(context) => context.dependencies(),
             Self::Future(context) => context.dependencies(),
+            Self::Stream(context) => context.dependencies(),
             Self::ResourceRemove => &[Self::HandleIndexSpaces, Self::ResourceScopeTasks],
             Self::ResourceTransferOwn => &[
                 Self::HandleIndexSpaces,
@@ -300,6 +307,7 @@ impl RuntimeContext {
             Self::Lift(context) => context.render(output, args),
             Self::Lower(context) => context.render(output, args),
             Self::Future(context) => context.render(output, args),
+            Self::Stream(context) => context.render(output, args),
             Self::ResourceRemove => uwriteln!(
                 output,
                 "const {local} = {{ RuntimeError: WebAssembly.RuntimeError, indexSpaces: HANDLE_INDEX_SPACES, scopeTasks: RESOURCE_SCOPE_TASKS }};"
@@ -581,8 +589,6 @@ pub(crate) fn discover_inline_dependencies(
     args: &super::RenderIntrinsicsArgs<'_>,
 ) {
     core::discover(intrinsic, args);
-    lift::discover(intrinsic, args);
-    lower::discover(intrinsic, args);
 }
 
 #[cfg(test)]
