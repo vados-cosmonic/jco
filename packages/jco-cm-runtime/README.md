@@ -25,7 +25,8 @@ from `intrinsics/core`, component state/scheduling from `intrinsics/component`,
 and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
 tasks, subtasks and their state use `intrinsics/async-task`;
-guest-to-guest host calls and event writing use `intrinsics/host`.
+guest-to-guest host calls and event writing use `intrinsics/host`;
+flat lifting helpers use `intrinsics/lift`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -51,8 +52,8 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(166/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context, 25 async-task and four host variants);
+(195/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context, 25 async-task, four host and 29 lift variants);
 other families remain inline during migration.
 
 ```js
@@ -434,3 +435,11 @@ The event writer validates its memory, pointer and event, writes two
 little-endian u32 payloads and returns the event code. Default wait/poll
 operations call that static dependency directly. Overriding a sibling host
 export does not intercept the default waitable implementation.
+
+Lift helpers consume the caller's live parameter/storage cursor. Composite metadata
+contains the selected field callbacks; callbacks may return a replacement cursor.
+UTF8/UTF16 codecs and variant scratch are selected once per store. Future and
+stream lifts temporarily receive lazy capabilities for the remaining inline tables,
+endpoints and stream class; these bridges are removed as those families migrate.
+Borrowed-resource lifting and indirect error-context lifting retain their explicit
+unsupported-operation errors.

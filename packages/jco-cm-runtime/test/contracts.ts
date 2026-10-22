@@ -263,3 +263,15 @@ const factoryHost: HostPrepareContext = { createIntrinsics: () => host };
 // @ts-expect-error host start functions need a capability context before their operands
 hostModule.asyncStartCall({ getCallbackFn: () => null, getPostReturnFn: () => null }, () => 0, 0, 0, 0);
 void [hostContract, independentWriter, minimalPromising, privateHost, wrongEventWriter, factoryHost];
+
+import * as lift from '../src/intrinsics/lift.js';
+import type { LiftModule, LiftVariantContext } from '../src/runtime.js';
+const liftContract: RuntimeModuleContracts['intrinsics/lift'] = lift;
+const liftModule: LiftModule = lift;
+liftModule.liftFlatBool({ componentIdx: 0, params: [1], useDirectParams: true });
+// @ts-expect-error UTF8 lifting requires the selected decoder
+liftModule.liftFlatStringUTF8({ strict: true }, { componentIdx: 0, params: [] });
+// @ts-expect-error variant scratch is a stable selected owner
+const invalidLiftScratch: LiftVariantContext = { scratch: [] };
+void liftContract;
+void invalidLiftScratch;

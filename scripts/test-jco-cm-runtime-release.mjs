@@ -133,3 +133,19 @@ assert.equal(
     1,
 );
 assert.equal(new DataView(eventMemory.buffer).getUint32(4, true), 23);
+
+const { liftFlatU32, liftFlatList } = await import('@bytecodealliance/jco-cm-runtime/intrinsics/lift');
+const liftCursor = { componentIdx: 0, params: [-1], useDirectParams: true };
+assert.equal(liftFlatU32(liftCursor)[0], 0xffffffff);
+assert.deepEqual(liftCursor.params, []);
+const liftMemory = { buffer: new ArrayBuffer(16) };
+new Uint32Array(liftMemory.buffer).set([17, 23]);
+assert.deepEqual(
+    liftFlatList(context, { elemLiftFn: liftFlatU32, elemSize32: 4, elemAlign32: 4 })({
+        componentIdx: 0,
+        params: [0, 2],
+        useDirectParams: true,
+        memory: liftMemory,
+    })[0],
+    [17, 23],
+);

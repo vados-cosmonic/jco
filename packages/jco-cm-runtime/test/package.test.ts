@@ -64,6 +64,7 @@ test('packed exports, standalone declarations, and independent provider conforma
                 'ErrorContextModule',
                 'AsyncTaskModule',
                 'HostModule',
+                'LiftModule',
             ].map((name) => {
                 const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                 expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -82,6 +83,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             './intrinsics/error-context',
             './intrinsics/host',
             './intrinsics/js-helper',
+            './intrinsics/lift',
             './intrinsics/resource',
             './intrinsics/string',
             './intrinsics/waitable',
@@ -150,12 +152,13 @@ test('packed exports, standalone declarations, and independent provider conforma
             import * as errorContext from '@bytecodealliance/jco-cm-runtime/intrinsics/error-context';
             import * as asyncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/async-task';
             import * as host from '@bytecodealliance/jco-cm-runtime/intrinsics/host';
+            import * as lift from '@bytecodealliance/jco-cm-runtime/intrinsics/lift';
             import * as jsHelper from '@bytecodealliance/jco-cm-runtime/intrinsics/js-helper';
             import * as string from '@bytecodealliance/jco-cm-runtime/intrinsics/string';
             import * as webidl from '@bytecodealliance/jco-cm-runtime/intrinsics/webidl';
             import * as custom from './provider.js';
             import type { ResourceModule, ConversionModule, RuntimeModuleContracts } from '@bytecodealliance/jco-cm-runtime/runtime';
-            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext, AsyncTaskModule: asyncTask, HostModule: host };
+            const publicModules: Record<string, Record<string, unknown>> = { ResourceModule: resource, ConversionModule: conversion, JsHelperModule: jsHelper, StringModule: string, WebIdlModule: webidl, CoreModule: core, ComponentModule: component, WaitableModule: waitable, ErrorContextModule: errorContext, AsyncTaskModule: asyncTask, HostModule: host, LiftModule: lift };
             const expectedExports = ${JSON.stringify(contractExports)};
             const constants = new Set(['ResourceModule.tableFlag', 'CoreModule.i32Min', 'CoreModule.i32Max', 'AsyncTaskModule.asyncBlockedCode']);
             for (const [name, exports] of Object.entries(expectedExports)) {
@@ -285,6 +288,7 @@ test('packed exports, standalone declarations, and independent provider conforma
             .replaceAll('../src/intrinsics/webidl.js', '@bytecodealliance/jco-cm-runtime/intrinsics/webidl')
             .replaceAll('../src/intrinsics/async-task.js', '@bytecodealliance/jco-cm-runtime/intrinsics/async-task')
             .replaceAll('../src/intrinsics/host.js', '@bytecodealliance/jco-cm-runtime/intrinsics/host')
+            .replaceAll('../src/intrinsics/lift.js', '@bytecodealliance/jco-cm-runtime/intrinsics/lift')
             .replaceAll('../src/runtime.js', '@bytecodealliance/jco-cm-runtime/runtime');
         await writeFile(join(consumer, 'negatives.ts'), negatives);
         await writeFile(
