@@ -8,8 +8,10 @@ import type {
     ConditionalTrampoline,
     ConditionalSlowFn,
     ConditionalSuspendingPlatform,
+    TaskMayBlockGlobal,
 } from '../runtime.js';
 import { checkMayLeave, recordTrap, getOrCreateAsyncState } from './component.js';
+import { getCurrentTask } from './task-operations.js';
 export { debugLog } from './core-debug.js';
 export { initializeRepTableClass } from './rep-table.js';
 export { initializeManagedBufferClass, initializeBufferManagerClass } from './buffers.js';
@@ -201,6 +203,10 @@ export function lookupMemories(
     }
     return args.memoryIdx === undefined ? Object.values(metas) : metas[args.memoryIdx]?.memory;
 }
+function taskRegisterMayBlock(register: TaskMayBlockGlobal) {
+    return (register === false ? undefined : register.value) !== 0;
+}
+
 export const suspendingImport: CoreModule['suspendingImport'] = (
     context,
     componentIdx,
@@ -213,8 +219,8 @@ export const suspendingImport: CoreModule['suspendingImport'] = (
     return function (...args) {
         checkMayLeave(context.mayLeave, componentIdx);
         const saved = currentTaskMeta[componentIdx] ?? null;
-        const savedTask = saved ? context.getCurrentTask(saved.componentIdx, saved.taskID) : null;
-        const mayBlock = savedTask ? (savedTask.mayBlock() ?? context.currentTaskMayBlock() !== 0) : false;
+        const savedTask = saved ? getCurrentTask(context.taskLookup, saved.componentIdx, saved.taskID)?.task : null;
+        const mayBlock = savedTask ? (savedTask.mayBlock() ?? taskRegisterMayBlock(context.mayBlock)) : false;
         if (!saved && !mayBlock) {
             throw new RuntimeError('cannot block a synchronous task before returning');
         }

@@ -82,10 +82,10 @@ async function withProbe(external: boolean, check: (probe: Probe) => void) {
         const source = new TextDecoder().decode(files['task-regression.js']).replace(/return \{ run,\s*\};/g, () => {
             replacements++;
             return `return { run, __test: {
-                    createTask: createNewCurrentTask, State: ComponentAsyncState, states: ASYNC_STATE,
+                    createTask: ${external ? 'createNewCurrentTask.bind(void 0, _jcoTaskCreateContext)' : 'createNewCurrentTask'}, State: ComponentAsyncState, states: ASYNC_STATE,
                     memories: GLOBAL_COMPONENT_MEMORY_MAP, registers: CURRENT_TASK_META,
                     tasks: ASYNC_TASKS_BY_COMPONENT_IDX, scopes: RESOURCE_SCOPE_TASKS,
-                    scheduler: STORE_ASYNC_STATE, compat: _lowerImportBackwardsCompat,
+                    scheduler: STORE_ASYNC_STATE, compat: ${external ? '_lowerImportBackwardsCompat.bind(void 0, _jcoTaskCompatImportContext)' : '_lowerImportBackwardsCompat'},
                 } };`;
         });
         assert.strictEqual(replacements, 1);

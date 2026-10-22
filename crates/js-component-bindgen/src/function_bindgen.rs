@@ -453,16 +453,6 @@ impl FunctionBindgen<'_> {
         }
     }
 
-    // Task-only templates may be built unconditionally, but must only be emitted
-    // when task management is enabled.
-    fn task_intrinsic(&mut self, intrinsic: Intrinsic) -> String {
-        if !self.skip_fn_call_task_management {
-            self.intrinsic(intrinsic)
-        } else {
-            intrinsic.name().to_string()
-        }
-    }
-
     fn emit_dealloc(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
         let Some(dealloc) = self.dealloc else {
             return;
@@ -2340,8 +2330,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let start_current_task_fn = self.task_intrinsic(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
                 ));
-                let current_task_get_fn =
-                    self.task_intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::GetCurrentTask));
+                let current_task_get_fn = self.task_intrinsic_call_prefix(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GetCurrentTask,
+                ));
 
                 // At first, use the global current thread metadata, in case we are executing from
                 // inside a with-global-current-thread wrapper
@@ -2419,7 +2410,7 @@ impl Bindgen for FunctionBindgen<'_> {
                     }};
 
                     taskCreation: {{
-                        parentTask = {current_task_get_fn}(
+                        parentTask = {current_task_get_fn}
                             {component_idx_expr},
                             {get_global_current_thread_meta_fn}{component_idx_expr})?.taskID,
                         )?.task;
@@ -4083,8 +4074,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 };
                 let debug_log_fn = self.intrinsic(Intrinsic::DebugLog);
                 let is_async_js = self.requires_async_porcelain | self.is_async;
-                let async_driver_loop_fn =
-                    self.intrinsic(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
+                let async_driver_loop_fn = self
+                    .intrinsic_call_prefix(Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop));
                 let get_or_create_async_state_fn = self.intrinsic_call_prefix(
                     Intrinsic::Component(ComponentIntrinsic::GetOrCreateAsyncState),
                 );
@@ -4206,7 +4197,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                   componentInstanceIdx: {component_idx_expr},
                                   taskID: task.id(),
                               }});
-                              await {async_driver_loop_fn}({{
+                              await {async_driver_loop_fn}{{
                                   componentInstanceIdx: {component_idx_expr},
                                   componentState,
                                   task,

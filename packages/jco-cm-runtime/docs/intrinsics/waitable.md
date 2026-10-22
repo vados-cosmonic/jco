@@ -9,13 +9,14 @@ constructor, preserving class identity across tasks, component handles and
 
 New-set operations receive the actual component lookup and selected set
 constructor. Wait/poll also receive the selected trap constructor, a narrow
-task lookup and host event-writer capability; poll alone receives `NONE`.
+task Map/register view and host event-writer capability; poll alone receives `NONE`.
 Drop needs lookup, task metadata and the trap constructor. Join needs lookup
 and the trap constructor. Removal needs only the trap constructor and its
 per-call state/handle operand. Memory and canonical options remain per-call
 operands rather than shared runtime state.
 
-Task lookup and event writing remain lazy while those families are inline.
+Task lookup uses its own static default operation and actual state owners.
+Only event writing remains a lazy bridge until host operations migrate.
 Lookup preserves the generated helper's current-task fallback behavior. Waits
 retain their synchronous fast path, cancellation rules, waiter counts and live
 memory buffer; pending events are consumed once. Default operations call their

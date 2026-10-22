@@ -312,6 +312,12 @@ impl IntrinsicBinding {
     /// A host callback with no pre-existing partial application. Inline keeps
     /// its original identity; named calls bind only their capability context.
     pub(crate) fn callback_reference(self) -> String {
+        self.callback_reference_with_receiver("void 0")
+    }
+
+    /// Preserve the receiver supplied by the callback's eventual caller when
+    /// adding a named operation's capability argument. Inline stays unbound.
+    pub(crate) fn callback_reference_with_receiver(self, receiver: &str) -> String {
         match self {
             Self::Runtime {
                 local_name,
@@ -321,7 +327,7 @@ impl IntrinsicBinding {
                         context: Some(context),
                         ..
                     },
-            } => format!("{local_name}.bind(void 0, {})", context.local_name()),
+            } => format!("{local_name}.bind({receiver}, {})", context.local_name()),
             Self::Inline { local_name }
             | Self::Runtime {
                 local_name,
@@ -3177,6 +3183,17 @@ impl Intrinsic {
             };
         }
         match self {
+            Self::AsyncTask(intrinsic) if external_runtime => {
+                match runtime::task_import(*intrinsic) {
+                    Some(import) => IntrinsicBinding::Runtime {
+                        local_name: self.name(),
+                        import,
+                    },
+                    None => IntrinsicBinding::Inline {
+                        local_name: self.name(),
+                    },
+                }
+            }
             Self::ErrCtx(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::err_ctx_import(*intrinsic),

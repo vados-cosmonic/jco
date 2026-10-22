@@ -29,6 +29,14 @@ const { initializeWaitableClass, initializeWaitableSetClass } =
     await import('@bytecodealliance/jco-cm-runtime/intrinsics/waitable');
 const { initializeLocalErrorContextTables, initializeErrorContextTableRegistrations } =
     await import('@bytecodealliance/jco-cm-runtime/intrinsics/error-context');
+const { initializeTasksByComponent, getCurrentTask, initializeCurrentTaskMayBlock, initializeAsyncBlockingCallDepth } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/async-task');
+if (
+    getCurrentTask({ tasks: initializeTasksByComponent(), registers: {} }, 0) !== undefined ||
+    initializeCurrentTaskMayBlock(false) !== false ||
+    initializeAsyncBlockingCallDepth(false).value !== 0
+)
+    throw new Error('task optional capability leak');
 if (initializeLocalErrorContextTables().size || Object.keys(initializeErrorContextTableRegistrations()).length)
     throw new Error('error-context capability leak');
 const Waitable = initializeWaitableClass(),

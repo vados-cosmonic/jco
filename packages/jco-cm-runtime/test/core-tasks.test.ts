@@ -105,8 +105,11 @@ function bridge(mayBlock: boolean) {
         mayLeave: { RuntimeError: core.RuntimeError, instanceFlags: component.instanceFlags },
         traps: { RuntimeError: core.RuntimeError, registers: core.currentTaskMeta, lookup: states },
         states,
-        getCurrentTask: () => ({ mayBlock: () => mayBlock }),
-        currentTaskMayBlock: () => 0,
+        taskLookup: {
+            registers: core.currentTaskMeta,
+            tasks: new Map([[0, [{ id: 1n, componentIdx: 0, task: { id: () => 1n, mayBlock: () => mayBlock } }]]]),
+        },
+        mayBlock: { value: 0 },
     };
     return { context, traps, checks, state };
 }
