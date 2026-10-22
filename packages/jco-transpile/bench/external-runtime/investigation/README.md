@@ -7,6 +7,60 @@ The complete four-mode [input verification](../checkpoints/n14-matched-inputs.md
 also passed; accepted matched timing and the remaining investigations are pending.
 Inline remains the production default.
 
+## Standalone matched collection
+
+After the full input build and all functional/browser processes have exited,
+run the standalone collector from `packages/jco-transpile`:
+
+```sh
+pnpm bench:external-runtime:investigate \
+  --source /path/to/verified-matrix \
+  --anchor bench/external-runtime/checkpoints/n14-matched-inputs.json \
+  --processes 5 --verify-only
+pnpm bench:external-runtime:investigate \
+  --source /path/to/verified-matrix \
+  --anchor bench/external-runtime/checkpoints/n14-matched-inputs.json \
+  --processes 5
+pnpm bench:external-runtime:investigate \
+  --source /path/to/verified-matrix \
+  --anchor bench/external-runtime/checkpoints/n14-matched-inputs.json \
+  --processes 10
+```
+
+Both complete five- and ten-process cohorts are mandatory, declared in
+`collection-plan.mjs` before collection. Every process retains 15 paired samples
+after common calibration, with four-mode Williams orders and seeded scenario
+rotation. Recording, filters and incomplete matrices are refused. The primary
+experiment uses dynamic debug code with the default unset `JCO_DEBUG` environment;
+debug-disabled transformations belong to a separate matched experiment.
+
+The independent anchor pins the input manifest and all 272 bundle digests/sizes.
+The collector rechecks actual fixtures/core Wasm, both runtime packages, producer
+binaries, compiler/mapping/shim/lock hashes and installed measured-tool versions.
+It re-executes all 360 canonical named import controls (native-constructor counts
+remain partial allocation diagnostics), then verifies all four bundles for each
+entry. Linux process audits require an idle workspace. Worker/workload/report
+sources are copied into each new attempt and used directly by its workers and
+summary; no input archive is rewritten.
+
+Each invocation creates a fresh directory under
+`bench/output/external-runtime-matched`; `--output` selects another archive root.
+Configurations, raw samples, separate per-mode retained-memory processes, source
+snapshots and protocol/provenance are preserved. A completed result/summary is
+published only after the entire timing and memory matrix validates. Failures get
+their own metadata and progress; no historical baseline is replaced. Timeouts
+abort and reap owned workers. A verification-only attempt collects no accepted
+timing and publishes no completed performance result.
+
+Reports retain absolute medians, every per-process paired ratio, process ranges,
+95% process-cluster intervals and identical scalar-control noise. Current/old
+inline and normalized external/inline overhead remain visible alongside direct
+named/factory and inline comparisons. Existing size/timing parity budgets remain
+unchanged; a complete diagnostic collection can report parity losses. Negative
+memory deltas are excluded and overlapping counters are not total process memory.
+The standalone collection does not complete the separate browser, context/lazy
+initialization or controlled-loss investigations required for N14.
+
 ## Matched input preparation
 
 `vitest.config.ts` runs only the complete four-mode build/correctness phase.

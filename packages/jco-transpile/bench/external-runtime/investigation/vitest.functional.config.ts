@@ -9,6 +9,7 @@ export default defineConfig({
             'bench/external-runtime/investigation/transforms.test.ts',
             'bench/external-runtime/investigation/runtime-resolution.test.ts',
             'bench/external-runtime/investigation/matched-protocol.test.ts',
+            'bench/external-runtime/investigation/collector.test.ts',
         ],
         testTimeout: 30_000,
         maxWorkers: 1,
