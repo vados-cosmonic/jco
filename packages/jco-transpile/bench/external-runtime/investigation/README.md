@@ -22,6 +22,14 @@ Factory call hooks run only in separate instrumented diagnostics; readable sourc
 spans describe retention and are not additive compressed-size estimates. AST span
 edits preserve unrelated source, including array elisions.
 
+The bundler's `runtimePackageDirectory` diagnostic option selects the isolated
+runtime package and reads its own side-effects metadata. Bare root imports,
+named subpaths and file URLs use that selection. Package imports resolving
+outside the selected runtime are rejected. Functional checks exercise both
+bundlers, metadata with and without side effects, real module execution and
+accidental links to the current runtime; the default suite keeps its current
+runtime selection.
+
 ## Recollect a frozen smoke matrix
 
 From the repository root, using the original archived absolute artifact paths:
