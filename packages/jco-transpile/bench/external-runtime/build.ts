@@ -147,15 +147,26 @@ export async function optimize(entry: string, bundler: Bundler, treeshake = true
         await build.close();
     }
 }
-async function buildArtifact(
+export interface ArtifactBuildOptions {
+    runtimePackageDirectory?: string;
+    runtimeFileSpecifier?: string;
+    /** Diagnostic producer; defaults to the production Node API with the options below. */
+    generate?: (
+        fixture: string,
+        name: string,
+        runtimeSpecifier?: string,
+    ) => Promise<{ files: Record<string, Uint8Array> }>;
+}
+export async function buildArtifact(
     dir: string,
     mode: Mode,
     parts: readonly ComponentId[],
     bundler: Bundler,
     resolution: Resolution,
+    options: ArtifactBuildOptions = {},
 ): Promise<Artifact> {
     await mkdir(dir, { recursive: true });
-    await installRuntime(dir);
+    await installRuntime(dir, options.runtimePackageDirectory);
     const graph = { imports: [] as string[], contexts: [] as string[], initializers: [] as string[] };
     const fixtureDigests: Record<string, string> = {};
     const files: Record<string, string> = {};
@@ -169,22 +180,25 @@ async function buildArtifact(
         fixtureDigests[id] = createHash('sha256')
             .update(await readFile(fixture))
             .digest('hex');
+        const runtimeSpecifier =
+            mode === 'external'
+                ? resolution === 'file'
+                    ? (options.runtimeFileSpecifier ?? defaultRuntimeUrl.href)
+                    : '@bytecodealliance/jco-cm-runtime'
+                : undefined;
         const result =
             id === 'noise'
                 ? { files: { [`${name}.js`]: new Uint8Array(await readFile(fixture)) } }
-                : await transpile(fixture, {
-                      name,
-                      instantiation: 'sync',
-                      wasiShim: false,
-                      base64Cutoff: 0,
-                      asyncMode: 'jspi',
-                      cmRuntimeEsModule:
-                          mode === 'external'
-                              ? resolution === 'file'
-                                  ? defaultRuntimeUrl.href
-                                  : '@bytecodealliance/jco-cm-runtime'
-                              : undefined,
-                  });
+                : options.generate
+                  ? await options.generate(fixture, name, runtimeSpecifier)
+                  : await transpile(fixture, {
+                        name,
+                        instantiation: 'sync',
+                        wasiShim: false,
+                        base64Cutoff: 0,
+                        asyncMode: 'jspi',
+                        cmRuntimeEsModule: runtimeSpecifier,
+                    });
         const partDir = join(dir, prefix);
         await writeFiles(result.files, { baseDir: partDir });
         for (const [path, bytes] of Object.entries(result.files)) {
@@ -212,9 +226,10 @@ export function create${i}(load, imports) { return instantiate${i}(name => load(
     const entry = join(dir, 'entry.js');
     await writeFile(entry, exports.join('\n'));
     const start = performance.now();
-    const result = await optimize(entry, bundler);
+    const experiment = { runtimePackageDirectory: options.runtimePackageDirectory };
+    const result = await optimize(entry, bundler, true, experiment);
     const bundleMs = performance.now() - start;
-    const unshaken = await optimize(entry, bundler, false);
+    const unshaken = await optimize(entry, bundler, false, experiment);
     const bundle = join(dir, 'bundle.mjs');
     await writeFile(bundle, result.code);
     return {
