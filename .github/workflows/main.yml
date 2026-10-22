@@ -342,6 +342,7 @@ jobs:
         run: |
           pnpm run types:check:bench:external-runtime
           pnpm run bench:external-runtime:verify
+          node scripts/assert-external-runtime-bench-idle.mjs
           # CI has its own producer/toolchain fingerprint; never substitute a
           # local regression baseline or record one implicitly. Parity is strict.
           pnpm run bench:external-runtime:parity

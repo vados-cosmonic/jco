@@ -213,6 +213,9 @@ steady-state async/stream/future work remains N14/N19.
 canaries separately from timing. The normal/LTS/extended configurations do not
 discover benchmark files. CI runs strict types, this preflight and the complete
 strict-parity command once on Ubuntu/Node 24/inline, after functional suites.
+It checks Linux `/proc` for remaining workspace fixture, Vitest, compiler,
+browser and benchmark workers before timing; completing a command alone does
+not establish process isolation. This read-only audit never stops processes.
 It uploads raw artifacts even if parity fails. CI never records or silently uses
 a baseline from a different producer/toolchain fingerprint; documented parity
 losses can therefore produce an explicit failed comparison step. Local regression
