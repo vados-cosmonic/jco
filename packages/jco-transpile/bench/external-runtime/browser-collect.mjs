@@ -104,7 +104,12 @@ const server = http.createServer(async (req, res) => {
                 type = 'application/wasm';
             }
         }
-        res.writeHead(200, { 'Content-Type': type, 'Cache-Control': 'no-store' });
+        res.writeHead(200, {
+            'Content-Type': type,
+            'Cache-Control': 'no-store',
+            'Cross-Origin-Opener-Policy': 'same-origin',
+            'Cross-Origin-Embedder-Policy': 'require-corp',
+        });
         res.end(bytes);
     } catch (error) {
         res.writeHead(500);

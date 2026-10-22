@@ -88,6 +88,23 @@ export async function probe(config) {
             count *= 2;
         }
     }
+    // Retain an adaptive batch long enough to exceed the browser clock quantum.
+    // The same batch count is used by both modes; calibration is outside samples.
+    let instantiations = 16;
+    for (;;) {
+        const elapsed = [];
+        for (const mode of ['inline', 'external']) {
+            const state = prepared[mode],
+                start = performance.now();
+            const stores = Array.from({ length: instantiations }, () => state.instantiate(state.binding));
+            elapsed.push(performance.now() - start);
+            assert.equal(stores.length, instantiations);
+        }
+        if (Math.min(...elapsed) >= 1 || instantiations >= 4096) {
+            break;
+        }
+        instantiations *= 2;
+    }
     const raw = {
         inline: { moduleImport: [], instantiate: [], call: [] },
         external: { moduleImport: [], instantiate: [], call: [] },
@@ -108,15 +125,15 @@ export async function probe(config) {
                 URL.revokeObjectURL(blob);
             }
             const start = performance.now();
-            const retained = Array.from({ length: 16 }, () => state.instantiate(state.binding));
-            raw[mode].instantiate.push(((performance.now() - start) * 1e6) / 16);
+            const retained = Array.from({ length: instantiations }, () => state.instantiate(state.binding));
+            raw[mode].instantiate.push(((performance.now() - start) * 1e6) / instantiations);
             // Keep all 16 measured stores alive through independent known-answer checks.
             for (const stores of [retained[0], retained.at(-1)]) {
                 for (const [i, store] of stores.entries()) {
                     await workload(state.artifact.parts[i], store, state.binding[`util${i}`]);
                 }
             }
-            assert.equal(retained.length, 16);
+            assert.equal(retained.length, instantiations);
             if (callable) {
                 raw[mode].call.push(await calls(mode, count));
             }
@@ -137,12 +154,14 @@ export async function probe(config) {
         medians,
         coldHttpImportInstantiate,
         callsPerSample: count,
+        instantiationsPerSample: instantiations,
+        crossOriginIsolated: globalThis.crossOriginIsolated,
         verified: pair.inline.parts,
         jspi: typeof WebAssembly.Suspending === 'function',
         userAgent: navigator.userAgent,
         labels: {
             moduleImport: 'fresh unique Blob module fetch + parse + link + evaluation; source preparation excluded',
-            instantiate: '16 retained stores with precompiled core Wasm; validation after timer',
+            instantiate: 'calibrated retained-store batch with precompiled core Wasm; validation after timer',
             call: 'verified warm calls; actual payload/cancellation for labelled fixtures',
             coldHttpImportInstantiate:
                 'native HTTP ESM import + adapter instantiation; core compilation and host imports excluded',
