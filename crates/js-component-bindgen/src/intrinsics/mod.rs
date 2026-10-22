@@ -3200,6 +3200,10 @@ impl Intrinsic {
                     },
                 }
             }
+            Self::AsyncStream(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
+                local_name: self.name(),
+                import: runtime::stream_import(*intrinsic),
+            },
             Self::AsyncFuture(intrinsic) if external_runtime => IntrinsicBinding::Runtime {
                 local_name: self.name(),
                 import: runtime::future_import(*intrinsic),

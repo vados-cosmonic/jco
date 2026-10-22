@@ -348,7 +348,7 @@ mod tests {
                 continue;
             }
             assert!(
-                source.contains("_trackHostOperation(_jcoComponentHostOperationContext, () =>")
+                source.contains("const PendingValueQueue = _jcoInitializePendingValueQueueClass(_jcoComponentHostOperationContext);")
             );
             assert!(!source.contains("_trackHostOperation(() =>"));
         }

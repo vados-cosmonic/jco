@@ -18,6 +18,7 @@ Custom providers migrating from the temporary bridges must supply the selected
 `FutureValue` constructor to task classes, actual table/lookup owners to future
 lifting, and creation/injection owner views to future lowering. The former lazy
 future predicate and getters into inline future code have been removed. Stream
-bridges remain until the stream conversion.
+providers likewise supply actual stream/table owners, selected constructors and
+source/injection views; temporary getters and operation forwarding bridges are removed.
 
 [All intrinsic contracts](README.md) · [Runtime API](../runtime.md)
