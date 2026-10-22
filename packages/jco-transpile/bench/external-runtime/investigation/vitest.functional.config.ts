@@ -5,6 +5,8 @@ export default defineConfig({
         include: [
             'bench/external-runtime/investigation/node-worker.test.ts',
             'bench/external-runtime/investigation/frozen-replay.test.ts',
+            'bench/external-runtime/investigation/shapes.test.ts',
+            'bench/external-runtime/investigation/transforms.test.ts',
         ],
         testTimeout: 30_000,
         maxWorkers: 1,

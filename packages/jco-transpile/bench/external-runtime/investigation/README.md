@@ -2,8 +2,25 @@
 
 N14 is in progress. The matched factory/named assessment, browser measurements,
 retention/context traces and remaining diagnostic experiments are not complete.
-The implementation at this point adds clean replay of frozen historical inputs.
+Clean historical repair evidence is now [published separately](../checkpoints/n14-historical-repair.md).
 Inline remains the production default.
+
+## Factory shape and AST diagnostics
+
+The functional configuration also runs the minimal property-boundary reproducer
+through Rolldown and Rollup. It verifies varying known answers and records whether
+an unused member survives a direct named import, a factory property read, or a
+factory property bound to its namespace. It requires direct named elimination;
+it records future factory-elimination improvements without failing them. Each
+probe writes a fresh archive and cleans its own temporary inputs.
+
+`transforms.ts` keeps old-factory namespace/check/receiver omissions separate from
+the named API. Factory binding transforms reject named-import input. Every edit
+reports its changed-node count, so a no-op is visible. Namespace omission remains
+an unsafe closed-world diagnostic, not a general provider or production change.
+Factory call hooks run only in separate instrumented diagnostics; readable source
+spans describe retention and are not additive compressed-size estimates. AST span
+edits preserve unrelated source, including array elisions.
 
 ## Recollect a frozen smoke matrix
 
