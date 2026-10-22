@@ -61,11 +61,12 @@
         "freshContexts": "New context per scenario per independent browser session; alternate modes within each sample.",
         "axes": [
             "fresh unique Blob module import including fetch/parse/link/evaluation",
-            "precompiled-core instantiation,16retainedstores/sample",
+            "precompiled-core instantiation,calibrated16–4096retainedstores/sample",
             "verified warm call",
             "native HTTP ESM import plus adapter initialization"
         ],
-        "limitations": "No isolated browser parse axis; engine-specific and only three session clusters."
+        "limitations": "No isolated browser parse axis; engine-specific and only three session clusters.",
+        "clock": "Isolated same-origin context; instantiation batches calibrate both modes together to at least1ms where possible, bounded16–4096 stores. Record actual count and isolation. Retain each measured batch through validation."
     },
     "oldFactory": "N14 matched166 evidence remains separate and incomplete10cohort remains rejected. No new optimization/investigation experiments authorized; do not present166factory as274control.",
     "expectedControls": 384
