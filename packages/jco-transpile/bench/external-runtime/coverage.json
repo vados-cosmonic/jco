@@ -163,6 +163,10 @@
         "AsyncTask(LowerImport)",
         "AsyncTask(LowerImportBackwardsCompat)",
         "AsyncTask(EnterSymmetricSyncGuestCall)",
-        "AsyncTask(ExitSymmetricSyncGuestCall)"
+        "AsyncTask(ExitSymmetricSyncGuestCall)",
+        "Host(PrepareCall)",
+        "Host(AsyncStartCall)",
+        "Host(SyncStartCall)",
+        "Host(StoreEventInComponentMemory)"
     ]
 }
