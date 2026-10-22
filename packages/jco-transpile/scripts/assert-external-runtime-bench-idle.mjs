@@ -43,6 +43,8 @@ export async function assertBenchmarkIdle() {
                                   arg.endsWith('frozen-runtime-runner.mjs') ||
                                   arg.endsWith('frozen-runtime-trace.mjs') ||
                                   arg.endsWith('matched-runner.mjs') ||
+                                  arg.endsWith('matched-collector.mjs') ||
+                                  arg.endsWith('/source/trace.mjs') ||
                                   arg.endsWith('jco-matched-factory-producer') ||
                                   arg.endsWith('jco-matched-named-producer') ||
                                   arg.endsWith('/bench/external-runtime/runner.mjs') ||
