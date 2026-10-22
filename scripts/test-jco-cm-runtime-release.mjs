@@ -156,3 +156,10 @@ lowerFlatU32({ strict: true }, lowerCursor);
 assert.equal(new DataView(lowerCursor.memory.buffer).getUint32(0, true), 42);
 lowerFlatChar({ ...lowerCursor, vals: ['🚀'] });
 assert.equal(new DataView(lowerCursor.memory.buffer).getUint32(4, true), 0x1f680);
+
+const { initializeFutureValueClass, isFutureLowerableObject } =
+    await import('@bytecodealliance/jco-cm-runtime/intrinsics/future');
+const FutureValue = initializeFutureValueClass();
+assert.notEqual(FutureValue, initializeFutureValueClass());
+assert.equal(await new FutureValue(() => ({ value: 42 })), 42);
+assert.equal(isFutureLowerableObject(null), false);

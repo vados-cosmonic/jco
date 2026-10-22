@@ -497,7 +497,7 @@ impl AsyncFutureIntrinsic {
                         if (!futureEnd) {{
                             throw new {runtime_error_class}(`missing future end (tableIdx [${{tableIdx}}], handle [${{futureEndHandle}}], waitableIdx [${{futureEndWaitableIdx}}])`);
                         }}
-                        if (tableIdx && futureEnd.futureTableIdx() !== tableIdx) {{
+                        if (tableIdx !== undefined && futureEnd.futureTableIdx() !== tableIdx) {{
                             throw new Error(`future end table idx [${{futureEnd.futureTableIdx()}}] does not match [${{tableIdx}}]`);
                         }}
 
@@ -1953,7 +1953,7 @@ impl AsyncFutureIntrinsic {
                 output.push_str(&format!(
                     r#"
                       function {is_future_lowerable_object}(obj) {{
-                          if (typeof obj !== 'object') {{ return false; }}
+                          if (obj === null || typeof obj !== 'object') {{ return false; }}
                           return obj instanceof Promise
                                || 'then' in obj && typeof obj.then === 'function';
                       }}

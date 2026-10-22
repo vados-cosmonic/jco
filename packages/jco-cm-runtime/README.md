@@ -26,7 +26,8 @@ and waitable constructors/operations from `intrinsics/waitable`.
 Error-context storage and operations use `intrinsics/error-context`;
 tasks, subtasks and their state use `intrinsics/async-task`;
 guest-to-guest host calls and event writing use `intrinsics/host`;
-flat lifting helpers use `intrinsics/lift` and lowering helpers use `intrinsics/lower`.
+flat lifting helpers use `intrinsics/lift`, lowering helpers use `intrinsics/lower`,
+and future classes, tables and operations use `intrinsics/future`.
 Only implemented subpaths are published.
 Root exports the same metadata and types as `runtime`; there is no root factory.
 
@@ -52,8 +53,8 @@ Bindings check version 2 before use. Missing subpaths or named exports fail
 through the native ES module loader. The current externalized set is all 16 resource variants, the shared handle-table
 and scope owners, all 19 conversion operations, both JavaScript helpers, all ten
 string variants, the WebIDL proxy and the remaining 52 core variants
-(224/274 logical intrinsic variants, including all 16 component, eight waitable,
-eleven error-context, 25 async-task, four host, 29 lift and 29 lower variants);
+(248/274 logical intrinsic variants, including all 16 component, eight waitable,
+eleven error-context, 25 async-task, four host, 29 lift, 29 lower and 24 future variants);
 other families remain inline during migration.
 
 ```js
@@ -405,9 +406,8 @@ operation-specific views. Lift/lower callbacks and canonical metadata remain
 per-call operands. Existing partial callbacks preserve their null receiver and
 operand order. Direct symmetric-call callbacks bind context with `void 0` in
 named mode; the suspending wrapper's slow callback preserves its null receiver.
-Inline callbacks retain their original function identity. A narrow lazy
-future-value predicate remains until the future family migrates; selecting a
-class or owner does not invoke it. Waitables use their own static event writer
+Inline callbacks retain their original function identity. Task classes receive
+the selected per-store `FutureValue` constructor for identity checks. Waitables use their own static event writer
 without a generated callback.
 
 Custom providers must publish this subpath and replace the old resource, core
@@ -438,15 +438,36 @@ export does not intercept the default waitable implementation.
 
 Lift helpers consume the caller's live parameter/storage cursor. Composite metadata
 contains the selected field callbacks; callbacks may return a replacement cursor.
-UTF8/UTF16 codecs and variant scratch are selected once per store. Future and
-stream lifts temporarily receive lazy capabilities for the remaining inline tables,
-endpoints and stream class; these bridges are removed as those families migrate.
+UTF8/UTF16 codecs and variant scratch are selected once per store. Future lifts
+use the actual named table and component owners. Stream lifts temporarily receive
+lazy capabilities for the remaining inline tables, endpoints and stream class.
 Borrowed-resource lifting and indirect error-context lifting retain their explicit
 unsupported-operation errors.
 
 Lower helpers retain the caller's live memory/storage cursor, strict numeric policy,
 and selected string encoder. Composite callbacks receive that cursor explicitly.
-Future/stream lowering uses narrow lazy capabilities until those families migrate.
+Future lowering uses the named owners and static default creation/injection operations.
+Stream lowering retains narrow lazy capabilities until its family migrates.
 Character helpers accept Unicode scalar values, including NUL and astral characters.
 Error-context lowering transfers host ownership to a fresh local handle and balances
 references when replacing an exhausted local entry.
+
+Future values preserve one awaitable layer at a time. Each store selects its own
+value, base endpoint, readable endpoint, writable endpoint, internal coordinator
+and host wrapper constructors. Private brands and inherited static state follow
+those selected classes. The two endpoints of an internal future retain the same
+pending buffer record; future tables and global representations retain the actual
+selected table owners.
+
+Future read/write, cancellation, drop and transfer use operation-specific state
+views and the selected error constructor. Transfer requires no current task.
+Callback partial applications prepend the named context and preserve their null
+receiver; bare transfer callbacks bind with `void 0`. Default implementations
+use their own static dependencies. Sibling export overrides intercept a default
+only when an explicit capability provides that behavior.
+
+Custom providers migrating from the temporary bridges must supply the selected
+`FutureValue` constructor to task classes, actual table/lookup owners to future
+lifting, and creation/injection owner views to future lowering. The former lazy
+future predicate and getters into inline future code have been removed. Stream
+bridges remain until the stream conversion.
