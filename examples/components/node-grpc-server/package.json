@@ -7,7 +7,7 @@
     "scripts": {
         "generate": "buf lint && buf generate",
         "build": "pnpm run generate && jco componentize src/server.js --bundle --with-nodejs-http2-via direct --wit wit --out component.wasm",
-        "transpile": "jco transpile component.wasm --instantiation async --async-mode jspi --async-exports '*' --no-wasi-shim --map jco:node/http2@0.1.0=jco:node/http2@0.1.0 --out-dir dist/transpiled",
+        "transpile": "jco transpile component.wasm --instantiation async --async-mode jspi --async-exports '*' --no-wasi-shim --map jco:node/http2@0.1.0=jco:node/http2@0.1.0 --map jco:node/tls@0.1.0=jco:node/tls@0.1.0 --out-dir dist/transpiled",
         "serve": "node --experimental-wasm-jspi run-transpiled.js",
         "serve:node": "node serve-node.js",
         "run-transpiled": "node --experimental-wasm-jspi run-transpiled.js",
@@ -24,7 +24,7 @@
     "devDependencies": {
         "@bufbuild/buf": "1.72.0",
         "@bufbuild/protoc-gen-es": "2.14.1",
-        "@bytecodealliance/jco": "workspace:*"
+        "@bytecodealliance/jco": "1.39.0"
     },
     "engines": {
         "node": ">=24"
