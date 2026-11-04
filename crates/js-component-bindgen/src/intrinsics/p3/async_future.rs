@@ -1752,6 +1752,9 @@ impl AsyncFutureIntrinsic {
                         }}
 
                         futureEnd.getWaitable().assertNoSyncWaiter();
+                        if (!ctx.resumeCancel && futureEnd.getCopyState() === {future_end_class}.CopyState.CANCELLING_COPY) {{
+                            throw new {runtime_error_class}('cannot cancel future while cancellation is already in progress');
+                        }}
                         const perform = () => {{
 
                         if (!futureEnd.isCopying()) {{ throw new {runtime_error_class}('future end is not copying, cannot cancel'); }}
