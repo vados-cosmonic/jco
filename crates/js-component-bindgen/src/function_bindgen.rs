@@ -2947,7 +2947,7 @@ impl Bindgen for FunctionBindgen<'_> {
 
                             if is_own {
                                 let table_get = self.intrinsic_call(
-                                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                    Intrinsic::Resource(ResourceIntrinsic::ResourceTableGetOwn),
                                     &format!("handleTable{tid}, {handle}"),
                                 );
                                 uwriteln!(self.src, "{table_get};");
@@ -2996,7 +2996,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             let rep = format!("rep{}", self.tmp());
                             let table_get = self.intrinsic_call(
-                                Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                                Intrinsic::Resource(if is_own {
+                                    ResourceIntrinsic::ResourceTableGetOwn
+                                } else {
+                                    ResourceIntrinsic::ResourceTableGet
+                                }),
                                 &format!("handleTable{tid}, {handle}"),
                             );
                             // Imported handles either lift as instance capture from a previous lowering,
