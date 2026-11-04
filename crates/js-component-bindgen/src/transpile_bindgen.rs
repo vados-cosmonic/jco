@@ -282,6 +282,7 @@ struct JsFunctionBindgenArgs<'a> {
     abi: AbiVariant,
     /// Whether the function in question is a host async function (i.e. JSPI)
     requires_async_porcelain: bool,
+    manual_async: bool,
     /// Whether the function in question is a guest async function (i.e. WASI P3)
     is_async: bool,
     /// Whether the function in question is an import generated as a generator function
@@ -4632,6 +4633,7 @@ impl<'a> Instantiator<'a, '_> {
                     resource_map: &import_resource_map,
                     abi,
                     requires_async_porcelain,
+                    manual_async: requires_async_porcelain,
                     is_async,
                     host_import_generator,
                     wrap_async_future_result: false,
@@ -5450,6 +5452,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             abi,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator,
             wrap_async_future_result,
@@ -5675,6 +5678,7 @@ impl<'a> Instantiator<'a, '_> {
             src: source::Source::default(),
             resolve: self.resolve,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator,
             canonical_abi_async: opts.async_,
@@ -6367,12 +6371,12 @@ impl<'a> Instantiator<'a, '_> {
                     format!("{export_name}#{func_name}")
                 });
         }
-        let requires_async_porcelain = inferred_async
-            || requires_async_porcelain(
-                FunctionIdentifier::Fn(func),
-                export_name,
-                &self.async_exports,
-            );
+        let manual_async = requires_async_porcelain(
+            FunctionIdentifier::Fn(func),
+            export_name,
+            &self.async_exports,
+        );
+        let requires_async_porcelain = inferred_async || manual_async;
         // If the function is *also* async lifted, it
         if options.async_ {
             assert!(
@@ -6561,6 +6565,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map: export_resource_map,
             abi: AbiVariant::GuestExport,
             requires_async_porcelain,
+            manual_async,
             is_async,
             host_import_generator: false,
             wrap_async_future_result,

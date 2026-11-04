@@ -2347,6 +2347,8 @@ impl AsyncStreamIntrinsic {
                             throw new {runtime_error_class}(message);
                         }}
 
+                        const perform = () => {{
+
                         // Validate before copy's early return for a dropped peer, too.
                         const memory = getMemoryFn?.();
                         {managed_buffer_class}.validateGuestBuffer(memory, ptr, count, elemMeta ?? streamEnd.getElemMeta());
@@ -2378,6 +2380,8 @@ impl AsyncStreamIntrinsic {
                             elemMeta,
                             deferSyncFinish,
                         }});
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
@@ -2419,6 +2423,8 @@ impl AsyncStreamIntrinsic {
                         if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
+                        const perform = () => {{
+
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
@@ -2455,6 +2461,8 @@ impl AsyncStreamIntrinsic {
                         }}
 
                         return finishCancel();
+                        }};
+                        return isAsync && !ctx.syncFastOnly ? perform() : streamEnd.getWaitable().withSyncUse(perform);
                     }}
                 "#));
             }
