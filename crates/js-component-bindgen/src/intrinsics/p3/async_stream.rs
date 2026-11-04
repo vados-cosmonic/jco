@@ -2423,6 +2423,7 @@ impl AsyncStreamIntrinsic {
                         if (!streamEnd) {{ throw new {runtime_error_class}('missing stream end with idx [' + streamEndWaitableIdx + ']'); }}
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
+                        streamEnd.getWaitable().assertNoSyncWaiter();
                         const perform = () => {{
 
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
