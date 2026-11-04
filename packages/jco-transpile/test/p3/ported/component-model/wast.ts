@@ -68,9 +68,6 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
     'async/trap-if-sync-and-waitable-set.wast': {
         skip: 'synchronous waitable operations do not reject handles belonging to a waitable set',
     },
-    'binary/binary.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/attributes.wast': { skip: 'the WAST converter does not support assert_malformed' },
-    'validation/outer-alias.wast': { skip: 'the WAST converter does not support assert_malformed' },
     'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
     'linking/unit.wast': { transpile: { multiMemory: true } },
