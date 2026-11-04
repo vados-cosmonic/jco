@@ -203,10 +203,46 @@ impl StringIntrinsic {
                 "#
             ),
 
-            Self::GlobalTextDecoderUtf8 => uwriteln!(
-                output,
-                "const {name} = new TextDecoder('utf-8', {{ fatal: true, ignoreBOM: true }});"
-            ),
+            Self::GlobalTextDecoderUtf8 => {
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                uwriteln!(
+                    output,
+                    r#"
+                    const {name} = (() => {{
+                        const decoder = new TextDecoder('utf-8', {{ fatal: true, ignoreBOM: true }});
+                        return {{ decode(input) {{
+                            try {{ return decoder.decode(input); }} catch (error) {{
+                                if (!(error instanceof TypeError)) {{ throw error; }}
+                                const bytes = ArrayBuffer.isView(input)
+                                    ? new Uint8Array(input.buffer, input.byteOffset, input.byteLength)
+                                    : new Uint8Array(input);
+                                // TextDecoder does not distinguish a malformed sequence
+                                // from a valid prefix cut short at the buffer boundary.
+                                for (let i = 0; i < bytes.length; i++) {{
+                                    const lead = bytes[i];
+                                    if (lead < 0x80) {{ continue; }}
+                                    const count = lead >= 0xc2 && lead <= 0xdf ? 1
+                                        : lead >= 0xe0 && lead <= 0xef ? 2
+                                        : lead >= 0xf0 && lead <= 0xf4 ? 3 : -1;
+                                    if (count < 0) {{ throw new {runtime_error}('invalid utf-8'); }}
+                                    for (let j = 1; j <= count; j++) {{
+                                        if (i + j >= bytes.length) {{ throw new {runtime_error}('incomplete utf-8 byte sequence'); }}
+                                        const byte = bytes[i + j];
+                                        if (byte < 0x80 || byte > 0xbf || (j === 1 && (
+                                            (lead === 0xe0 && byte < 0xa0) || (lead === 0xed && byte > 0x9f) ||
+                                            (lead === 0xf0 && byte < 0x90) || (lead === 0xf4 && byte > 0x8f)
+                                        ))) {{ throw new {runtime_error}('invalid utf-8'); }}
+                                    }}
+                                    i += count;
+                                }}
+                                throw error;
+                            }}
+                        }} }};
+                    }})();
+                "#
+                );
+            }
             Self::GlobalTextEncoderUtf8 => uwriteln!(output, "const {name} = new TextEncoder();"),
 
             Self::Utf8Encode | Self::Utf8EncodeAsync => {
