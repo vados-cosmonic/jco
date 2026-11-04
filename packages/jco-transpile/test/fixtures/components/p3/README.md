@@ -27,6 +27,14 @@ adapter in `packages/jco/lib`, retaining their WASI 0.2.12 imports. The build
 checks the public WIT interface against the existing fixture, ignoring only
 declaration order and preserving ordered type members.
 
+The recipe also refreshes 17 ported async components under `backpressure`,
+`general`, `round-trip`, and `streams`. Historical backpressure source and WIT
+pins retain the original exports. Each component keeps its original WASI version:
+0.2.6 uses the pinned adapter provider 40.0.2, while 0.2.12 uses the repository
+adapters. Source hashes, historical file overrides, compiler/tool versions, and
+all 61 output mappings are recorded in `scripts/fixtures/p3_sdk/manifest.json`.
+The checked-in dependency lock retains the original upstream crate versions.
+
 Runtime waitable exclusion checks remain
 unchanged; the component-model WAST suite independently tests their traps.
 
