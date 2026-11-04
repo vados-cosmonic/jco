@@ -1740,6 +1740,7 @@ impl AsyncFutureIntrinsic {
                             throw new {runtime_error_class}('invalid future end, expected value of type [{future_end_class}]');
                         }}
 
+                        futureEnd.getWaitable().assertNoSyncWaiter();
                         const perform = () => {{
 
                         if (!futureEnd.isCopying()) {{ throw new {runtime_error_class}('future end is not copying, cannot cancel'); }}
