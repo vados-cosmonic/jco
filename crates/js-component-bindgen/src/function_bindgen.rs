@@ -24,7 +24,6 @@ use crate::intrinsics::p3::async_future::AsyncFutureIntrinsic;
 use crate::intrinsics::p3::async_stream::AsyncStreamIntrinsic;
 use crate::intrinsics::p3::async_task::AsyncTaskIntrinsic;
 use crate::intrinsics::resource::ResourceIntrinsic;
-use crate::intrinsics::runtime;
 use crate::intrinsics::string::StringIntrinsic;
 use crate::names::js_string_literal;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
@@ -163,7 +162,7 @@ pub struct FunctionBindgen<'a> {
     /// Set of intrinsics
     pub intrinsics: &'a mut BTreeSet<Intrinsic>,
 
-    /// Whether intrinsic calls use the external runtime's capability operands.
+    /// Select contextual named runtime calls instead of inline implementations.
     #[builder(default)]
     pub external_runtime: bool,
 
@@ -435,7 +434,7 @@ impl FunctionBindgen<'_> {
 
     fn intrinsic_call(&mut self, intrinsic: Intrinsic, operands: &str) -> String {
         self.intrinsics.insert(intrinsic);
-        runtime::select(self.external_runtime).call(intrinsic, operands)
+        crate::intrinsics::runtime::select(self.external_runtime).call(intrinsic, operands)
     }
 
     // Task-only templates may be built unconditionally, but must only be emitted
