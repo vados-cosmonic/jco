@@ -2424,6 +2424,9 @@ impl AsyncStreamIntrinsic {
                         if (!(streamEnd instanceof {stream_end_class})) {{ throw new Error('invalid stream end, expected value of type [{stream_end_class}]'); }}
 
                         streamEnd.getWaitable().assertNoSyncWaiter();
+                        if (!ctx.resumeCancel && streamEnd.getCopyState() === {stream_end_class}.CopyState.CANCELLING_COPY) {{
+                            throw new {runtime_error_class}('cannot cancel stream while cancellation is already in progress');
+                        }}
                         const perform = () => {{
 
                         if (!streamEnd.isCopying()) {{ throw new {runtime_error_class}('stream end is not copying, cannot cancel'); }}
