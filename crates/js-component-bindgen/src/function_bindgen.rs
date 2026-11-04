@@ -1885,6 +1885,12 @@ impl Bindgen for FunctionBindgen<'_> {
                 } else {
                     1
                 };
+                if self.encoding == StringEncoding::UTF16 {
+                    uwriteln!(
+                        self.src,
+                        "if (ptr{tmp} % 2 !== 0) throw new {runtime_error}('wasm trap: unaligned pointer');"
+                    );
+                }
                 uwriteln!(
                     self.src,
                     r#"
