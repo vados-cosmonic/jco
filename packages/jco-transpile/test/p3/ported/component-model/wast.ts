@@ -54,12 +54,9 @@ const WAST_OVERRIDES: Record<string, Omit<WastTest, 'relPath'>> = {
         // artifacts need additional reentrance/threading support.
         artifactCases: [{ index: 8, exportName: 'run', expected: 42 }],
     },
-    'values/post-return.wast': { skip: 'the pinned wast parser does not support stream.forward/future.forward' },
     'linking/tags.wast': { transpile: { bindgenEnableWasmExnref: true } },
     'linking/unit.wast': { transpile: { multiMemory: true } },
     'validation/instantiation.wast': { transpile: { multiMemory: true } },
-    'async/forward.wast': {
-        skip: 'the pinned wast parser does not support stream.forward/future.forward',
     },
 };
 
