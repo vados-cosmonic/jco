@@ -38,12 +38,11 @@ binary, linking, resource, validation, and value tests. All fixtures, including
 runtime support allow the full interleaving fixture to run.
 
 The [WAST runner](../../p3/ported/component-model/wast.ts) derives its test
-list from the manifest. Vendored fixtures that cannot yet run have explicit
-skip reasons in `WAST_OVERRIDES`; vendoring a test does not imply conformance.
-These exceptions track parser/converter limitations, runtime behavior, and
-validation or trap diagnostic differences. The two existing artifact subsets
-for cancellation and reentrance remain partial coverage. Tests using Wasm
-exceptions or multiple memories enable the corresponding transpiler options.
+list from the manifest and runs all 78 upstream fixtures. `WAST_OVERRIDES`
+retains artifact subsets for cancellation and reentrance, so those two fixtures
+remain partial coverage. Tests using Wasm exceptions or multiple memories enable
+the corresponding transpiler options. Passing these fixtures does not imply
+complete Component Model conformance.
 
 Run the suite with either runtime implementation:
 
