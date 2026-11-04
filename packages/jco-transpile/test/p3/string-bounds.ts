@@ -39,3 +39,26 @@ test.concurrent.each([
         await cleanup();
     }
 });
+
+test.concurrent.each([0, 1])('UTF-16 rejects an unaligned pointer with length %i', async (length) => {
+    const { instance, cleanup } = await setupAsyncTest({
+        component: {
+            name: `unaligned-utf16-${length}`,
+            path: join(P3_COMPONENT_FIXTURES_DIR, 'string-bounds/read-utf16.wat'),
+        },
+    });
+    try {
+        const failure = await Promise.resolve()
+            .then(() => instance.read(1, length))
+            .then(
+                () => {
+                    throw new Error('expected an alignment trap');
+                },
+                (failure) => failure,
+            );
+        expect(failure).toBeInstanceOf(WebAssembly.RuntimeError);
+        expect(failure.message).toContain('unaligned pointer');
+    } finally {
+        await cleanup();
+    }
+});

@@ -679,6 +679,8 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringUtf8 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let decoder = render_args
                     .require_intrinsic(Intrinsic::String(StringIntrinsic::GlobalTextDecoderUtf8));
                 let lift_flat_string_utf8_fn = self.name();
@@ -695,6 +697,10 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(offset)) {{ throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
+                            if (offset % 1 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                            if (offset > ctx.memory.buffer.byteLength || len < 0 || len > Math.floor((ctx.memory.buffer.byteLength - offset) / 1)) {{
+                                throw new {runtime_error}('string pointer/length out of bounds of memory');
+                            }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len));
                             ctx.params = ctx.params.slice(2);
                             return [val, ctx];
@@ -707,6 +713,10 @@ impl LiftIntrinsic {
                         const start = dv.getUint32(ctx.storagePtr, true);
                         const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 
+                        if (start % 1 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                        if (start > ctx.memory.buffer.byteLength || codeUnits > Math.floor((ctx.memory.buffer.byteLength - start) / 1)) {{
+                            throw new {runtime_error}('string pointer/length out of bounds of memory');
+                        }}
                         val = {decoder}.decode(new Uint8Array(ctx.memory.buffer, start, codeUnits));
 
                         ctx.storagePtr += 8;
@@ -719,6 +729,8 @@ impl LiftIntrinsic {
 
             Self::LiftFlatStringUtf16 => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
+                let runtime_error =
+                    render_args.require_intrinsic(Intrinsic::WebAssemblyRuntimeError);
                 let decoder =
                     render_args.require_intrinsic(Intrinsic::String(StringIntrinsic::Utf16Decoder));
                 let lift_flat_string_utf16_fn = self.name();
@@ -734,6 +746,10 @@ impl LiftIntrinsic {
                             if (!Number.isSafeInteger(offset)) {{  throw new Error('invalid offset'); }}
                             const len = ctx.params[1];
                             if (!Number.isSafeInteger(len)) {{  throw new Error('invalid len'); }}
+                            if (offset % 2 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                            if (offset > ctx.memory.buffer.byteLength || len < 0 || len > Math.floor((ctx.memory.buffer.byteLength - offset) / 2)) {{
+                                throw new {runtime_error}('string pointer/length out of bounds of memory');
+                            }}
                             val = {decoder}.decode(new DataView(ctx.memory.buffer, offset, len * 2));
                             ctx.params = ctx.params.slice(2);
                             return [val, ctx];
@@ -746,6 +762,10 @@ impl LiftIntrinsic {
                         const start = dv.getUint32(ctx.storagePtr, true);
                         const codeUnits = dv.getUint32(ctx.storagePtr + 4, true);
 
+                        if (start % 2 !== 0) {{ throw new {runtime_error}('wasm trap: unaligned pointer'); }}
+                        if (start > ctx.memory.buffer.byteLength || codeUnits > Math.floor((ctx.memory.buffer.byteLength - start) / 2)) {{
+                            throw new {runtime_error}('string pointer/length out of bounds of memory');
+                        }}
                         val = {decoder}.decode(new DataView(ctx.memory.buffer, start, codeUnits * 2));
 
                         ctx.storagePtr += 8;
