@@ -1,0 +1,18 @@
+schema = 1
+
+[receive]
+enabled = true
+
+[[receive.route]]
+name = "shared"
+destination = "file:///packages/jco-transpile/test/fixtures/wast/cm-testsuite"
+supports = ["component-model"]
+allow_unknown = true
+
+# TODO: name this contribute & contribute.test ?
+[[test]]
+name = "stream-forward"
+path = "file:///packages/jco-transpile/test/fixtures/wast/jco/thread-handle-traps.wast"
+summary = "invalid indices trap & poison on thread.{resume-later, new-indirect}"
+requires = ["component-model"]
+covers = ["canon:thread.resume-later", "canon:thread.new-indirect"]
