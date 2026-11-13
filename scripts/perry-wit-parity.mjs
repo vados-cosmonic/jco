@@ -5,11 +5,14 @@
 //   - examples/components/*, read from the `jco componentize` commands in their package scripts
 //   - packages/jco/test/fixtures/componentize/*, read from their source and WIT files
 //
-// Usage: node scripts/perry-wit-parity.mjs --project <dir> [--json <path>] [--out <dir>] [--only <text>]
+// Components that can only work on another backend are skipped, see OUT_OF_SCOPE.
+//
+// Usage: node scripts/perry-wit-parity.mjs --project <dir> [--json <path>] [--out <dir>] [--only <text>] [--all]
 //   --project  directory of a project that installed the perry-wit package
 //   --json     write the full results to this file
 //   --out      keep the compiled components in this directory
 //   --only     compile only components whose name contains this text
+//   --all      also compile the components in OUT_OF_SCOPE
 import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -49,6 +52,17 @@ const VALUE_FLAGS = new Set([
     '--backend-perry-package',
     '--backend-perry-cli-path',
     '--backend-perry-wit-package',
+]);
+
+/**
+ * Components the perry-wit backend is not expected to compile, by name, with the reason.
+ * They depend on an npm package that needs bundling, or on the API of one JavaScript engine.
+ */
+const OUT_OF_SCOPE = new Map([
+    ['http-server-hono', 'depends on the hono npm package, which needs a bundler'],
+    ['http-server-hono-with-bindings', 'depends on the hono npm package, which needs a bundler'],
+    ['p3-stream-echo-qjs', 'written for the QuickJS backend'],
+    ['quickjs-futures', "uses the QuickJS backend's `wit` global"],
 ]);
 
 /** Fixture file names that are a component's entry module, most specific first. */
@@ -220,9 +234,14 @@ async function fixtureComponents() {
  * @param {(source: string, options: object) => Promise<Uint8Array>} componentizePerryWit
  * @param {string} project directory of the project that installed perry-wit
  * @param {string} out directory that receives the compiled component
+ * @param {boolean} all whether to compile components in OUT_OF_SCOPE too
  * @returns {Promise<Result>}
  */
-async function compile(component, componentizePerryWit, project, out) {
+async function compile(component, componentizePerryWit, project, out, all) {
+    const reason = OUT_OF_SCOPE.get(component.name);
+    if (reason !== undefined && !all) {
+        return { component, status: 'skipped', codes: [], detail: reason };
+    }
     if (component.wit === undefined) {
         return { component, status: 'skipped', codes: [], detail: 'the component has no WIT world' };
     }
@@ -289,7 +308,7 @@ function report(results) {
 }
 
 /**
- * @param {{ project: string, json?: string, out?: string, only?: string }} args
+ * @param {{ project: string, json?: string, out?: string, only?: string, all?: boolean }} args
  */
 async function main(args) {
     const { componentizePerryWit } = await import(join(JCO_DIST, 'cmd/componentize/perry-wit.js')).catch((cause) => {
@@ -304,7 +323,7 @@ async function main(args) {
         );
         const results = [];
         for (const component of components) {
-            results.push(await compile(component, componentizePerryWit, resolve(args.project), out));
+            results.push(await compile(component, componentizePerryWit, resolve(args.project), out, args.all === true));
         }
         report(results);
         if (args.json) {
@@ -323,12 +342,13 @@ const { values } = parseArgs({
         json: { type: 'string' },
         out: { type: 'string' },
         only: { type: 'string' },
+        all: { type: 'boolean' },
     },
     strict: true,
 });
 if (!values.project) {
     console.error(
-        'Usage: node scripts/perry-wit-parity.mjs --project <dir> [--json <path>] [--out <dir>] [--only <text>]',
+        'Usage: node scripts/perry-wit-parity.mjs --project <dir> [--json <path>] [--out <dir>] [--only <text>] [--all]',
     );
     process.exitCode = 2;
 } else {
