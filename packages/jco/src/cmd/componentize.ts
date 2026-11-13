@@ -10,6 +10,7 @@ import { bundleComponentChunk, bundleComponentSource, classifyComponentSource, l
 import { engineCompatPlugin } from "../engine-compat.js";
 import { styleText, isWindows } from "../common.js";
 import { componentizePerry } from "./componentize/perry.js";
+import { componentizePerryWit } from "./componentize/perry-wit.js";
 import {
     nodeBuiltinPlugin,
     nodeGlobals,
@@ -31,7 +32,7 @@ const ALL_FEATURES = ["clocks", "http", "random", "stdio", "fetch-event"];
 /** Features that should be used for --debug mode */
 const DEBUG_FEATURES = ["stdio"];
 
-type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm" | "perry";
+type ComponentizeJSBackend = "qjs" | "quickjs" | "starlingmonkey" | "sm" | "perry" | "perry-wit";
 
 /** Fully-qualified world every script engine implements, which script-only components record. */
 export const SCRIPT_ENGINE_WORLD = "jco:script-engine/engine@0.1.0";
@@ -77,6 +78,8 @@ export interface ComponentizeOptions {
     backendPerryPackage?: string;
     /** Explicit Perry CLI path, relative to the invocation directory. */
     backendPerryCliPath?: string;
+    /** Project-installed npm package exposing the Perry-WIT compiler (supports npm aliases). */
+    backendPerryWitPackage?: string;
     backendQjsDisableAsync?: boolean;
     backendQjsStubWasi?: boolean;
     aot?: boolean;
@@ -136,6 +139,7 @@ const COMPONENTIZE_BACKENDS: Record<string, ComponentizeJSBackend> = {
     quickjs: "quickjs",
     qjs: "quickjs",
     perry: "perry",
+    "perry-wit": "perry-wit",
 };
 
 const STARLINGMONKEY_OPTIONS: Array<keyof Omit<ComponentizeOptions, "wit" | "worldName">> = [
@@ -278,6 +282,12 @@ export async function componentize(jsSource: string, opts: ComponentizeOptions):
         // Perry compiles the original module graph, including TypeScript and Node-style
         // builtins, to WASI. Do not erase types or inject Jco's Node compatibility layer.
         await writeComponent(opts.out, await componentizePerry(jsSource, opts));
+        return;
+    }
+    if (backend === "perry-wit") {
+        // Perry-WIT compiles the original TypeScript module graph against the WIT world.
+        // Do not bundle it, erase its types or inject Jco's Node compatibility layer.
+        await writeComponent(opts.out, await componentizePerryWit(jsSource, opts));
         return;
     }
     if (!opts.wit) {
@@ -457,7 +467,7 @@ export async function componentizeCommand(sources: string[], opts: ComponentizeC
  */
 export async function componentizeScriptOnly(sources: string[], opts: ComponentizeScriptOnlyOptions): Promise<void> {
     const backend = normalizeBackend(opts.backend);
-    if (backend === "perry") {
+    if (backend === "perry" || backend === "perry-wit") {
         throw new Error("--script-only requires a JavaScript engine backend (starlingmonkey or quickjs)");
     }
     validateBackendOptions(backend, opts);
@@ -578,7 +588,7 @@ function normalizeBackend(backend = "starlingmonkey") {
     const normalized = COMPONENTIZE_BACKENDS[backend];
     if (!normalized) {
         throw new Error(
-            `Unknown componentization backend "${backend}". Expected one of: starlingmonkey, sm, quickjs, qjs, perry.`,
+            `Unknown componentization backend "${backend}". Expected one of: starlingmonkey, sm, quickjs, qjs, perry, perry-wit.`,
         );
     }
     return normalized;
@@ -591,7 +601,10 @@ function validateBackendOptions(backend: ComponentizeJSBackend, opts: Omit<Compo
             throw new Error(`--${flag} is only supported by the perry backend`);
         }
     }
-    if (backend === "perry" && opts.engine !== undefined) {
+    if (backend !== "perry-wit" && opts.backendPerryWitPackage !== undefined) {
+        throw new Error("--backend-perry-wit-package is only supported by the perry-wit backend");
+    }
+    if ((backend === "perry" || backend === "perry-wit") && opts.engine !== undefined) {
         throw new Error("--engine is only supported by the starlingmonkey and quickjs backends");
     }
     if (backend === "starlingmonkey") {

@@ -219,7 +219,7 @@ QuickJS uses an async-capable runtime by default, even for synchronous WIT world
 components targeting hosts without async support, such as Node.js 22 when running Jco-generated
 JavaScript, add `--backend-qjs-disable-async` to select the non-async runtime.
 
-The accepted backend names are `starlingmonkey`/`sm`, `quickjs`/`qjs`, and `perry`. The existing `--engine <path>`
+The accepted backend names are `starlingmonkey`/`sm`, `quickjs`/`qjs`, `perry`, and `perry-wit`. The existing `--engine <path>`
 option supplies a custom StarlingMonkey build and is valid only with the StarlingMonkey backend.
 
 With StarlingMonkey and QuickJS, TypeScript entry modules are transformed and bundled automatically:

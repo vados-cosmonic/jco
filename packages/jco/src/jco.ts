@@ -71,11 +71,12 @@ program
     .option("--preview2-adapter <adapter>", "provide a custom preview2 adapter path")
     .addOption(
         new Option("--backend <backend>", "componentization backend")
-            .choices(["starlingmonkey", "sm", "quickjs", "qjs", "perry"])
+            .choices(["starlingmonkey", "sm", "quickjs", "qjs", "perry", "perry-wit"])
             .default("starlingmonkey"),
     )
     .option("--backend-perry-package <name>", "project-installed Perry CLI package (default: @perryts/perry)")
     .option("--backend-perry-cli-path <path>", "Perry CLI executable or JS launcher (relative to invocation directory)")
+    .option("--backend-perry-wit-package <name>", "project-installed Perry-WIT compiler package (default: perry-wit)")
     .option(
         "--backend-qjs-disable-async",
         "disable async (enable the 'sync' option) when buliding with componentize-qjs",

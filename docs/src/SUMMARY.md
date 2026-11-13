@@ -5,6 +5,7 @@
     - [StarlingMonkey backend](./starlingmonkey.md)
     - [QuickJS backend](./quickjs.md)
     - [Perry backend](./perry.md)
+    - [Perry-WIT backend](./perry-wit.md)
 - [Transpiling](./transpiling.md)
 - [Example Workflow](./example.md)
 - [WASI support](./wasi/index.md)

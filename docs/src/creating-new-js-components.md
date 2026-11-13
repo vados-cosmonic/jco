@@ -7,6 +7,7 @@ Jco can build WebAssembly components from JavaScript or TypeScript using several
 | [StarlingMonkey](./starlingmonkey.md) | Default; `--backend starlingmonkey` or `sm` | Included with Jco through `componentize-js`; builds against your WIT world. |
 | [QuickJS](./quickjs.md) | `--backend quickjs` or `qjs` | Included with Jco through `componentize-qjs`; builds against your WIT world. |
 | [Perry](./perry.md) (experimental) | `--backend perry` | User-selected compiler and WASI toolchain; produces WASI P2 commands without custom WIT bindings. |
+| [Perry-WIT](./perry-wit.md) (experimental) | `--backend perry-wit` | User-installed `perry-wit` npm package; compiles a static TypeScript subset ahead of time against your WIT world. |
 
 The backend guides cover setup, complete build/run examples, and backend-specific options.
 The scaffolding and bundling workflows below apply to StarlingMonkey and QuickJS;
