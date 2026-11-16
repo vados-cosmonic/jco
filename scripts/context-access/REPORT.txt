@@ -1,0 +1,144 @@
+Context access experiments — 2026-11-16
+
+Branch: perf/2481-context-access. Base: PR #2483 at cfc2c84ccc5552602b24573eed6cfe13323a5c55.
+
+Direct checked lookup improves the issue’s million-call Rust workload by 1.34–1.67x
+across two cohorts; checked caching improves it by 1.71–1.95x. These are gains beyond
+PR #2483, with debug:false selected at instantiation. A generation-counted cache
+measures 1.73x in the follow-up, but only 1.02x versus the simpler checked cache
+(95% paired bootstrap interval 0.87–1.11): no additional benefit established.
+
+A native Wasm accessor module backed by two mutable globals improves the same
+workload by 7.37–10.10x and reaches 1.28–1.45x the WASIp2 time. It uses the original
+guest core Wasm bytes: replacing JS imports with native Wasm exports removes the
+Wasm-to-JS transition. This prototype lacks task/thread save and restore and fails
+thread-isolation checks; its result is a single-task lower bound.
+
+Protocol: unmodified issue #2481 Rust workload, release builds for wasm32-wasip2
+and wasm32-wasip3, Rust 1.100.0, Node 24.13.0 (V8 13.6.233.17-node.37), JSPI,
+preview2-shim 0.31.1 and preview3-shim 0.14.1. The independent Wasmtime control is
+50.0.1. All checksums passed. Every Rust sample runs in a fresh process, with a
+seeded shuffled order and no explicit warmup. Guest Instant measures only the
+loop; startup, compilation before instantiation, and instantiation are excluded.
+JIT work during the loop is included. No CPU pinning or concurrent experiment
+builds/benchmarks were used during the final matrices.
+
+This shared six-vCPU Xeon host showed substantial timing variation. The primary
+baseline median was 536.40 ms, and the later matched baseline was 155.59 ms.
+Compare variants within their own cohort; do not divide numbers across cohorts
+or compare absolute times directly with the issue/PR’s published measurements.
+Intervals below resample paired rounds 10,000 times and describe sampling
+uncertainty, not all possible host effects. No multiple-comparison correction
+is applied. Small differences whose interval includes 1 are inconclusive.
+
+Primary Rust workload: 1,000,000 steps, 11 fresh processes per variant.
+All times are milliseconds. Speedup = baseline median / variant median.
+
+Variant                      Median      Min       Max   Speedup    95% interval
+pr2483                        536.40   330.18   958.00    1.00x   [1.00, 1.00]
+no-context-log                454.64   339.18  1072.64    1.18x   [0.87, 1.19]
+no-meta-copy                  503.78   263.02   800.55    1.06x   [0.93, 1.37]
+no-log-no-copy                373.57   263.86   598.62    1.44x   [1.11, 1.89]
+no-runtime-log                425.40   337.51  1281.16    1.26x   [0.66, 1.29]
+direct-checked                320.49   233.14   553.02    1.67x   [1.33, 2.08]
+direct-no-runtime-log         288.35   223.56  1067.40    1.86x   [1.40, 2.07]
+cache-checked                 274.50   187.01   640.13    1.95x   [1.16, 2.68]
+cache-unchecked               194.62   145.70   400.19    2.76x   [1.67, 3.35]
+single-array                  144.52    99.84   517.18    3.71x   [2.22, 4.18]
+wasm-globals                   53.12    35.08   106.44   10.10x   [6.48, 12.27]
+wasip2                         41.58    26.15    95.48   12.90x   [9.13, 16.60]
+wasmtime                       18.04    12.31    38.11   29.73x   [18.81, 44.02]
+
+Generation-counter follow-up: same workload, 11 fresh processes per variant.
+Ratios use this follow-up’s own baseline.
+
+Variant                      Median   Speedup    95% interval
+pr2483                        155.59    1.00x   [1.00, 1.00]
+direct-checked                116.05    1.34x   [1.19, 1.57]
+cache-checked                  91.15    1.71x   [1.59, 1.94]
+cache-epoch                    89.72    1.73x   [1.54, 1.91]
+wasm-globals                   21.10    7.37x   [5.94, 8.13]
+wasip2                         14.60   10.66x   [10.01, 12.43]
+
+Warmed core-Wasm microbenchmarks: seven fresh processes per variant. Each process
+warms up for five 100,000-iteration runs, then records seven million-iteration
+samples per workload. Reported time is the median of the seven process medians.
+The write workload performs get/set/get on each iteration: two million reads
+and one million writes. This complements the Rust workload’s predominantly reads.
+These tests extract actual generated functions and RepTable into a smaller
+closure with a fixed no-op logger. They do not reproduce the full component’s
+closure layout, logger selection, task scheduler, or suspensions.
+
+Variant                       Read ms    Gain    Get/set/get ms    Gain
+pr2483                         371.15   1.00x          1038.50   1.00x
+no-context-log                 238.43   1.56x           785.75   1.32x
+no-meta-copy                   215.10   1.73x           626.65   1.66x
+no-log-no-copy                 183.45   2.02x           713.77   1.45x
+no-runtime-log                 276.55   1.34x           940.33   1.10x
+direct-checked                 156.09   2.38x           600.05   1.73x
+direct-no-runtime-log          155.70   2.38x           580.21   1.79x
+cache-checked                  111.05   3.34x           410.37   2.53x
+cache-unchecked                 84.43   4.40x           381.85   2.72x
+single-array                    74.84   4.96x           167.88   6.19x
+wasm-globals                    10.30  36.04x            25.05  41.47x
+
+Checked caching improves warmed reads by 3.34x [1.27, 4.86] and get/set/get by
+2.53x [1.35, 4.24]. Read/write confidence intervals for every variant are stored
+in results/comparison.json. The generation-counter cache was added after this
+broader microbenchmark matrix and has no warmed read/write result in this report.
+
+Interpretation and implementation priorities:
+
+1. Start with direct checked lookup. Read the task register without snapshotting
+   it, resolve the live thread without allocating an AsyncThreadMeta wrapper,
+   and avoid redundant task()/id() calls. Keep component selection, task-ID
+   validation, executing-task fallback, slot checks, and i32 validation. Restrict
+   removal of register copies to this hot path; other callers use snapshots.
+
+2. Prototype a cache at the execution-context boundary. The checked cache here
+   attaches thread/table references to task-register objects and still checks
+   table membership and task ID on each hit. It avoids the component Map lookup.
+   A production cache needs an explicit ownership/lifetime contract and audits
+   of register snapshots, table replacement, stale post-return metadata, and
+   retained thread references. The epoch prototype validates a generation and
+   thread/component/task IDs instead of reading the table, but does not establish
+   an extra performance gain. Its generation increments on insert/remove/clear.
+
+3. Erase debug-only argument construction when debug is disabled, including
+   RepTable#get, rather than just substituting an empty logger. Logging removal
+   alone is inconclusive on the full Rust workload. Combining context-log removal
+   with elimination of metadata copies gives 1.44x [1.11, 1.89]. Removing all
+   embedded diagnostics does not establish an additional gain over direct lookup.
+   Production integration must retain debug-enabled behavior.
+
+4. Explore a tiny native Wasm getter/setter module as the route toward WASIp2
+   performance. It avoids guest binary rewriting. Schedule-aware save/restore
+   must handle JSPI suspension/resumption, nested component calls, both context
+   slots, realloc, destructors, and fused-adapter/post-return context. Measure
+   the cost at task-switch boundaries before treating the lower bound as an
+   achievable general speedup. A plain global array or unchecked cache fails
+   isolation and should not be adopted as an optimization.
+
+Validation and scope:
+
+- Nine generated variants (including the baseline) pass focused tests covering
+  both slots, nested/restored thread registers, component selection, dead-thread
+  fallback, recycled IDs, independent stores, invalid arguments, and table clear.
+- The unchecked cache, single array, and Wasm globals each fail the expected
+  isolation test. They are diagnostic lower bounds.
+- 143 primary Rust processes, 66 follow-up Rust processes, and 77 warmed
+  microbenchmark processes completed with checked results. Internal repeated
+  microbenchmark samples are not counted as independent processes.
+- The saved native driver builds with its pinned Cargo.lock and reproduces the
+  baseline JavaScript and every core Wasm module byte for byte. The baseline JS
+  SHA-256 is 203f84b3dc50dc577f96c7977fad46215160b5924b7cb53e5d3322fe216ca45b.
+- Rust formatting, JavaScript formatting/lint, and whitespace checks pass.
+- These are generated-output experiments. Real JSPI interleavings and the full
+  transpiler/runtime integration suite have not been validated for these patches.
+  The larger shell-interpreter workload was not available; no end-to-end shell
+  or I/O throughput gain is claimed.
+
+README.txt documents each variant and reproduction commands. results/ contains
+raw independent-process samples, environment metadata, paired bootstrap results,
+and artifact hashes. Full generated local artifacts are also preserved under
+/home/agent/workspace/jco/.llm/benchmarks/2481-context.

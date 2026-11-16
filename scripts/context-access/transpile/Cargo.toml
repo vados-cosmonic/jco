@@ -1,0 +1,13 @@
+[package]
+name = "context-access-transpile"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+anyhow = "1"
+js-component-bindgen = { path = "../../../crates/js-component-bindgen", features = [
+    "embedded-cm-runtime",
+    "external-runtime",
+] }

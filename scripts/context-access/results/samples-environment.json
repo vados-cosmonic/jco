@@ -1,0 +1,27 @@
+{
+    "node": "v24.13.0",
+    "v8": "13.6.233.17-node.37",
+    "platform": "linux",
+    "kernel": "6.12.111",
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+    "cpus": 6,
+    "repetitions": 11,
+    "counts": [1000000],
+    "variants": [
+        "pr2483",
+        "no-context-log",
+        "no-meta-copy",
+        "no-log-no-copy",
+        "no-runtime-log",
+        "direct-checked",
+        "direct-no-runtime-log",
+        "cache-checked",
+        "cache-unchecked",
+        "single-array",
+        "wasm-globals",
+        "wasip2",
+        "wasmtime"
+    ],
+    "seed": 2481,
+    "methodology": "Serial fresh processes; shuffled variant order per round; in-guest Instant; no explicit warmup; checksum required; no CPU pinning."
+}

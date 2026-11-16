@@ -1,0 +1,107 @@
+{
+    "fixture": "/home/agent/workspace/jco/.llm/benchmarks/2481",
+    "variants": [
+        "pr2483",
+        "no-context-log",
+        "no-meta-copy",
+        "no-log-no-copy",
+        "no-runtime-log",
+        "direct-checked",
+        "direct-no-runtime-log",
+        "cache-checked",
+        "cache-unchecked",
+        "single-array",
+        "wasm-globals",
+        "wasip2",
+        "cache-epoch"
+    ],
+    "sourceHash": "203f84b3dc50dc577f96c7977fad46215160b5924b7cb53e5d3322fe216ca45b",
+    "baselineCommit": "cfc2c84ccc5552602b24573eed6cfe13323a5c55",
+    "diagnosticOnly": ["cache-unchecked", "single-array", "wasm-globals"],
+    "artifacts": {
+        "pr2483": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "203f84b3dc50dc577f96c7977fad46215160b5924b7cb53e5d3322fe216ca45b"
+        },
+        "no-context-log": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "2bbb6ce6b22b3b4ab4cd4b973d8f336abb7ee82e5f506ebc32dbd14cff530569"
+        },
+        "no-meta-copy": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "fdb1e66f2911abd81239e65405e9869bb36c13f9152ea2dcc52f458c18e2bf58"
+        },
+        "no-log-no-copy": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "5e0932c5a5a77423130a5ddb0a6a00083aa33ca9219222a82923c0dd8610702c"
+        },
+        "no-runtime-log": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "b3e9e321b77bddcb54d584784df969e383e4893c05aeb2e07602965dfab719d0"
+        },
+        "direct-checked": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "15decbaa401d4a04ca89fce67ee8a2620ab715f98457e9db2717ecb5a2d20b61"
+        },
+        "direct-no-runtime-log": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "c0f2f88a1e61442ded7f34167be75b97bd3cd43ce33fb0ee15d52dd99e105e37"
+        },
+        "cache-checked": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "1785d97ff7fb5452770153fa14c649ffb2b9ebc1a20c85beb83d723bd9693009"
+        },
+        "cache-unchecked": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "7a286d239ed2164136633880957b852e161f56d9cf665bb2d372489a9681c36c"
+        },
+        "single-array": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "d95a42b718593a50fe02a6f2f011cb626be0fe4f66fbf280c6cbaee2893f1c89"
+        },
+        "wasm-globals": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "cf57d6e9da0c77858f3d4749ee58da668ed7ae943e72440e6e607b5e6dda8f08"
+        },
+        "wasip2": {
+            "stack-loop.core.wasm": "76f1e2972bf91dc6629e5f7d9fa34e7dcf622418026edd6d76a61076b075f390",
+            "stack-loop.core2.wasm": "1548c06760f165e2a0766b59e802a4a51c844643cdfd1c9e6611041af2c6dbfe",
+            "stack-loop.core3.wasm": "691117375a8aa4855693d9cc27aecf68cd03efcd239329a01706ad51ae1f5cff",
+            "stack-loop.js": "b717e6588fe58305c0649eacf48d6a119d7a456cf67e19011d2f67bb7a81d6f8"
+        },
+        "cache-epoch": {
+            "stack-loop.core.wasm": "e06faf3961033d134e39f92f4203c15d48105016e0e992201157845c303f29f2",
+            "stack-loop.core2.wasm": "d655036c5186884de299af49853dc05c17c1fc821fbe3e7b9a9085672b858761",
+            "stack-loop.core3.wasm": "6483f09a10bb129a2bc191d533e7a5a42412ac1656ae867b7ed707f13ad2ae0c",
+            "stack-loop.js": "e61f239c44581aaf2cae055ea36b4ae633f36b623e20f2de41177747e8e3347b"
+        }
+    },
+    "guestComponents": {
+        "wasm32-wasip2": "856edd62b3a43150fc398a62e584b5e23835d75f3713360de0254b6a03e70b44",
+        "wasm32-wasip3": "1d63e760d004fc99eee600cea785b4588927156011148125d7e9b42e18870077"
+    },
+    "nativeDriverLockHash": "5e3f8a240ec35b9c3f8d9f9eb87e83d0e22038ffbd034e97f5fe82b1f1525396",
+    "regenerationCheck": "Native driver reproduced the baseline JavaScript and every core Wasm module byte for byte."
+}
