@@ -382,7 +382,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         if bundle_runtime && name.ends_with(".js") {
             let source = std::str::from_utf8(source)
                 .with_context(|| format!("generated module {name} is not UTF-8"))?;
-            if let Some(linked) = embedded_runtime::link(source)
+            if let Some(linked) = embedded_runtime::link(source, opts.instantiation_mode.is_some())
                 .with_context(|| format!("failed to bundle the runtime into {name}"))?
             {
                 files_out.push((name.to_string(), linked.into_bytes()));

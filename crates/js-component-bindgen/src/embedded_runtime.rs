@@ -18,7 +18,7 @@ use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail, ensure};
 use oxc_allocator::Allocator;
-use oxc_ast::ast::{ImportDeclarationSpecifier, Statement};
+use oxc_ast::ast::{BindingPattern, Declaration, ImportDeclarationSpecifier, Statement};
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 use oxc_minifier::{CompressOptions, Minifier, MinifierOptions};
 use oxc_parser::Parser;
@@ -46,7 +46,7 @@ struct Runtime {
 
 impl Runtime {
     /// Parse the shipped runtime and prefix its top-level names with `namespace`.
-    fn with_namespace(namespace: &str) -> Result<Self> {
+    fn with_namespace(namespace: &str, instantiation: bool) -> Result<Self> {
         let allocator = Allocator::default();
         let parsed = Parser::new(&allocator, RUNTIME_SOURCE, SourceType::mjs()).parse();
         ensure!(
@@ -55,6 +55,46 @@ impl Runtime {
             parsed.diagnostics
         );
         let mut program = parsed.program;
+        if instantiation {
+            // Resolve the logger through the export map rather than relying on
+            // Rolldown's choice of a local name. All runtime functions will share
+            // this logger inside the generated instantiate closure.
+            let aliases = export_aliases()?;
+            let alias = aliases
+                .get("intrinsics/core:debugLog")
+                .context("the shipped runtime does not export debugLog")?;
+            let local = program
+                .body
+                .iter()
+                .find_map(|statement| {
+                    let Statement::ExportNamedDeclaration(export) = statement else {
+                        return None;
+                    };
+                    export
+                        .specifiers
+                        .iter()
+                        .find(|specifier| specifier.exported.name() == *alias)
+                        .map(|specifier| specifier.local.name().to_string())
+                })
+                .context("the shipped runtime does not define debugLog")?;
+            let mut replaced = false;
+            for statement in &mut program.body {
+                let Statement::VariableDeclaration(declaration) = statement else {
+                    continue;
+                };
+                for declarator in &mut declaration.declarations {
+                    if matches!(&declarator.id, BindingPattern::BindingIdentifier(identifier) if identifier.name == local.as_str())
+                    {
+                        declarator.init = Some(Parser::new(&allocator,
+                            "(options?.debug ?? Boolean(globalThis?.process?.env?.JCO_DEBUG)) ? (...args) => console.debug(...args) : () => {}",
+                            SourceType::mjs()).parse_expression()
+                            .map_err(|errors| anyhow::anyhow!("invalid debug initializer: {errors:?}"))?);
+                        replaced = true;
+                    }
+                }
+            }
+            ensure!(replaced, "the shipped runtime logger has no initializer");
+        }
         let semantics = SemanticBuilder::new().build(&program);
         ensure!(
             semantics.diagnostics.is_empty(),
@@ -103,11 +143,19 @@ impl Runtime {
         Ok(Self { code, exports })
     }
 
-    /// The runtime under the default namespace, prepared once per process.
-    fn shared() -> Result<&'static Self> {
+    /// The runtime under the default namespace, prepared once per instantiation style.
+    fn shared(instantiation: bool) -> Result<&'static Self> {
         static SHARED: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
-        SHARED
-            .get_or_init(|| Self::with_namespace(NAMESPACE).map_err(|error| format!("{error:#}")))
+        static PER_INSTANCE: OnceLock<std::result::Result<Runtime, String>> = OnceLock::new();
+        let shared = if instantiation {
+            &PER_INSTANCE
+        } else {
+            &SHARED
+        };
+        shared
+            .get_or_init(|| {
+                Self::with_namespace(NAMESPACE, instantiation).map_err(|error| format!("{error:#}"))
+            })
             .as_ref()
             .map_err(|error| anyhow::anyhow!("{error}"))
     }
@@ -143,7 +191,7 @@ fn runtime_subpath<'a>(statement: &'a Statement<'_>) -> Option<&'a str> {
 /// Returns `None` when `generated` imports nothing from the runtime, in which case
 /// it needs no linking and is best left exactly as generated. All other imports,
 /// such as a component's own imports, are left in place.
-pub(crate) fn link(generated: &str) -> Result<Option<String>> {
+pub(crate) fn link(generated: &str, instantiation: bool) -> Result<Option<String>> {
     if !generated.contains(PACKAGE) {
         return Ok(None);
     }
@@ -172,9 +220,9 @@ pub(crate) fn link(generated: &str) -> Result<Option<String>> {
     }
     let owned_runtime;
     let runtime = if namespace == NAMESPACE {
-        Runtime::shared()?
+        Runtime::shared(instantiation)?
     } else {
-        owned_runtime = Runtime::with_namespace(&namespace)?;
+        owned_runtime = Runtime::with_namespace(&namespace, instantiation)?;
         &owned_runtime
     };
 
@@ -219,7 +267,39 @@ pub(crate) fn link(generated: &str) -> Result<Option<String>> {
     bindings.directives.clear();
     let bindings = Codegen::new().build(&bindings).code;
 
-    let linked = format!("{directives}{}\n{imported}\n{bindings}", runtime.code);
+    let linked = if instantiation {
+        // Runtime functions close over this instance's logger, including across
+        // JSPI suspensions. A shared mutable logger would mix concurrent instances.
+        let parsed = Parser::new(&allocator, &bindings, SourceType::mjs()).parse();
+        let body_start = parsed
+            .program
+            .body
+            .iter()
+            .find_map(|statement| {
+                let Statement::ExportDeclaration(export) = statement else {
+                    return None;
+                };
+                let Declaration::FunctionDeclaration(function) = &export.declaration else {
+                    return None;
+                };
+                if function.id.as_ref()?.name != "instantiate" {
+                    return None;
+                }
+                function
+                    .body
+                    .as_ref()
+                    .map(|body| body.span.start as usize + 1)
+            })
+            .context("instantiation bindings have no instantiate function")?;
+        format!(
+            "{directives}{}\n{}\n{imported}\n{}",
+            &bindings[..body_start],
+            runtime.code,
+            &bindings[body_start..]
+        )
+    } else {
+        format!("{directives}{}\n{imported}\n{bindings}", runtime.code)
+    };
     let parsed = Parser::new(&allocator, &linked, SourceType::mjs()).parse();
     ensure!(
         parsed.diagnostics.is_empty(),
@@ -278,7 +358,7 @@ mod tests {
             export function run(value) { return consume(toInt8({ strict: false }, value)); }
             export const location = import.meta.url;
         "#;
-        let linked = link(source).unwrap().unwrap();
+        let linked = link(source, false).unwrap().unwrap();
         assert!(!linked.contains("@bytecodealliance/jco-cm-runtime"));
         assert!(linked.contains("consumer"));
         assert!(linked.contains("import.meta.url"));
@@ -290,28 +370,43 @@ mod tests {
     }
 
     #[test]
+    fn instantiation_owns_runtime_functions_and_debug_configuration() {
+        let source = r#"
+            import { withCurrentTaskMeta } from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
+            export function instantiate(getCoreModule, imports, instantiateCore, options) {
+                return { run: () => withCurrentTaskMeta({}, { componentIdx: 0, taskID: 1, threadID: 1, fn: () => 42 }) };
+            }
+        "#;
+        let linked = link(source, true).unwrap().unwrap();
+        assert!(linked.starts_with("export function instantiate("));
+        assert!(linked.contains("options?.debug ??"));
+        assert!(linked.contains("__jcoEmbeddedRuntime$withCurrentTaskMeta"));
+        assert_eq!(linked.matches("process?.env?.JCO_DEBUG").count(), 1);
+    }
+
+    #[test]
     fn leaves_modules_without_runtime_imports_untouched() {
         assert!(
-            link("import { consume } from 'consumer'; consume();")
+            link("import { consume } from 'consumer'; consume();", false)
                 .unwrap()
                 .is_none()
         );
         // Mentioning the package without importing from it is not a runtime import.
         let mention = "export const name = '@bytecodealliance/jco-cm-runtime/runtime';";
-        assert!(link(mention).unwrap().is_none());
+        assert!(link(mention, false).unwrap().is_none());
     }
 
     #[test]
     fn uses_the_default_namespace_when_it_is_free() {
         let source = "import { toInt8 } from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion'; export { toInt8 };";
-        let linked = link(source).unwrap().unwrap();
+        let linked = link(source, false).unwrap().unwrap();
         assert!(linked.contains(&format!("{NAMESPACE}toInt8")));
         assert!(!linked.contains(&format!("{NAMESPACE}$")));
     }
 
     #[test]
     fn reports_missing_runtime_exports() {
-        let error = link("import { missing } from '@bytecodealliance/jco-cm-runtime/runtime'; export { missing };").unwrap_err();
+        let error = link("import { missing } from '@bytecodealliance/jco-cm-runtime/runtime'; export { missing };", false).unwrap_err();
         assert!(
             error
                 .to_string()
@@ -322,7 +417,7 @@ mod tests {
     #[test]
     fn rejects_namespace_imports_of_the_runtime() {
         let error = link(
-            "import * as runtime from '@bytecodealliance/jco-cm-runtime/runtime'; export { runtime };",
+            "import * as runtime from '@bytecodealliance/jco-cm-runtime/runtime'; export { runtime };", false,
         )
         .unwrap_err();
         assert!(error.to_string().contains("must use named imports"));

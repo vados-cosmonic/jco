@@ -624,13 +624,13 @@ impl Intrinsic {
 
             Intrinsic::DebugLog => {
                 let fn_name = args.require_intrinsic(Intrinsic::DebugLog);
+                let enabled = if args.instantiation_occurred {
+                    "options?.debug ?? Boolean(globalThis?.process?.env?.JCO_DEBUG)"
+                } else {
+                    "Boolean(globalThis?.process?.env?.JCO_DEBUG)"
+                };
                 output.push_str(&format!(
-                    "
-                    const {fn_name} = (...args) => {{
-                        if (!globalThis?.process?.env?.JCO_DEBUG) {{ return; }}
-                        console.debug(...args);
-                    }};
-                "
+                    "const {fn_name} = ({enabled}) ? (...args) => console.debug(...args) : () => {{}};"
                 ));
             }
 

@@ -292,6 +292,21 @@ Upstreaming into the [@bytecodealliance/preview2-shim](https://github.com/byteco
 
 Instantiation output is enabled via `jco transpile component.wasm --instantiation sync|async`.
 
+The fourth argument to `instantiate` can configure debug logging for an embedded
+or inline runtime:
+
+```js
+const instance = await instantiate(getCoreModule, imports, undefined, { debug: false });
+```
+
+`debug: true` enables `console.debug` diagnostics; `debug: false` disables them even
+when `JCO_DEBUG` is set. If omitted, the runtime reads `JCO_DEBUG` once during
+instantiation. Each instance keeps its own setting, so later changes to the
+options object or environment do not affect it. Direct ESM output reads
+`JCO_DEBUG` once when the module loads. External runtime providers configure their
+own logging; the default external runtime also snapshots `JCO_DEBUG` at module
+load.
+
 When using instantiation mode, the output is a JS module with a single `instantiate()` function.
 
 For async instantiation, the instantiate function takes the following signature:

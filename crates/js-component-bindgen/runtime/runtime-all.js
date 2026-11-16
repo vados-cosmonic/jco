@@ -1,5 +1,5 @@
-// @bytecodealliance/jco-cm-runtime@0.0.1
-// generated from commit 74bccaa98dc28ee94342f22beb12574d727715da
+// @bytecodealliance/jco-cm-runtime@0.1.0
+// generated from commit 1ad06b2d631df5c3cc57650434218d5537ca4487
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -26,10 +26,12 @@ function isPromiseLike(value) {
 
 //#endregion
 //#region runtime/intrinsics/core/debug.js
-const debugLog = (...args) => {
-	if (!globalThis?.process?.env?.JCO_DEBUG) return;
-	console.debug(...args);
-};
+/**
+* Log runtime diagnostics when enabled at module load. Snapshot the environment
+* so hot runtime operations never read process.env.
+* @param args Values to log.
+*/
+const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (...args) => console.debug(...args) : () => {};
 
 //#endregion
 //#region runtime/intrinsics/task-context.js
@@ -500,6 +502,38 @@ function setAllError(states) {
 const TICK_DONE = "done";
 const TICK_RESUMED = "resumed";
 const TICK_IDLE = "idle";
+const IDLE_POLL_MS = 10;
+/**
+* Run `callback` on the next macrotask, after the current microtasks have drained, as
+* `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
+* browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
+* Returns a function that cancels the callback.
+*/
+function onNextMacrotask(callback) {
+	if (typeof setImmediate === "function") {
+		const handle = setImmediate(callback);
+		return () => clearImmediate(handle);
+	}
+	if (typeof MessageChannel === "function") {
+		const channel = new MessageChannel();
+		let cancelled = false;
+		channel.port1.onmessage = () => {
+			channel.port1.close();
+			if (!cancelled) callback();
+		};
+		channel.port2.postMessage(null);
+		return () => {
+			cancelled = true;
+			channel.port1.close();
+		};
+	}
+	const handle = setTimeout(callback, 0);
+	return () => clearTimeout(handle);
+}
+function afterDelay(callback, ms) {
+	const handle = setTimeout(callback, ms);
+	return () => clearTimeout(handle);
+}
 function initializeComponentAsyncStateClass(context) {
 	const { RuntimeError, RepTable, indexSpaces, instanceFlags, storeTrap, normalization, cannotEnter, deadlock, Waitable } = context;
 	class ComponentAsyncState {
@@ -525,6 +559,7 @@ function initializeComponentAsyncStateClass(context) {
 		#backpressureWaiters = 0n;
 		#handlers = [];
 		#nextHandlerID = 0n;
+		/** Cancels the scheduled tick while the tick loop runs. */
 		#tickLoop = null;
 		#onExclusiveReleaseHandlers = [];
 		#mayLeave = true;
@@ -912,7 +947,7 @@ function initializeComponentAsyncStateClass(context) {
 			return false;
 		}
 		stop() {
-			if (this.#tickLoop !== null) clearTimeout(this.#tickLoop);
+			this.#tickLoop?.();
 			this.#tickLoop = null;
 			this.abandonLockWaiters();
 			this.abandonAdmissionWaiters();
@@ -931,10 +966,9 @@ function initializeComponentAsyncStateClass(context) {
 					return;
 				}
 				if (result === TICK_IDLE) checkForDeadlock(deadlock);
-				const delay = result === TICK_RESUMED ? 0 : 10;
-				this.#tickLoop = setTimeout(run, delay);
+				this.#tickLoop = result === TICK_RESUMED ? onNextMacrotask(run) : afterDelay(run, IDLE_POLL_MS);
 			};
-			this.#tickLoop = setTimeout(run, 10);
+			this.#tickLoop = onNextMacrotask(run);
 		}
 		tick() {
 			for (const [thread, meta] of this.#suspendedThreadsByRef) {

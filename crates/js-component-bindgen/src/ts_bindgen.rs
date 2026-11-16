@@ -782,6 +782,13 @@ pub fn ts_bindgen(
                  */
                 export interface InstantiateOptions {{
                     /**
+                     * Enable debug logging for this instance's embedded or inline runtime.
+                     * Defaults to the truthiness of JCO_DEBUG at instantiation time.
+                     * Later environment changes do not affect this instance.
+                     * External runtime providers configure their own logging.
+                     */
+                    debug?: boolean;
+                    /**
                      * Called with each trap of this instance as it happens, in whichever
                      * task: including one a guest left running, which no call of the host's
                      * would otherwise fail for. Not called for stopping the instance, which
