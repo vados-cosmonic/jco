@@ -292,21 +292,6 @@ Upstreaming into the [@bytecodealliance/preview2-shim](https://github.com/byteco
 
 Instantiation output is enabled via `jco transpile component.wasm --instantiation sync|async`.
 
-The fourth argument to `instantiate` can configure debug logging for an embedded
-or inline runtime:
-
-```js
-const instance = await instantiate(getCoreModule, imports, undefined, { debug: false });
-```
-
-`debug: true` enables `console.debug` diagnostics; `debug: false` disables them even
-when `JCO_DEBUG` is set. If omitted, the runtime reads `JCO_DEBUG` once during
-instantiation. Each instance keeps its own setting, so later changes to the
-options object or environment do not affect it. Direct ESM output reads
-`JCO_DEBUG` once when the module loads. External runtime providers configure their
-own logging; the default external runtime also snapshots `JCO_DEBUG` at module
-load.
-
 When using instantiation mode, the output is a JS module with a single `instantiate()` function.
 
 For async instantiation, the instantiate function takes the following signature:
@@ -352,6 +337,49 @@ export function instantiate(
 
 Where instead of promises, all functions are synchronous.
 
+### Instantiation options
+
+Both instantiation modes accept an optional fourth argument, `options`. Pass `undefined`
+for the third argument to keep the default core instantiator. The generated bindings export
+its type as `InstantiateOptions`:
+
+```ts
+export interface InstantiateOptions {
+  debug?: boolean;
+  onTrap?: (error: WebAssembly.RuntimeError) => void;
+  shim?: {
+    globals?: {
+      WebAssembly?: typeof WebAssembly;
+    };
+  };
+}
+```
+
+| Option | Purpose | Default |
+| --- | --- | --- |
+| [`debug`](#debug-logging) | Enable or disable debug logging for this instance's embedded or inline runtime. | The truthiness of `JCO_DEBUG` when instantiation begins. |
+| [`onTrap`](#trap-notifications) | Receive traps, including traps from background guest tasks. | No callback; failed calls still report their errors. |
+| [`shim.globals.WebAssembly`](#runtime-overrides) | Supply the WebAssembly implementation used by runtime helpers and the default core instantiator. | `globalThis.WebAssembly`. |
+
+```js
+const instance = await instantiate(getCoreModule, imports, undefined, {
+  debug: false,
+  onTrap: (error) => console.error('Component trapped:', error),
+});
+```
+
+#### Debug logging
+
+`debug: true` enables `console.debug` diagnostics; `debug: false` disables them even
+when `JCO_DEBUG` is set. If omitted, the runtime reads `JCO_DEBUG` once during
+instantiation. Each instance keeps its own setting, so later changes to the
+options object or environment do not affect it. Direct ESM output reads
+`JCO_DEBUG` once when the module loads. External runtime providers configure their
+own logging; the default external runtime also snapshots `JCO_DEBUG` at module
+load.
+
+#### Trap notifications
+
 `options.onTrap` is called with each trap of the instance, once, as soon as it happens. That includes
 a trap in a task a guest left running, after the calls of the host's that started it have returned,
 which no promise would otherwise report; a trap that also fails a call does that as well. A deadlock
@@ -361,6 +389,31 @@ trap, and isn't reported: the host knows it threw.
 shouldn't use the instance otherwise. An exception it throws is left uncaught.
 See [Detecting traps](./advanced/detecting-traps.md#receive-background-traps-with-ontrap)
 for examples of catching failed calls and receiving background trap notifications.
+
+#### Runtime overrides
+
+Runtime overrides are grouped under `shim`. Set `options.shim.globals.WebAssembly` to provide
+a custom `WebAssembly` implementation for that instance. It defaults to `globalThis.WebAssembly`
+when the override is omitted or nullish at any level.
+The override applies to the generated component's helpers and its default core instantiator
+(`WebAssembly.instantiate` in async mode, `new WebAssembly.Instance` in sync mode), which calls
+the implementation as a method. An explicit `instantiateCore` callback still takes precedence.
+When neither an override nor a platform `WebAssembly` global is available, `instantiate` throws
+unless an explicit `instantiateCore` is supplied.
+
+```js
+const component = await instantiate(getCoreModule, imports, undefined, {
+  shim: {
+    globals: { WebAssembly: customWebAssembly },
+  },
+});
+```
+
+The supplied WebAssembly implementation must provide the APIs used by the component, including JSPI
+APIs when needed. To override only selected APIs, inherit from the platform implementation
+with `Object.create(WebAssembly)`; its properties are not enumerable, so object spread does
+not copy them. Callbacks supplied by the caller, such as `getCoreModule`, must use the custom
+implementation themselves if needed.
 
 ### Dropping a received future
 
@@ -390,42 +443,3 @@ for completion semantics and an orderly shutdown example.
 
 With `--call-tracking`, `_util.calls.start(fn, ...args)` returns a handle with a separate
 `finished` promise for selected guest execution. See [Tracking individual calls](./advanced/call-tracking.md).
-
-### Runtime overrides
-
-The optional fourth argument, `options`, configures the instantiation. Its type is exported
-from the generated bindings as `InstantiateOptions`:
-
-```ts
-export interface InstantiateOptions {
-  onTrap?: (error: WebAssembly.RuntimeError) => void;
-  shim?: {
-    globals?: {
-      WebAssembly?: typeof WebAssembly;
-    };
-  };
-}
-```
-
-Runtime overrides are grouped under `shim`. Set `options.shim.globals.WebAssembly` to provide
-a custom `WebAssembly` implementation for that instance. It defaults to `globalThis.WebAssembly`
-when the override is omitted or nullish at any level.
-The override applies to the generated component's helpers and its default core instantiator
-(`WebAssembly.instantiate` in async mode, `new WebAssembly.Instance` in sync mode), which calls
-the implementation as a method. An explicit `instantiateCore` callback still takes precedence.
-When neither an override nor a platform `WebAssembly` global is available, `instantiate` throws
-unless an explicit `instantiateCore` is supplied.
-
-```js
-const component = await instantiate(getCoreModule, imports, undefined, {
-  shim: {
-    globals: { WebAssembly: customWebAssembly },
-  },
-});
-```
-
-The supplied WebAssembly implementation must provide the APIs used by the component, including JSPI
-APIs when needed. To override only selected APIs, inherit from the platform implementation
-with `Object.create(WebAssembly)`; its properties are not enumerable, so object spread does
-not copy them. Callbacks supplied by the caller, such as `getCoreModule`, must use the custom
-implementation themselves if needed.
