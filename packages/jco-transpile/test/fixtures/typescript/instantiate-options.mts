@@ -19,3 +19,8 @@ instantiate(load, {}, undefined, { shim: { globals: { WebAssembly: { compile: ()
 instantiate(load, {}, undefined, { WebAssembly });
 // @ts-expect-error Global overrides must be grouped under shim.
 instantiate(load, {}, undefined, { globals: { WebAssembly } });
+
+instantiate(load, {}, undefined, { debug: true });
+instantiate(load, {}, undefined, { debug: false });
+// @ts-expect-error The debug option must be boolean.
+instantiate(load, {}, undefined, { debug: '1' });
