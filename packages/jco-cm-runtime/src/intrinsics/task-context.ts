@@ -1,6 +1,7 @@
 import { isPromiseLike } from './core/promises.js';
 import type { CoreModule, TaskMeta, TaskRegisters } from '../runtime.js';
 import { debugLog } from './core/debug.js';
+import { syncContextSlots } from './async-task/context.js';
 
 export const initializeTaskRegisters: CoreModule['initializeTaskRegisters'] = () => ({});
 
@@ -27,7 +28,9 @@ export const getCurrentTaskMeta: CoreModule['getCurrentTaskMeta'] = (registers, 
 export const setCurrentTaskMeta: CoreModule['setCurrentTaskMeta'] = (registers, args) => {
     validate(args);
     const { taskID, threadID, componentIdx } = args;
-    return (registers.current = registers[componentIdx] = { taskID, threadID, componentIdx });
+    const meta = (registers.current = registers[componentIdx] = { taskID, threadID, componentIdx });
+    syncContextSlots(registers);
+    return meta;
 };
 
 export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta & { fn: () => T }): T {
@@ -41,6 +44,7 @@ export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta 
     const previousCurrent = registers.current ?? null;
     try {
         registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
+        syncContextSlots(registers);
         return fn();
     } catch (error) {
         debugLog('error while executing sync callee/callback', { ...args, err: error });
@@ -48,6 +52,7 @@ export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta 
     } finally {
         registers[componentIdx] = previous;
         registers.current = previousCurrent;
+        syncContextSlots(registers);
     }
 }
 
@@ -66,16 +71,19 @@ export function withCurrentTaskMetaAsync<T>(
     let result: T;
     try {
         registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
+        syncContextSlots(registers);
         result = fn();
     } catch (error) {
         debugLog('error while executing sync callee/callback', { ...args, err: error });
         registers[componentIdx] = previous;
         registers.current = previousCurrent;
+        syncContextSlots(registers);
         throw error;
     }
     if (!isPromiseLike(result)) {
         registers[componentIdx] = previous;
         registers.current = previousCurrent;
+        syncContextSlots(registers);
         return result;
     }
     return (async (): Promise<Awaited<T>> => {
@@ -92,6 +100,7 @@ export function withCurrentTaskMetaAsync<T>(
             if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) {
                 registers.current = null;
             }
+            syncContextSlots(registers);
         }
     })();
 }
@@ -117,4 +126,5 @@ export const clearCurrentTaskMeta: CoreModule['clearCurrentTaskMeta'] = async (r
     if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) {
         registers.current = null;
     }
+    syncContextSlots(registers);
 };

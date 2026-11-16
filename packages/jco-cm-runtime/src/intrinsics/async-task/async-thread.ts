@@ -3,6 +3,7 @@ import type {
     AsyncThreadConstructor,
     AsyncTask as AsyncTaskType,
     AsyncThreadOptions,
+    ContextSlotGlobals,
     TaskSuspendOptions,
 } from '../../runtime.js';
 import { getOrCreateAsyncState, recordTrap } from '../component.js';
@@ -38,7 +39,35 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
         #task: AsyncTaskType;
         #state: 'not-started' | 'running' | 'completed';
         #startFn: (() => unknown) | null = null;
-        storage = [0, 0];
+        #storage = [0, 0];
+        contextGlobals: ContextSlotGlobals | undefined = undefined;
+
+        /**
+         * The context slots of this thread.
+         *
+         * While this is its instance's current thread, the slots live in
+         * `contextGlobals`: reading them here first copies them out of the
+         * globals, and replacing them here also replaces them in the globals.
+         */
+        get storage(): number[] {
+            const globals = this.contextGlobals;
+            if (globals !== undefined) {
+                for (let slot = 0; slot < this.#storage.length; slot++) {
+                    this.#storage[slot] = globals.slots[slot]!.value;
+                }
+            }
+            return this.#storage;
+        }
+
+        set storage(values: number[]) {
+            this.#storage = values;
+            const globals = this.contextGlobals;
+            if (globals !== undefined) {
+                for (let slot = 0; slot < values.length; slot++) {
+                    globals.slots[slot]!.value = values[slot]!;
+                }
+            }
+        }
 
         constructor(opts: AsyncThreadOptions) {
             if (opts?.componentIdx === undefined) {

@@ -128,3 +128,151 @@ test.concurrent('task.return rejects a synchronous canonical lift even when JSPI
         s.cleanup();
     }
 });
+
+test.concurrent("context slot accessors of an instance follow the instance's current thread", () => {
+    const s = store();
+    try {
+        const get = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'get') as () => number;
+        const set = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'set') as (
+            value: number,
+        ) => void;
+        const getSecond = operations.contextSlotAccessor(
+            s.threadLookup,
+            { componentIdx: 0, slot: 1 },
+            'get',
+        ) as () => number;
+
+        const a = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
+        const other = a.task.addThread(new s.asyncTask.AsyncThread({ componentIdx: 0, task: a.task }));
+        other.storage[1] = 5;
+        s.core.withCurrentTaskMeta({
+            componentIdx: 0,
+            taskID: a.taskID,
+            threadID: a.threadID,
+            fn() {
+                // The accessors and the JS implementation see the same slots.
+                set(17);
+                expect(s.asyncTask.contextGet({ componentIdx: 0, slot: 0 })).toBe(17);
+                s.asyncTask.contextSet({ slot: 0 }, 18);
+                expect(get()).toBe(18);
+                expect(getSecond()).toBe(0);
+
+                s.core.withCurrentTaskMeta({
+                    componentIdx: 0,
+                    taskID: a.taskID,
+                    threadID: other.id(),
+                    fn() {
+                        expect(get()).toBe(0);
+                        expect(getSecond()).toBe(5);
+                        set(42);
+                        expect(s.asyncTask.contextGet({ slot: 0 })).toBe(42);
+                    },
+                });
+                expect(get()).toBe(18);
+                expect(getSecond()).toBe(0);
+
+                // Replacing the current thread's slots, as the realloc wrapper
+                // of generated bindings does, is visible to the accessors.
+                const saved = a.thread.storage;
+                expect(saved).toEqual([18, 0]);
+                a.thread.storage = [0, 0];
+                expect(get()).toBe(0);
+                set(97);
+                a.thread.storage = saved;
+                expect(get()).toBe(18);
+            },
+        });
+
+        // Slots return to a thread once it is no longer current.
+        expect(a.thread.storage).toEqual([18, 0]);
+        expect(other.storage).toEqual([42, 5]);
+        a.task.resolve([]);
+        a.task.removeThread(other);
+        a.task.exit({ skipExclusiveLockCheck: true });
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('context slot accessors stop using a thread which exits while current', () => {
+    const s = store();
+    try {
+        const get = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'get') as () => number;
+        const set = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'set') as (
+            value: number,
+        ) => void;
+
+        const a = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
+        const other = a.task.addThread(new s.asyncTask.AsyncThread({ componentIdx: 0, task: a.task }));
+        s.core.withCurrentTaskMeta({
+            componentIdx: 0,
+            taskID: a.taskID,
+            threadID: other.id(),
+            fn() {
+                set(9);
+                a.task.removeThread(other);
+                expect(other.storage[0]).toBe(9);
+
+                // The register now names no live thread.
+                expect(() => get()).toThrow(/missing\/incomplete global current thread meta/);
+                expect(() => set(1)).toThrow(/missing\/incomplete global current thread meta/);
+            },
+        });
+        a.task.resolve([]);
+        a.task.exit({ skipExclusiveLockCheck: true });
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('context slot accessors fall back to the executing task of another instance', () => {
+    const s = store();
+    try {
+        const get = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'get') as () => number;
+        const calleeGet = operations.contextSlotAccessor(
+            s.threadLookup,
+            { componentIdx: 1, slot: 0 },
+            'get',
+        ) as () => number;
+        const calleeSet = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 1, slot: 0 }, 'set') as (
+            value: number,
+        ) => void;
+
+        const caller = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
+        s.core.withCurrentTaskMeta({
+            componentIdx: 0,
+            taskID: caller.taskID,
+            threadID: caller.threadID,
+            fn() {
+                s.asyncTask.contextSet({ componentIdx: 0, slot: 0 }, 21);
+
+                // Instance 1 has no task of its own, as in a post-return
+                // function: it shares the caller's slots in both directions.
+                expect(calleeGet()).toBe(21);
+                calleeSet(22);
+                expect(get()).toBe(22);
+                expect(s.asyncTask.contextGet({ slot: 0 })).toBe(22);
+
+                const callee = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 1 });
+                s.core.withCurrentTaskMeta({
+                    componentIdx: 1,
+                    taskID: callee.taskID,
+                    threadID: callee.threadID,
+                    fn() {
+                        expect(calleeGet()).toBe(0);
+                        calleeSet(7);
+                        expect(get()).toBe(22);
+                    },
+                });
+                expect(callee.thread.storage[0]).toBe(7);
+                expect(calleeGet()).toBe(22);
+                callee.task.resolve([]);
+                callee.task.exit({ skipExclusiveLockCheck: true });
+            },
+        });
+        caller.task.resolve([]);
+        caller.task.exit({ skipExclusiveLockCheck: true });
+    } finally {
+        s.cleanup();
+    }
+});

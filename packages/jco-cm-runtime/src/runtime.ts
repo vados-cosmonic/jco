@@ -347,6 +347,24 @@ export interface TaskMeta {
 export interface TaskRegisters {
     [componentIdx: number]: TaskMeta | null | undefined;
     current?: TaskMeta | null;
+    /** Context slots kept in WebAssembly globals, which follow these registers. */
+    contextSlots?: {
+        readonly context: ThreadLookupContext;
+        readonly components: ContextSlotGlobals[];
+    };
+}
+/** The context slots of one component instance's current thread, kept in WebAssembly globals. */
+export interface ContextSlotGlobals {
+    readonly componentIdx: number;
+    /** Nonzero while `thread` is set; the accessors call into JS otherwise. */
+    readonly loaded: WebAssembly.Global<'i32'>;
+    readonly slots: readonly WebAssembly.Global<'i32'>[];
+    /** WebAssembly functions reading each slot. */
+    readonly getters: readonly (() => number)[];
+    /** WebAssembly functions writing each slot. */
+    readonly setters: readonly ((value: number) => void)[];
+    /** The thread of this instance whose slots live in the globals rather than in its `storage`. */
+    thread: AsyncThread | undefined;
 }
 export interface MemoryMeta {
     componentIdx: number;
@@ -573,7 +591,10 @@ export interface CoreModule {
     readonly initializeTaskRegisters: () => TaskRegisters;
     readonly initializeConditionalSuspendingWasm: () => ConditionalSuspendingWasmModules;
     readonly initializeFileCompileCache: (nodejsCompat: boolean) => FileCompileCache;
-    readonly debugLog: (...args: unknown[]) => void;
+    readonly debugLog: ((...args: unknown[]) => void) & {
+        /** Set on a logger which logs; a logger without it may be a no-op. */
+        readonly enabled?: boolean;
+    };
     readonly coinFlip: () => boolean;
     readonly typeCheckValidI32: (value: unknown) => boolean;
     readonly typeCheckAsyncFn: (constructor: Function, value: unknown) => boolean;
@@ -1303,7 +1324,10 @@ export interface AsyncThreadOptions {
     startFn?: () => unknown;
 }
 export interface AsyncThread extends ComponentThread {
+    /** Context slots; reading or replacing them goes through `contextGlobals` while that holds them. */
     storage: number[];
+    /** The globals holding this thread's context slots while it is its instance's current thread. */
+    contextGlobals?: ContextSlotGlobals;
     readonly setId: (id: number) => void;
     readonly task: () => AsyncTask;
     readonly taskID: () => bigint;
@@ -1719,6 +1743,11 @@ export interface AsyncTaskModule {
         value: number,
     ) => void;
     readonly contextGet: (context: ThreadLookupContext, options: { componentIdx?: number; slot: number }) => number;
+    readonly contextSlotAccessor: (
+        context: ThreadLookupContext,
+        options: { componentIdx?: number; slot: number },
+        operation: 'get' | 'set',
+    ) => (() => number) | ((value: number) => void);
     readonly taskReturn: (context: TaskReturnRuntimeContext, options: TaskReturnOptions, ...params: unknown[]) => void;
     readonly subtaskDrop: (context: SubtaskDropContext, componentIdx: number, rep: number) => void;
     readonly asyncYield: (
