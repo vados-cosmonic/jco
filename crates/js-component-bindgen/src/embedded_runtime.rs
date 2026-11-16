@@ -86,7 +86,7 @@ impl Runtime {
                     if matches!(&declarator.id, BindingPattern::BindingIdentifier(identifier) if identifier.name == local.as_str())
                     {
                         declarator.init = Some(Parser::new(&allocator,
-                            "(options?.debug ?? Boolean(globalThis?.process?.env?.JCO_DEBUG)) ? (...args) => console.debug(...args) : () => {}",
+                            "(options?.debug ?? Boolean(globalThis?.process?.env?.JCO_DEBUG)) ? Object.assign((...args) => console.debug(...args), { enabled: true }) : () => {}",
                             SourceType::mjs()).parse_expression()
                             .map_err(|errors| anyhow::anyhow!("invalid debug initializer: {errors:?}"))?);
                         replaced = true;

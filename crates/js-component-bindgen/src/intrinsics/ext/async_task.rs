@@ -453,6 +453,13 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             )),
             RuntimeImportKind::Call,
         ),
+        ContextSlotAccessor => (
+            "contextSlotAccessor",
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::GetCurrentThread,
+            )),
+            RuntimeImportKind::Call,
+        ),
         GetCurrentTask => (
             "getCurrentTask",
             Some(RuntimeContextIntrinsic::Task(
@@ -725,6 +732,7 @@ mod tests {
             SymmetricSyncGuestCallStack,
             ContextGet,
             ContextSet,
+            ContextSlotAccessor,
             GetCurrentTask,
             SubtaskCancel,
             SubtaskDrop,
