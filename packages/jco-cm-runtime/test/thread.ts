@@ -276,3 +276,42 @@ test.concurrent('context slot accessors fall back to the executing task of anoth
         s.cleanup();
     }
 });
+
+test.concurrent('context slot accessors follow registers which are written directly', () => {
+    const s = store();
+    try {
+        const get = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'get') as () => number;
+        const set = operations.contextSlotAccessor(s.threadLookup, { componentIdx: 0, slot: 0 }, 'set') as (
+            value: number,
+        ) => void;
+        const { registers } = s.threadLookup;
+
+        const a = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
+        const b = s.asyncTask.createNewCurrentImplicitThread({ componentIdx: 0 });
+        const metaA = { componentIdx: 0, taskID: a.taskID, threadID: a.threadID };
+        const metaB = { componentIdx: 0, taskID: b.taskID, threadID: b.threadID };
+
+        // Resuming a suspended stack restores its task without entering a scope.
+        registers[0] = metaA;
+        set(1);
+        registers[0] = metaB;
+        expect(get()).toBe(0);
+        set(2);
+        registers[0] = metaA;
+        expect(get()).toBe(1);
+
+        // Code without a live task of its own uses the executing task.
+        registers[0] = null;
+        registers.current = metaB;
+        expect(get()).toBe(2);
+        registers.current = null;
+        expect(() => get()).toThrow(/missing\/incomplete global current thread meta/);
+
+        for (const value of [a, b]) {
+            value.task.resolve([]);
+            value.task.exit({ skipExclusiveLockCheck: true });
+        }
+    } finally {
+        s.cleanup();
+    }
+});

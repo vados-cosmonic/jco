@@ -107,7 +107,8 @@ function currentContextThread(context: ThreadLookupContext, componentIdx?: numbe
  *
  * That selection depends only on the task registers and on which threads are
  * live, so this must run after every write to a register and every change to a
- * component's thread table.
+ * component's thread table. Registers are watched for writes (see
+ * `watchRegister`); code which changes a thread table calls this itself.
  *
  * @param registers The task registers of the store.
  */
@@ -147,6 +148,30 @@ export function syncContextSlots(registers: TaskRegisters): void {
 }
 
 /**
+ * Run `syncContextSlots` after every write to one task register.
+ *
+ * Registers are written from many places (entering and leaving tasks, and
+ * restoring a task when a suspended stack resumes), including by runtime
+ * providers which replace those operations. Watching the register itself keeps
+ * the globals correct whichever code performs the write.
+ *
+ * @param registers The task registers of the store.
+ * @param key The register: a component instance's, or that of the executing task.
+ */
+function watchRegister(registers: TaskRegisters, key: number | 'current'): void {
+    let value = registers[key];
+    Object.defineProperty(registers, key, {
+        enumerable: true,
+        configurable: true,
+        get: () => value,
+        set(next: TaskMeta | null | undefined) {
+            value = next;
+            syncContextSlots(registers);
+        },
+    });
+}
+
+/**
  * Get the context slot globals of a component instance, creating them when the
  * host can instantiate WebAssembly modules synchronously.
  *
@@ -156,8 +181,7 @@ export function syncContextSlots(registers: TaskRegisters): void {
  */
 function contextSlotGlobals(context: ThreadLookupContext, componentIdx: number): ContextSlotGlobals | undefined {
     const { registers } = context;
-    const state = (registers.contextSlots ??= { context, components: [] });
-    const existing = state.components.find((globals) => globals.componentIdx === componentIdx);
+    const existing = registers.contextSlots?.components.find((globals) => globals.componentIdx === componentIdx);
     if (existing) {
         return existing;
     }
@@ -191,7 +215,15 @@ function contextSlotGlobals(context: ThreadLookupContext, componentIdx: number):
         setters: [exports.set0 as (value: number) => void, exports.set1 as (value: number) => void],
         thread: undefined,
     };
-    state.components.push(globals);
+
+    // The thread an instance's code accesses is selected by the instance's own
+    // register, then by that of the executing task.
+    if (registers.contextSlots === undefined) {
+        registers.contextSlots = { context, components: [] };
+        watchRegister(registers, 'current');
+    }
+    registers.contextSlots.components.push(globals);
+    watchRegister(registers, componentIdx);
     syncContextSlots(registers);
     return globals;
 }
