@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 33161449a00ace37e91ecdeb1e4eed90cbe56df2
+// generated from commit c9511328cac904a1e5d3a7f1339b3e215d2d6ce6
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -35,6 +35,110 @@ function isPromiseLike(value) {
 * @param args Values to log.
 */
 const debugLog = globalThis?.process?.env?.JCO_DEBUG ? Object.assign((...args) => console.debug(...args), { enabled: true }) : () => {};
+
+//#endregion
+//#region runtime/intrinsics/task-context.js
+const initializeTaskRegisters = () => ({});
+function validate(args) {
+	if (!args) throw new TypeError("args missing");
+	if (args.taskID === void 0) throw new TypeError("missing task ID");
+	if (args.threadID === void 0) throw new TypeError("missing thread ID");
+	if (args.componentIdx === void 0) throw new TypeError("missing component idx");
+}
+const getCurrentTaskMeta = (registers, componentIdx) => {
+	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[componentIdx];
+	return value === void 0 || value === null ? void 0 : { ...value };
+};
+const setCurrentTaskMeta = (registers, args) => {
+	validate(args);
+	const { taskID, threadID, componentIdx } = args;
+	return registers.current = registers[componentIdx] = {
+		taskID,
+		threadID,
+		componentIdx
+	};
+};
+function withCurrentTaskMeta(registers, args) {
+	debugLog("[_withGlobalCurrentThreadMeta()] args", args);
+	validate(args);
+	if (!args.fn) throw new TypeError("missing fn");
+	const { taskID, threadID, componentIdx, fn } = args;
+	const previous = registers[componentIdx] ?? null;
+	const previousCurrent = registers.current ?? null;
+	try {
+		registers.current = registers[componentIdx] = {
+			taskID,
+			threadID,
+			componentIdx
+		};
+		return fn();
+	} catch (error) {
+		debugLog("error while executing sync callee/callback", {
+			...args,
+			err: error
+		});
+		throw error;
+	} finally {
+		registers[componentIdx] = previous;
+		registers.current = previousCurrent;
+	}
+}
+function withCurrentTaskMetaAsync(registers, args) {
+	debugLog("[_withGlobalCurrentThreadMetaAsync()] args", args);
+	validate(args);
+	if (!args.fn) throw new TypeError("missing fn");
+	const { taskID, threadID, componentIdx, fn } = args;
+	const previous = registers[componentIdx] ?? null;
+	const previousCurrent = registers.current ?? null;
+	let result;
+	try {
+		registers.current = registers[componentIdx] = {
+			taskID,
+			threadID,
+			componentIdx
+		};
+		result = fn();
+	} catch (error) {
+		debugLog("error while executing sync callee/callback", {
+			...args,
+			err: error
+		});
+		registers[componentIdx] = previous;
+		registers.current = previousCurrent;
+		throw error;
+	}
+	if (!isPromiseLike(result)) {
+		registers[componentIdx] = previous;
+		registers.current = previousCurrent;
+		return result;
+	}
+	return (async () => {
+		try {
+			return await result;
+		} catch (error) {
+			debugLog("error while executing async callee/callback", {
+				...args,
+				err: error
+			});
+			throw error;
+		} finally {
+			if (registers[componentIdx]?.threadID === threadID && registers[componentIdx]?.taskID === taskID) registers[componentIdx] = null;
+			if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
+		}
+	})();
+}
+const clearCurrentTaskMeta = async (registers, args) => {
+	debugLog("[_clearCurrentTask()] args", args);
+	validate(args);
+	const { taskID, threadID, componentIdx } = args;
+	const meta = registers[componentIdx];
+	if (!meta) throw new Error(`missing current thread meta for component idx [${componentIdx}]`);
+	if (meta.threadID !== threadID) throw new Error(`thread ID [${meta.threadID}] != requested ID [${threadID}]`);
+	if (meta.taskID !== taskID) throw new Error(`task ID [${meta.taskID}] != requested ID [${taskID}]`);
+	if (meta.componentIdx !== componentIdx) throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
+	registers[componentIdx] = null;
+	if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
+};
 
 //#endregion
 //#region runtime/intrinsics/component/call-tracking.js
@@ -912,6 +1016,464 @@ const guardPostReturn = (context, componentIdx, fn) => (...args) => {
 };
 
 //#endregion
+//#region runtime/intrinsics/async-task/task-operations.js
+function getCurrentTask(_context, componentIdx, taskID) {
+	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing component idx");
+	const taskMetas = _context.tasks.get(componentIdx);
+	if (taskMetas === void 0 || taskMetas.length === 0) return;
+	if (taskID) return taskMetas.find((meta) => meta.task.id() === taskID);
+	const current = _context.registers[componentIdx];
+	if (current && current.taskID !== void 0) {
+		const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
+		if (currentMeta) return currentMeta;
+	}
+	const taskMeta = taskMetas[taskMetas.length - 1];
+	if (!taskMeta || !taskMeta.task) return;
+	return taskMeta;
+}
+function createNewCurrentImplicitThread(_context, args) {
+	debugLog("[createNewCurrentImplicitThread()] args", args);
+	const { componentIdx, isAsync, isManualAsync, preserveFutureResult, entryFnName, callbackFnName, getCallbackFn, stringEncoding, errHandling, getCalleeParamsFn, resultPtr, callingWasmExport } = args;
+	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while starting task");
+	let taskMetas = _context.tasks.get(componentIdx);
+	const callbackFn = getCallbackFn ? getCallbackFn() : null;
+	const newTask = new _context.AsyncTask({
+		componentIdx,
+		isAsync,
+		isManualAsync,
+		preserveFutureResult,
+		entryFnName,
+		callbackFn,
+		callbackFnName,
+		stringEncoding,
+		getCalleeParamsFn,
+		resultPtr,
+		errHandling,
+		callingWasmExport
+	});
+	const thread = newTask.addThread(new _context.AsyncThread({
+		componentIdx,
+		task: newTask
+	}));
+	const newTaskID = newTask.id();
+	const newTaskMeta = {
+		id: newTaskID,
+		componentIdx,
+		task: newTask
+	};
+	_context.taskIds.push(newTaskID);
+	_context.componentIdxs.push(componentIdx);
+	if (!taskMetas) {
+		taskMetas = [newTaskMeta];
+		_context.tasks.set(componentIdx, [newTaskMeta]);
+	} else taskMetas.push(newTaskMeta);
+	return {
+		task: newTask,
+		taskID: newTaskID,
+		thread,
+		threadID: thread.id()
+	};
+}
+function clearCurrentThread(_context, componentIdx, taskID, options = {}) {
+	debugLog("[clearCurrentThread()] args", {
+		componentIdx,
+		taskID
+	});
+	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while ending current task");
+	const tasks = _context.tasks.get(componentIdx);
+	if (!tasks || !Array.isArray(tasks)) throw new Error("missing/invalid tasks for component instance while ending task");
+	if (tasks.length == 0) throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
+	const taskIdx = taskID === void 0 ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
+	if (taskIdx === -1) return;
+	const taskMeta = tasks[taskIdx];
+	if (!options.preserveTask) {
+		tasks.splice(taskIdx, 1);
+		_context.checkIdle?.();
+	}
+	const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
+	if (globalTaskIdx !== -1) {
+		_context.taskIds.splice(globalTaskIdx, 1);
+		_context.componentIdxs.splice(globalTaskIdx, 1);
+	}
+	return taskMeta.task;
+}
+/** Compatibility helper for consumers that only need the task tuple. */
+function createNewCurrentTask(context, args) {
+	const { task, taskID } = createNewCurrentImplicitThread(context, args);
+	return [task, taskID];
+}
+const clearCurrentTask = clearCurrentThread;
+/** Implements `canon task.return`. */
+function taskReturn(_context, ctx, ...params) {
+	const { componentIdx, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns, stringEncoding } = ctx;
+	const memory = getMemoryFn();
+	let useDirectParams = ctx.useDirectParams;
+	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
+	if (!taskMeta) throw new Error("failed to retrieve current task metadata");
+	const task = taskMeta.task;
+	if (!task) throw new Error("invalid/missing current task in metadata");
+	if (!task.calleeIsAsync()) throw new _context.RuntimeError("task.return requires an async canonical lift");
+	task.validateResourceBorrowScope();
+	const expectedResultType = task.returnResultTypeIdx();
+	if (expectedResultType !== null && ctx.resultTypeIdx !== void 0 && ctx.resultTypeIdx !== expectedResultType) throw new _context.RuntimeError("task.return result type does not match the function type");
+	debugLog("[taskReturn()] args", {
+		componentIdx,
+		taskID: task.id(),
+		subtaskID: task.getParentSubtask()?.id(),
+		callbackFnIdx,
+		memoryIdx,
+		liftFns,
+		lowerFns,
+		params
+	});
+	const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
+	if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {
+		debugLog("[taskReturn()] calling return fn on subtask", {
+			componentIdx,
+			taskID: task.id(),
+			subtaskID: task.getParentSubtask()?.id(),
+			returnFnParams: [...params, subtaskCallMetadata.resultPtr]
+		});
+		const callerTask = task.getParentSubtask().getParentTask();
+		subtaskCallMetadata.returnFnResult = withCurrentTaskMeta(_context.registers, {
+			taskID: callerTask.id(),
+			threadID: subtaskCallMetadata.callerThreadID,
+			componentIdx: callerTask.componentIdx(),
+			fn: () => subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr])
+		});
+		subtaskCallMetadata.returnFnCalled = true;
+		task.resolve([]);
+		return;
+	}
+	const expectedMemoryIdx = task.getReturnMemoryIdx();
+	if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
+		debugLog("[taskReturn()] mismatched memory indices", {
+			expectedMemoryIdx,
+			memoryIdx
+		});
+		throw new Error("task.return memory [" + memoryIdx + "] does not match task [" + expectedMemoryIdx + "]");
+	}
+	task.callbackFnIdx = callbackFnIdx;
+	if (!memory && liftFns.length > 4) {
+		debugLog("[taskReturn()] memory not present for max async flat lifts");
+		throw new Error("memory must be present if more than max async flat lifts are performed");
+	}
+	let liftCtx = {
+		memory,
+		useDirectParams,
+		params,
+		componentIdx,
+		stringEncoding
+	};
+	if (!useDirectParams) {
+		if (!memory) {
+			debugLog("missing memory despite indirect param usage", {
+				useDirectParams,
+				liftCtx,
+				ctx
+			});
+			throw new Error("missing memory despite indirect param usage");
+		}
+		liftCtx.storagePtr = params[0] >>> 0;
+		liftCtx.storageLen = params[1];
+	}
+	const liftedResults = [];
+	debugLog("[taskReturn()] lifting results out of memory", { liftCtx });
+	for (const liftFn of liftFns) {
+		if (liftCtx.storageLen !== void 0 && liftCtx.storageLen <= 0) {
+			debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
+			throw new Error("ran out of storage while writing");
+		}
+		const [val, newLiftCtx] = liftFn(liftCtx);
+		liftCtx = newLiftCtx;
+		liftedResults.push(val);
+	}
+	task.resolve(liftedResults);
+}
+/** Implements `canon task.cancel`. */
+function taskCancel(_context, componentIdx) {
+	debugLog("[taskCancel()] args", { componentIdx });
+	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave, cannot be cancelled");
+	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
+	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
+	if (!taskMeta) throw new Error("invalid/missing async task meta");
+	const task = taskMeta.task;
+	if (!task) throw new Error("invalid/missing async task");
+	if (Reflect.get(task, "sync") && !task.alwaysTaskReturn) throw new Error("cannot cancel sync tasks without always task return set");
+	task.cancel();
+}
+
+//#endregion
+//#region runtime/intrinsics/resource.js
+const RESOURCE_TABLE_FLAG = 1 << 30;
+const RESOURCE_TABLE_OWN = 2 ** 32;
+const tableGet = (context, table, handle) => {
+	const scope = table[handle << 1];
+	const value = table[(handle << 1) + 1];
+	const own = value >= RESOURCE_TABLE_OWN;
+	const rep = own ? value - RESOURCE_TABLE_OWN : value;
+	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError(`unknown handle index ${handle}`);
+	return {
+		rep,
+		scope,
+		own
+	};
+};
+const tableFlag = RESOURCE_TABLE_FLAG;
+const tableOwn = RESOURCE_TABLE_OWN;
+const initializeHandleIndexSpaces = () => /* @__PURE__ */ new Map();
+const initializeHandleTables = () => [];
+const initializeCallBorrows = () => ({ borrows: [] });
+const initializeCurrentBorrows = () => ({ borrows: [] });
+const initializeResourceScopeCounter = () => ({ value: 0 });
+const initializeResourceScopeTasks = () => /* @__PURE__ */ new Map();
+const initializeScopeId = () => ({ value: 0 });
+const getHandleIndexSpace = (spaces, key) => {
+	let space = spaces.get(key);
+	if (space === void 0) {
+		space = {
+			next: 1,
+			free: [],
+			alloc() {
+				return this.free.length > 0 ? this.free.pop() : this.next++;
+			},
+			release(index) {
+				this.free.push(index);
+			}
+		};
+		spaces.set(key, space);
+	}
+	return space;
+};
+const tableCreateBorrow = (spaces, table, rep, scopeId) => {
+	if (scopeId === void 0) throw new Error("missing scopeId");
+	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
+	table[handle << 1] = scopeId;
+	table[(handle << 1) + 1] = rep >>> 0;
+	return handle;
+};
+const tableCreateOwn = (spaces, table, rep) => {
+	rep >>>= 0;
+	table._createdReps.add(rep);
+	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
+	table[handle << 1] = 0;
+	table[(handle << 1) + 1] = rep + RESOURCE_TABLE_OWN;
+	return handle;
+};
+const tableEnsureBorrowDrop = (table, handle, scope) => {
+	if (table[handle << 1] === scope) throw new TypeError("Resource borrow was not dropped at end of call");
+};
+const tableRemove = (context, table, handle) => {
+	const scope = table[handle << 1];
+	const value = table[(handle << 1) + 1];
+	const own = value >= RESOURCE_TABLE_OWN;
+	const rep = own ? value - RESOURCE_TABLE_OWN : value;
+	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError("unknown handle index " + handle);
+	if (own && scope !== 0) throw new context.RuntimeError("cannot remove owned resource while borrowed");
+	const borrowTask = own ? void 0 : context.scopeTasks.get(scope);
+	table[handle << 1] = RESOURCE_TABLE_FLAG;
+	table[(handle << 1) + 1] = 0;
+	getHandleIndexSpace(context.indexSpaces, table._componentIdx ?? table).release(handle);
+	borrowTask?.removeBorrowedHandle();
+	return {
+		rep,
+		scope,
+		own
+	};
+};
+function getOrCreateTable(tables, tid) {
+	let table = tables[tid];
+	if (!table) {
+		table = Object.assign([RESOURCE_TABLE_FLAG, 0], { _createdReps: /* @__PURE__ */ new Set() });
+		tables[tid] = table;
+	}
+	return table;
+}
+const transferBorrow = (context, handle, fromTid, toTid) => {
+	const fromTable = context.tables[fromTid];
+	const { rep, own } = tableGet(context, fromTable, handle);
+	const toTable = getOrCreateTable(context.tables, toTid);
+	const componentIdx = toTable._componentIdx;
+	const meta = componentIdx === void 0 ? void 0 : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
+	const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx, meta.taskID)?.task : void 0;
+	if (borrowTask && own) {
+		fromTable[handle << 1]++;
+		borrowTask.addResourceLender(fromTable, handle);
+	}
+	if (toTable._createdReps.has(rep)) return rep;
+	const newHandle = tableCreateBorrow(context.indexSpaces, toTable, rep, borrowTask?.resourceScopeId() ?? context.scope.value);
+	if (borrowTask) borrowTask.addBorrowedHandle();
+	else context.callBorrows.borrows.push({
+		rid: toTid,
+		handle: newHandle
+	});
+	return newHandle;
+};
+const transferBorrowValidLifting = transferBorrow;
+const transferOwn = (context, handle, fromTid, toTid) => {
+	const { rep } = tableRemove(context, context.tables[fromTid], handle);
+	return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
+};
+const callDestructor = (context, { componentIdx, dtor, rep }) => {
+	if (context.storeTrap.stopped) return;
+	const { task, threadID } = createNewCurrentImplicitThread(context.creation, {
+		componentIdx,
+		isAsync: false,
+		callingWasmExport: true,
+		entryFnName: "<resource-drop>"
+	});
+	task.enterSync();
+	return withCurrentTaskMeta(context.registers, {
+		taskID: task.id(),
+		threadID,
+		componentIdx,
+		fn: () => {
+			try {
+				const result = dtor(rep);
+				task.resolve([]);
+				task.exit();
+				return result;
+			} catch (error) {
+				if (!task.isResolvedState()) {
+					task.setErrored(error);
+					task.reject(error);
+				}
+				if (!task.isExited()) task.exit({ skipExclusiveLockCheck: true });
+				throw error;
+			}
+		}
+	});
+};
+
+//#endregion
+//#region runtime/intrinsics/conversion/numeric.js
+const isInt8 = (value) => typeof value === "number" && value === value << 24 >> 24;
+const isUint8 = (value) => typeof value === "number" && value === (value & 255);
+const isInt16 = (value) => typeof value === "number" && value === value << 16 >> 16;
+const isUint16 = (value) => typeof value === "number" && value === (value & 65535);
+const isInt32 = (value) => typeof value === "number" && value === value >> 0;
+const isUint32 = (value) => typeof value === "number" && value === value >>> 0;
+const isInt64 = (value) => typeof value === "bigint" && value === BigInt.asIntN(64, value);
+const isUint64 = (value) => typeof value === "bigint" && value === BigInt.asUintN(64, value);
+/** Report the same conversion failure for direct and type-dispatched validation. */
+function invalidNumericPrimitive(type, value) {
+	throw new TypeError(`invalid ${type} value [${value}]`);
+}
+
+//#endregion
+//#region runtime/intrinsics/conversion.js
+/** Allocate only the selected scratch family, once per instantiation. */
+const initializeBitcast32 = () => {
+	const i32 = /* @__PURE__ */ new Int32Array(1);
+	return {
+		i32,
+		f32: new Float32Array(i32.buffer)
+	};
+};
+const initializeBitcast64 = () => {
+	const i64 = /* @__PURE__ */ new BigInt64Array(1);
+	return {
+		i64,
+		f64: new Float64Array(i64.buffer)
+	};
+};
+const i32ToF32 = (context, value) => {
+	context.i32[0] = value;
+	return context.f32[0];
+};
+const f32ToI32 = (context, value) => {
+	context.f32[0] = value;
+	return context.i32[0];
+};
+const i64ToF64 = (context, value) => {
+	context.i64[0] = value;
+	return context.f64[0];
+};
+const f64ToI64 = (context, value) => {
+	context.f64[0] = value;
+	return context.i64[0];
+};
+const i32ToChar = (value) => {
+	if (typeof value !== "number" || !Number.isInteger(value)) throw new Error("invalid i32");
+	if (value < 0) throw new Error("i32 must be greater than zero");
+	if (value >= 1114112) throw new Error("invalid i32, out of range");
+	if (55296 <= value && value <= 57343) throw new Error("invalid i32 out of range");
+	return String.fromCodePoint(value);
+};
+const toInt8 = (context, value) => {
+	if (context.strict && !isInt8(value)) invalidNumericPrimitive("s8", value);
+	return value << 24 >> 24;
+};
+const toUint8 = (context, value) => {
+	if (context.strict && !isUint8(value)) invalidNumericPrimitive("u8", value);
+	return value & 255;
+};
+const toInt16 = (context, value) => {
+	if (context.strict && !isInt16(value)) invalidNumericPrimitive("s16", value);
+	return value << 16 >> 16;
+};
+const toUint16 = (context, value) => {
+	if (context.strict && !isUint16(value)) invalidNumericPrimitive("u16", value);
+	return value & 65535;
+};
+const toInt32 = (context, value) => {
+	if (context.strict && !isInt32(value)) invalidNumericPrimitive("s32", value);
+	return value >> 0;
+};
+const toUint32 = (context, value) => {
+	if (context.strict && !isUint32(value)) invalidNumericPrimitive("u32", value);
+	return value >>> 0;
+};
+const toInt64 = (context, value) => {
+	const converted = BigInt(value);
+	if (context.strict && !isInt64(converted)) invalidNumericPrimitive("s64", converted);
+	return BigInt.asIntN(64, converted);
+};
+const toUint64 = (context, value) => {
+	const converted = BigInt(value);
+	if (context.strict && !isUint64(converted)) invalidNumericPrimitive("u64", converted);
+	return BigInt.asUintN(64, converted);
+};
+const toString = (value) => {
+	if (typeof value === "symbol") throw new TypeError("symbols cannot be converted to strings");
+	return String(value);
+};
+const toResultString = (value) => {
+	return JSON.stringify(value, (_, v) => {
+		if (v && Object.getPrototypeOf(v) === Uint8Array.prototype) return `[${v[Symbol.toStringTag]} (${v.byteLength})]`;
+		else if (typeof v === "bigint") return v.toString();
+		return v;
+	});
+};
+const isValidNumericPrimitive = (type, value) => {
+	switch (type) {
+		case "bool": return value === 0 || value === 1;
+		case "s8": return isInt8(value);
+		case "u8": return isUint8(value);
+		case "s16": return isInt16(value);
+		case "u16": return isUint16(value);
+		case "s32": return isInt32(value);
+		case "u32": return isUint32(value);
+		case "s64": return isInt64(value);
+		case "u64": return isUint64(value);
+		case "f32":
+		case "f64": return typeof value === "number";
+		default: return false;
+	}
+};
+const requireValidNumericPrimitive = (type, value) => {
+	if (!isValidNumericPrimitive(type, value)) invalidNumericPrimitive(type, value);
+	return true;
+};
+const splitInt64 = (value) => {
+	return [Number(value & 4294967295n) | 0, Number(value >> 32n & 4294967295n) | 0];
+};
+const mergeInt64 = (low, high) => {
+	return BigInt(low | 0) | BigInt(high | 0) << 32n;
+};
+
+//#endregion
 //#region runtime/intrinsics/async-task/thread-operations.js
 function getCurrentThread(context, componentIdx, threadID, taskID) {
 	if (componentIdx === -1 || threadID === void 0 || threadID === null || threadID === 0) return;
@@ -1141,6 +1703,212 @@ const conditionalSuspendingHostImport = (context, module, componentIdx, fn) => n
 	fast: fn,
 	slow: new context.WebAssembly.Suspending(fn)
 } }).exports.run;
+
+//#endregion
+//#region runtime/intrinsics/string.js
+function requireString(value) {
+	if (typeof value !== "string") throw new TypeError("expected a string, received [" + typeof value + "]");
+	return value;
+}
+function utf8Size(s) {
+	let len = 0;
+	let codepoints = 0;
+	for (let i = 0; i < s.length; i++) {
+		const ch = s.charCodeAt(i);
+		codepoints++;
+		if (ch < 128) len += 1;
+		else if (ch < 2048) len += 2;
+		else if (ch >= 55296 && ch <= 56319 && i + 1 < s.length && (s.charCodeAt(i + 1) & 64512) === 56320) {
+			len += 4;
+			i++;
+		} else len += 3;
+	}
+	return {
+		len,
+		codepoints
+	};
+}
+const initializeUtf8Decoder = () => new TextDecoder("utf-8", {
+	fatal: true,
+	ignoreBOM: true
+});
+const initializeUtf16Decoder = () => new TextDecoder("utf-16", {
+	fatal: true,
+	ignoreBOM: true
+});
+const initializeUtf8Encoder = () => new TextEncoder();
+const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 });
+function writeUtf16(context, str, ptr, memory) {
+	const len = str.length;
+	const out = new Uint16Array(memory.buffer, ptr, len);
+	const put = context.littleEndian ? (i, ch) => {
+		out[i] = ch;
+	} : (i, ch) => {
+		out[i] = (ch & 255) << 8 | ch >>> 8;
+	};
+	for (let i = 0; i < len; i++) {
+		let ch = str.charCodeAt(i);
+		if ((ch & 63488) === 55296) {
+			if (ch < 56320 && i + 1 < len && (str.charCodeAt(i + 1) & 64512) === 56320) {
+				put(i++, ch);
+				ch = str.charCodeAt(i);
+			} else ch = 65533;
+		}
+		put(i, ch);
+	}
+	return {
+		ptr,
+		len,
+		codepoints: [...str].length
+	};
+}
+function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
+	const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
+	if (read !== s.length || written !== len) throw new Error("failed to encode whole string");
+	return {
+		ptr,
+		len,
+		codepoints
+	};
+}
+const utf16Encode = (context, value, realloc, memory) => {
+	const str = requireString(value);
+	return writeUtf16(context, str, realloc(0, 0, 2, str.length * 2), memory);
+};
+const utf16EncodeAsync = async (context, value, realloc, memory) => {
+	const str = requireString(value);
+	return writeUtf16(context, str, await realloc(0, 0, 2, str.length * 2), memory);
+};
+const utf16ValidatingCopy = (from, to) => {
+	let allLatin1 = true;
+	let highSurrogate = false;
+	for (let i = 0; i < from.length; i++) {
+		const unit = from[i];
+		if (highSurrogate !== ((unit & 64512) === 56320)) throw new Error("invalid utf16 encoding");
+		highSurrogate = (unit & 64512) === 55296;
+		if (unit > 255) allLatin1 = false;
+		to[i] = unit;
+	}
+	if (highSurrogate) throw new Error("invalid utf16 encoding");
+	return allLatin1;
+};
+const utf8Encode = (encoder, value, realloc, memory) => {
+	const s = requireString(value);
+	if (s.length === 0) return {
+		ptr: 1,
+		len: 0
+	};
+	const { len, codepoints } = utf8Size(s);
+	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory);
+};
+const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
+	const s = requireString(value);
+	if (s.length === 0) return {
+		ptr: 1,
+		len: 0
+	};
+	const { len, codepoints } = utf8Size(s);
+	return writeUtf8(encoder, s, await realloc(0, 0, 1, len), len, codepoints, memory);
+};
+const validateGuestChar = (value) => {
+	if (value > 1114111 || value >= 55296 && value <= 57343) throw new TypeError("not a valid char");
+	return String.fromCodePoint(value);
+};
+/** Lower exactly one Unicode scalar value from a host string. */
+const validateHostChar = (value) => {
+	if (typeof value !== "string") throw new TypeError("must be a string");
+	const codePoint = value.codePointAt(0);
+	if (codePoint === void 0 || codePoint >= 55296 && codePoint <= 57343 || value.length !== (codePoint > 65535 ? 2 : 1)) throw new TypeError("not a valid char");
+	return codePoint;
+};
+/** Decode canonical Latin-1 bytes directly; TextDecoder('latin1') uses Windows-1252. */
+const compactUtf16Decode = (decoder, memory, ptr, taggedLength) => {
+	ptr >>>= 0;
+	taggedLength >>>= 0;
+	if (ptr % 2 !== 0) throw new RangeError("unaligned compact UTF-16 string");
+	if (taggedLength & 2147483648) return decoder.decode(new Uint8Array(memory.buffer, ptr, (taggedLength & 2147483647) * 2));
+	const bytes = new Uint8Array(memory.buffer, ptr, taggedLength);
+	let value = "";
+	for (let i = 0; i < bytes.length; i += 32768) value += String.fromCharCode(...bytes.subarray(i, i + 32768));
+	return value;
+};
+const compactUtf16Encode = (context, value, realloc, memory) => {
+	if (typeof value !== "string") throw new TypeError("expected a string");
+	if (value.length >= 2147483648) throw new RangeError("compact UTF-16 string is too long");
+	for (let i = 0; i < value.length; i++) if (value.charCodeAt(i) > 255) {
+		const encoded = utf16Encode(context, value, realloc, memory);
+		return {
+			...encoded,
+			len: (encoded.len | 2147483648) >>> 0
+		};
+	}
+	const ptr = realloc(0, 0, 2, value.length) >>> 0;
+	if (ptr % 2 !== 0) throw new RangeError("unaligned compact UTF-16 allocation");
+	const bytes = new Uint8Array(memory.buffer, ptr, value.length);
+	for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i);
+	return {
+		ptr,
+		len: value.length
+	};
+};
+
+//#endregion
+//#region runtime/intrinsics/webidl.js
+const initializeWebIdlProxyCache = () => ({ proxy: void 0 });
+const globalThisIdlProxy = (context) => {
+	if (context.proxy) return context.proxy;
+	const innerSymbol = Symbol("inner");
+	const isProxySymbol = Symbol("isProxy");
+	const uppercaseRegex = /html|Html|dom|Dom/g;
+	const globalNames = ["Window", "WorkerGlobalScope"];
+	function proxy(target, fake = {}) {
+		const origTarget = target;
+		return new Proxy(fake, {
+			get: (_, prop, receiver) => {
+				if (prop === innerSymbol) return origTarget;
+				if (prop === isProxySymbol) return true;
+				if (typeof prop !== "string") return maybeProxy(Reflect.get(origTarget, prop));
+				if (origTarget === globalThis && prop.startsWith("get") && globalNames.includes(prop.slice(3))) return () => receiver;
+				prop = prop.replaceAll(uppercaseRegex, (x) => x.toUpperCase());
+				if (prop.startsWith("set")) return (val) => Reflect.set(origTarget, `${prop[3].toLowerCase()}${prop.slice(4)}`, val);
+				if (prop.startsWith("as")) return () => receiver;
+				const res = Reflect.get(origTarget, prop);
+				if (res === void 0 && prop[0].toUpperCase() === prop[0]) {
+					const key = `${prop[0].toLowerCase()}${prop.slice(1)}`;
+					const obj = Reflect.get(globalThis, key);
+					if (obj) return Object.getPrototypeOf(obj).constructor;
+				}
+				return maybeProxy(res);
+			},
+			apply: (_, thisArg, args) => {
+				if (args.length === 1 && Array.isArray(args[0]) && Reflect.get(origTarget, "length") === 0) args = args[0];
+				const res = Reflect.apply(origTarget, proxyInner(thisArg), args.map((a) => a[isProxySymbol] ? proxyInner(a) : a));
+				return typeof res === "object" ? proxy(res) : res;
+			},
+			getPrototypeOf: () => Reflect.getPrototypeOf(origTarget),
+			construct: (_, args, newTarget) => maybeProxy(Reflect.construct(origTarget, args, newTarget)),
+			defineProperty: (_, property, attributes) => Reflect.defineProperty(origTarget, property, attributes),
+			deleteProperty: (_, property) => Reflect.deleteProperty(origTarget, property),
+			getOwnPropertyDescriptor: (_, property) => Reflect.getOwnPropertyDescriptor(origTarget, property),
+			has: (_, property) => Reflect.has(origTarget, property),
+			isExtensible: () => Reflect.isExtensible(origTarget),
+			ownKeys: () => maybeProxy(Reflect.ownKeys(origTarget)),
+			preventExtensions: () => Reflect.preventExtensions(origTarget),
+			set: (_, property, value, receiver) => Reflect.set(origTarget, property, value, receiver),
+			setPrototypeOf: (_, value) => Reflect.setPrototypeOf(origTarget, value)
+		});
+	}
+	function maybeProxy(res) {
+		if (typeof res === "function" && res.prototype?.constructor === res) return res;
+		if (typeof res === "function") return proxy(res, () => {});
+		if (typeof res === "object" && res !== null) return () => proxy(res);
+		return res;
+	}
+	function proxyInner(value) {
+		return value ? value[innerSymbol] : value;
+	}
+	return context.proxy = proxy(globalThis);
+};
 
 //#endregion
 //#region runtime/intrinsics/rep-table.js
@@ -1638,1216 +2406,6 @@ const conditionalSuspending3I32ToVoid = (context, fast, slow) => instantiateTram
 //#endregion
 //#region runtime/intrinsics/async-task/helpers.js
 const isThenable = (value) => !!value && typeof value.then === "function";
-
-//#endregion
-//#region runtime/intrinsics/async-task/context.js
-/**
-* A core module that keeps the context slots of one component instance's
-* current thread in mutable globals, and exports a getter and a setter function
-* for each slot. While no thread's slots are loaded into the globals, the
-* functions call the imported JS implementations instead:
-*
-* ```wat
-* (module
-*   (import "context" "get0" (func $get0 (result i32)))
-*   (import "context" "set0" (func $set0 (param i32)))
-*   (import "context" "get1" (func $get1 (result i32)))
-*   (import "context" "set1" (func $set1 (param i32)))
-*   (global $loaded (export "loaded") (mut i32) (i32.const 0))
-*   (global $slot0 (export "slot0") (mut i32) (i32.const 0))
-*   (global $slot1 (export "slot1") (mut i32) (i32.const 0))
-*   (func (export "get0") (result i32)
-*     (if (result i32) (global.get $loaded)
-*       (then (global.get $slot0))
-*       (else (call $get0))))
-*   (func (export "set0") (param i32)
-*     (if (global.get $loaded)
-*       (then (global.set $slot0 (local.get 0)))
-*       (else (call $set0 (local.get 0)))))
-*   ;; ... and likewise "get1" and "set1" for $slot1
-* )
-* ```
-*
-* A guest that imports these functions reads and writes its context slots
-* without leaving WebAssembly. Toolchains keep the shadow stack pointer in a
-* context slot, so a guest may do so in every function prologue.
-*/
-const CONTEXT_SLOTS_MODULE = new Uint8Array([
-	0,
-	97,
-	115,
-	109,
-	1,
-	0,
-	0,
-	0,
-	1,
-	9,
-	2,
-	96,
-	0,
-	1,
-	127,
-	96,
-	1,
-	127,
-	0,
-	2,
-	61,
-	4,
-	7,
-	99,
-	111,
-	110,
-	116,
-	101,
-	120,
-	116,
-	4,
-	103,
-	101,
-	116,
-	48,
-	0,
-	0,
-	7,
-	99,
-	111,
-	110,
-	116,
-	101,
-	120,
-	116,
-	4,
-	115,
-	101,
-	116,
-	48,
-	0,
-	1,
-	7,
-	99,
-	111,
-	110,
-	116,
-	101,
-	120,
-	116,
-	4,
-	103,
-	101,
-	116,
-	49,
-	0,
-	0,
-	7,
-	99,
-	111,
-	110,
-	116,
-	101,
-	120,
-	116,
-	4,
-	115,
-	101,
-	116,
-	49,
-	0,
-	1,
-	3,
-	5,
-	4,
-	0,
-	1,
-	0,
-	1,
-	6,
-	16,
-	3,
-	127,
-	1,
-	65,
-	0,
-	11,
-	127,
-	1,
-	65,
-	0,
-	11,
-	127,
-	1,
-	65,
-	0,
-	11,
-	7,
-	54,
-	7,
-	6,
-	108,
-	111,
-	97,
-	100,
-	101,
-	100,
-	3,
-	0,
-	5,
-	115,
-	108,
-	111,
-	116,
-	48,
-	3,
-	1,
-	5,
-	115,
-	108,
-	111,
-	116,
-	49,
-	3,
-	2,
-	4,
-	103,
-	101,
-	116,
-	48,
-	0,
-	4,
-	4,
-	115,
-	101,
-	116,
-	48,
-	0,
-	5,
-	4,
-	103,
-	101,
-	116,
-	49,
-	0,
-	6,
-	4,
-	115,
-	101,
-	116,
-	49,
-	0,
-	7,
-	10,
-	61,
-	4,
-	12,
-	0,
-	35,
-	0,
-	4,
-	127,
-	35,
-	1,
-	5,
-	16,
-	0,
-	11,
-	11,
-	16,
-	0,
-	35,
-	0,
-	4,
-	64,
-	32,
-	0,
-	36,
-	1,
-	5,
-	32,
-	0,
-	16,
-	1,
-	11,
-	11,
-	12,
-	0,
-	35,
-	0,
-	4,
-	127,
-	35,
-	2,
-	5,
-	16,
-	2,
-	11,
-	11,
-	16,
-	0,
-	35,
-	0,
-	4,
-	64,
-	32,
-	0,
-	36,
-	2,
-	5,
-	32,
-	0,
-	16,
-	3,
-	11,
-	11
-]);
-/** The number of context slots each thread has. */
-const SLOT_COUNT = 2;
-/**
-* Find the live thread that a task register entry names.
-*
-* @param context Capabilities for looking up component state.
-* @param meta A task register entry.
-* @returns The thread, unless the entry is empty or names a thread which has exited.
-*/
-function resolveThread(context, meta) {
-	if (meta === void 0 || meta === null) return;
-	const { componentIdx, threadID } = meta;
-	if (componentIdx === -1 || threadID === void 0 || threadID === null || threadID === 0) return;
-	const thread = getOrCreateAsyncState(context.lookup, componentIdx).threads.get(threadID);
-	return thread && thread.taskID() === meta.taskID ? thread : void 0;
-}
-/**
-* Find the thread whose context slots a component instance's code accesses.
-*
-* Guest callbacks use their component's task register. FACT adapters have no
-* component index; post-return also runs after the callee register is cleared,
-* or while it still names a task which has exited. Both use the executing task,
-* whose context FACT temporarily saves and restores.
-*
-* @param context Capabilities for looking up the current thread.
-* @param componentIdx The component instance, if the code belongs to one.
-* @returns The thread, if there is one.
-*/
-function currentContextThread(context, componentIdx) {
-	const { registers } = context;
-	return (componentIdx === void 0 ? void 0 : resolveThread(context, registers[componentIdx])) ?? resolveThread(context, registers.current);
-}
-/**
-* Keep the context slot globals of every component instance loaded with the
-* slots of the thread that the instance's code accesses, as
-* `currentContextThread` selects it.
-*
-* That selection depends only on the task registers and on which threads are
-* live, so this must run after every write to a register and every change to a
-* component's thread table.
-*
-* @param registers The task registers of the store.
-*/
-function syncContextSlots(registers) {
-	const state = registers.contextSlots;
-	if (state === void 0) return;
-	for (const globals of state.components) {
-		const thread = currentContextThread(state.context, globals.componentIdx);
-		const next = thread !== void 0 && thread.componentIdx() === globals.componentIdx ? thread : void 0;
-		const previous = globals.thread;
-		if (previous === next) continue;
-		if (previous !== void 0) {
-			for (let slot = 0; slot < SLOT_COUNT; slot++) previous.storage[slot] = globals.slots[slot].value;
-			previous.contextGlobals = void 0;
-		}
-		if (next !== void 0) {
-			for (let slot = 0; slot < SLOT_COUNT; slot++) globals.slots[slot].value = next.storage[slot];
-			next.contextGlobals = globals;
-		}
-		globals.thread = next;
-		globals.loaded.value = next === void 0 ? 0 : 1;
-	}
-}
-/**
-* Get the context slot globals of a component instance, creating them when the
-* host can instantiate WebAssembly modules synchronously.
-*
-* @param context Capabilities for looking up the current thread.
-* @param componentIdx The component instance.
-* @returns The globals, or `undefined` if they cannot be created.
-*/
-function contextSlotGlobals(context, componentIdx) {
-	const { registers } = context;
-	const state = registers.contextSlots ??= {
-		context,
-		components: []
-	};
-	const existing = state.components.find((globals) => globals.componentIdx === componentIdx);
-	if (existing) return existing;
-	const wasm = globalThis.WebAssembly;
-	if (typeof wasm?.Module !== "function" || typeof wasm.Instance !== "function") return;
-	let exports;
-	try {
-		exports = new wasm.Instance(new wasm.Module(CONTEXT_SLOTS_MODULE), { context: {
-			get0: contextGet.bind(null, context, {
-				componentIdx,
-				slot: 0
-			}),
-			set0: contextSet.bind(null, context, {
-				componentIdx,
-				slot: 0
-			}),
-			get1: contextGet.bind(null, context, {
-				componentIdx,
-				slot: 1
-			}),
-			set1: contextSet.bind(null, context, {
-				componentIdx,
-				slot: 1
-			})
-		} }).exports;
-	} catch {
-		return;
-	}
-	const globals = {
-		componentIdx,
-		loaded: exports.loaded,
-		slots: [exports.slot0, exports.slot1],
-		getters: [exports.get0, exports.get1],
-		setters: [exports.set0, exports.set1],
-		thread: void 0
-	};
-	state.components.push(globals);
-	syncContextSlots(registers);
-	return globals;
-}
-/**
-* Create the function a core module imports for `canon context.get` or
-* `canon context.set` on one slot.
-*
-* Code that belongs to a component instance gets a WebAssembly function over
-* that instance's context slot globals where possible, and a JS function
-* otherwise. Debug logging also selects JS functions, which log each access.
-*
-* @param _context Capabilities for looking up the current thread.
-* @param ctx The slot, and the component instance of the importing code, if any.
-* @param operation Whether the function reads or writes the slot.
-* @returns The function to import.
-*/
-const contextSlotAccessor = (_context, ctx, operation) => {
-	const { componentIdx, slot } = ctx;
-	if (slot === void 0 || slot < 0 || slot >= SLOT_COUNT) throw new TypeError("invalid slot");
-	const globals = componentIdx === void 0 || debugLog.enabled ? void 0 : contextSlotGlobals(_context, componentIdx);
-	if (globals === void 0) return operation === "get" ? contextGet.bind(null, _context, ctx) : contextSet.bind(null, _context, ctx);
-	return operation === "get" ? globals.getters[slot] : globals.setters[slot];
-};
-/** Implements `canon context.set`. */
-function contextSet(_context, ctx, value) {
-	const { slot } = ctx;
-	if (slot === void 0) throw new TypeError("missing slot");
-	if (!typeCheckValidI32(value)) throw new Error("invalid value for context set (not valid i32)");
-	const thread = currentContextThread(_context, ctx.componentIdx);
-	if (!thread) throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context set`);
-	if (debugLog.enabled) debugLog("[contextSet()] args", {
-		slot,
-		value,
-		threadID: thread.id(),
-		taskID: thread.taskID(),
-		componentIdx: thread.componentIdx()
-	});
-	if (slot < 0 || slot >= thread.storage.length) throw new Error("invalid slot for current thread");
-	const globals = thread.contextGlobals;
-	if (globals === void 0) thread.storage[slot] = value;
-	else globals.slots[slot].value = value;
-}
-/** Implements `canon context.get`. */
-function contextGet(_context, ctx) {
-	const { slot } = ctx;
-	if (slot === void 0) throw new TypeError("missing slot");
-	const thread = currentContextThread(_context, ctx.componentIdx);
-	if (!thread) throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context get`);
-	if (debugLog.enabled) debugLog("[contextGet()] args", {
-		slot,
-		threadID: thread.id(),
-		taskID: thread.taskID(),
-		componentIdx: thread.componentIdx()
-	});
-	if (slot < 0 || slot >= thread.storage.length) throw new Error("invalid slot for current thread");
-	const globals = thread.contextGlobals;
-	return globals === void 0 ? thread.storage[slot] : globals.slots[slot].value;
-}
-
-//#endregion
-//#region runtime/intrinsics/task-context.js
-const initializeTaskRegisters = () => ({});
-function validate(args) {
-	if (!args) throw new TypeError("args missing");
-	if (args.taskID === void 0) throw new TypeError("missing task ID");
-	if (args.threadID === void 0) throw new TypeError("missing thread ID");
-	if (args.componentIdx === void 0) throw new TypeError("missing component idx");
-}
-const getCurrentTaskMeta = (registers, componentIdx) => {
-	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[componentIdx];
-	return value === void 0 || value === null ? void 0 : { ...value };
-};
-const setCurrentTaskMeta = (registers, args) => {
-	validate(args);
-	const { taskID, threadID, componentIdx } = args;
-	const meta = registers.current = registers[componentIdx] = {
-		taskID,
-		threadID,
-		componentIdx
-	};
-	syncContextSlots(registers);
-	return meta;
-};
-function withCurrentTaskMeta(registers, args) {
-	debugLog("[_withGlobalCurrentThreadMeta()] args", args);
-	validate(args);
-	if (!args.fn) throw new TypeError("missing fn");
-	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
-	const previousCurrent = registers.current ?? null;
-	try {
-		registers.current = registers[componentIdx] = {
-			taskID,
-			threadID,
-			componentIdx
-		};
-		syncContextSlots(registers);
-		return fn();
-	} catch (error) {
-		debugLog("error while executing sync callee/callback", {
-			...args,
-			err: error
-		});
-		throw error;
-	} finally {
-		registers[componentIdx] = previous;
-		registers.current = previousCurrent;
-		syncContextSlots(registers);
-	}
-}
-function withCurrentTaskMetaAsync(registers, args) {
-	debugLog("[_withGlobalCurrentThreadMetaAsync()] args", args);
-	validate(args);
-	if (!args.fn) throw new TypeError("missing fn");
-	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
-	const previousCurrent = registers.current ?? null;
-	let result;
-	try {
-		registers.current = registers[componentIdx] = {
-			taskID,
-			threadID,
-			componentIdx
-		};
-		syncContextSlots(registers);
-		result = fn();
-	} catch (error) {
-		debugLog("error while executing sync callee/callback", {
-			...args,
-			err: error
-		});
-		registers[componentIdx] = previous;
-		registers.current = previousCurrent;
-		syncContextSlots(registers);
-		throw error;
-	}
-	if (!isPromiseLike(result)) {
-		registers[componentIdx] = previous;
-		registers.current = previousCurrent;
-		syncContextSlots(registers);
-		return result;
-	}
-	return (async () => {
-		try {
-			return await result;
-		} catch (error) {
-			debugLog("error while executing async callee/callback", {
-				...args,
-				err: error
-			});
-			throw error;
-		} finally {
-			if (registers[componentIdx]?.threadID === threadID && registers[componentIdx]?.taskID === taskID) registers[componentIdx] = null;
-			if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
-			syncContextSlots(registers);
-		}
-	})();
-}
-const clearCurrentTaskMeta = async (registers, args) => {
-	debugLog("[_clearCurrentTask()] args", args);
-	validate(args);
-	const { taskID, threadID, componentIdx } = args;
-	const meta = registers[componentIdx];
-	if (!meta) throw new Error(`missing current thread meta for component idx [${componentIdx}]`);
-	if (meta.threadID !== threadID) throw new Error(`thread ID [${meta.threadID}] != requested ID [${threadID}]`);
-	if (meta.taskID !== taskID) throw new Error(`task ID [${meta.taskID}] != requested ID [${taskID}]`);
-	if (meta.componentIdx !== componentIdx) throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
-	registers[componentIdx] = null;
-	if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
-	syncContextSlots(registers);
-};
-
-//#endregion
-//#region runtime/intrinsics/async-task/task-operations.js
-function getCurrentTask(_context, componentIdx, taskID) {
-	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing component idx");
-	const taskMetas = _context.tasks.get(componentIdx);
-	if (taskMetas === void 0 || taskMetas.length === 0) return;
-	if (taskID) return taskMetas.find((meta) => meta.task.id() === taskID);
-	const current = _context.registers[componentIdx];
-	if (current && current.taskID !== void 0) {
-		const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
-		if (currentMeta) return currentMeta;
-	}
-	const taskMeta = taskMetas[taskMetas.length - 1];
-	if (!taskMeta || !taskMeta.task) return;
-	return taskMeta;
-}
-function createNewCurrentImplicitThread(_context, args) {
-	debugLog("[createNewCurrentImplicitThread()] args", args);
-	const { componentIdx, isAsync, isManualAsync, preserveFutureResult, entryFnName, callbackFnName, getCallbackFn, stringEncoding, errHandling, getCalleeParamsFn, resultPtr, callingWasmExport } = args;
-	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while starting task");
-	let taskMetas = _context.tasks.get(componentIdx);
-	const callbackFn = getCallbackFn ? getCallbackFn() : null;
-	const newTask = new _context.AsyncTask({
-		componentIdx,
-		isAsync,
-		isManualAsync,
-		preserveFutureResult,
-		entryFnName,
-		callbackFn,
-		callbackFnName,
-		stringEncoding,
-		getCalleeParamsFn,
-		resultPtr,
-		errHandling,
-		callingWasmExport
-	});
-	const thread = newTask.addThread(new _context.AsyncThread({
-		componentIdx,
-		task: newTask
-	}));
-	const newTaskID = newTask.id();
-	const newTaskMeta = {
-		id: newTaskID,
-		componentIdx,
-		task: newTask
-	};
-	_context.taskIds.push(newTaskID);
-	_context.componentIdxs.push(componentIdx);
-	if (!taskMetas) {
-		taskMetas = [newTaskMeta];
-		_context.tasks.set(componentIdx, [newTaskMeta]);
-	} else taskMetas.push(newTaskMeta);
-	return {
-		task: newTask,
-		taskID: newTaskID,
-		thread,
-		threadID: thread.id()
-	};
-}
-function clearCurrentThread(_context, componentIdx, taskID, options = {}) {
-	debugLog("[clearCurrentThread()] args", {
-		componentIdx,
-		taskID
-	});
-	if (componentIdx === void 0 || componentIdx === null) throw new Error("missing/invalid component instance index while ending current task");
-	const tasks = _context.tasks.get(componentIdx);
-	if (!tasks || !Array.isArray(tasks)) throw new Error("missing/invalid tasks for component instance while ending task");
-	if (tasks.length == 0) throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
-	const taskIdx = taskID === void 0 ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
-	if (taskIdx === -1) return;
-	const taskMeta = tasks[taskIdx];
-	if (!options.preserveTask) {
-		tasks.splice(taskIdx, 1);
-		_context.checkIdle?.();
-	}
-	const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
-	if (globalTaskIdx !== -1) {
-		_context.taskIds.splice(globalTaskIdx, 1);
-		_context.componentIdxs.splice(globalTaskIdx, 1);
-	}
-	return taskMeta.task;
-}
-/** Compatibility helper for consumers that only need the task tuple. */
-function createNewCurrentTask(context, args) {
-	const { task, taskID } = createNewCurrentImplicitThread(context, args);
-	return [task, taskID];
-}
-const clearCurrentTask = clearCurrentThread;
-/** Implements `canon task.return`. */
-function taskReturn(_context, ctx, ...params) {
-	const { componentIdx, getMemoryFn, memoryIdx, callbackFnIdx, liftFns, lowerFns, stringEncoding } = ctx;
-	const memory = getMemoryFn();
-	let useDirectParams = ctx.useDirectParams;
-	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
-	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
-	if (!taskMeta) throw new Error("failed to retrieve current task metadata");
-	const task = taskMeta.task;
-	if (!task) throw new Error("invalid/missing current task in metadata");
-	if (!task.calleeIsAsync()) throw new _context.RuntimeError("task.return requires an async canonical lift");
-	task.validateResourceBorrowScope();
-	const expectedResultType = task.returnResultTypeIdx();
-	if (expectedResultType !== null && ctx.resultTypeIdx !== void 0 && ctx.resultTypeIdx !== expectedResultType) throw new _context.RuntimeError("task.return result type does not match the function type");
-	debugLog("[taskReturn()] args", {
-		componentIdx,
-		taskID: task.id(),
-		subtaskID: task.getParentSubtask()?.id(),
-		callbackFnIdx,
-		memoryIdx,
-		liftFns,
-		lowerFns,
-		params
-	});
-	const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
-	if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {
-		debugLog("[taskReturn()] calling return fn on subtask", {
-			componentIdx,
-			taskID: task.id(),
-			subtaskID: task.getParentSubtask()?.id(),
-			returnFnParams: [...params, subtaskCallMetadata.resultPtr]
-		});
-		const callerTask = task.getParentSubtask().getParentTask();
-		subtaskCallMetadata.returnFnResult = withCurrentTaskMeta(_context.registers, {
-			taskID: callerTask.id(),
-			threadID: subtaskCallMetadata.callerThreadID,
-			componentIdx: callerTask.componentIdx(),
-			fn: () => subtaskCallMetadata.returnFn.apply(null, [...params, subtaskCallMetadata.resultPtr])
-		});
-		subtaskCallMetadata.returnFnCalled = true;
-		task.resolve([]);
-		return;
-	}
-	const expectedMemoryIdx = task.getReturnMemoryIdx();
-	if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-		debugLog("[taskReturn()] mismatched memory indices", {
-			expectedMemoryIdx,
-			memoryIdx
-		});
-		throw new Error("task.return memory [" + memoryIdx + "] does not match task [" + expectedMemoryIdx + "]");
-	}
-	task.callbackFnIdx = callbackFnIdx;
-	if (!memory && liftFns.length > 4) {
-		debugLog("[taskReturn()] memory not present for max async flat lifts");
-		throw new Error("memory must be present if more than max async flat lifts are performed");
-	}
-	let liftCtx = {
-		memory,
-		useDirectParams,
-		params,
-		componentIdx,
-		stringEncoding
-	};
-	if (!useDirectParams) {
-		if (!memory) {
-			debugLog("missing memory despite indirect param usage", {
-				useDirectParams,
-				liftCtx,
-				ctx
-			});
-			throw new Error("missing memory despite indirect param usage");
-		}
-		liftCtx.storagePtr = params[0] >>> 0;
-		liftCtx.storageLen = params[1];
-	}
-	const liftedResults = [];
-	debugLog("[taskReturn()] lifting results out of memory", { liftCtx });
-	for (const liftFn of liftFns) {
-		if (liftCtx.storageLen !== void 0 && liftCtx.storageLen <= 0) {
-			debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
-			throw new Error("ran out of storage while writing");
-		}
-		const [val, newLiftCtx] = liftFn(liftCtx);
-		liftCtx = newLiftCtx;
-		liftedResults.push(val);
-	}
-	task.resolve(liftedResults);
-}
-/** Implements `canon task.cancel`. */
-function taskCancel(_context, componentIdx) {
-	debugLog("[taskCancel()] args", { componentIdx });
-	if (!getOrCreateAsyncState(_context.lookup, componentIdx).mayLeave) throw new Error("component instance is not marked as may leave, cannot be cancelled");
-	const { taskID } = getCurrentTaskMeta(_context.registers, componentIdx);
-	const taskMeta = getCurrentTask(_context, componentIdx, taskID);
-	if (!taskMeta) throw new Error("invalid/missing async task meta");
-	const task = taskMeta.task;
-	if (!task) throw new Error("invalid/missing async task");
-	if (Reflect.get(task, "sync") && !task.alwaysTaskReturn) throw new Error("cannot cancel sync tasks without always task return set");
-	task.cancel();
-}
-
-//#endregion
-//#region runtime/intrinsics/resource.js
-const RESOURCE_TABLE_FLAG = 1 << 30;
-const RESOURCE_TABLE_OWN = 2 ** 32;
-const tableGet = (context, table, handle) => {
-	const scope = table[handle << 1];
-	const value = table[(handle << 1) + 1];
-	const own = value >= RESOURCE_TABLE_OWN;
-	const rep = own ? value - RESOURCE_TABLE_OWN : value;
-	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError(`unknown handle index ${handle}`);
-	return {
-		rep,
-		scope,
-		own
-	};
-};
-const tableFlag = RESOURCE_TABLE_FLAG;
-const tableOwn = RESOURCE_TABLE_OWN;
-const initializeHandleIndexSpaces = () => /* @__PURE__ */ new Map();
-const initializeHandleTables = () => [];
-const initializeCallBorrows = () => ({ borrows: [] });
-const initializeCurrentBorrows = () => ({ borrows: [] });
-const initializeResourceScopeCounter = () => ({ value: 0 });
-const initializeResourceScopeTasks = () => /* @__PURE__ */ new Map();
-const initializeScopeId = () => ({ value: 0 });
-const getHandleIndexSpace = (spaces, key) => {
-	let space = spaces.get(key);
-	if (space === void 0) {
-		space = {
-			next: 1,
-			free: [],
-			alloc() {
-				return this.free.length > 0 ? this.free.pop() : this.next++;
-			},
-			release(index) {
-				this.free.push(index);
-			}
-		};
-		spaces.set(key, space);
-	}
-	return space;
-};
-const tableCreateBorrow = (spaces, table, rep, scopeId) => {
-	if (scopeId === void 0) throw new Error("missing scopeId");
-	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-	table[handle << 1] = scopeId;
-	table[(handle << 1) + 1] = rep >>> 0;
-	return handle;
-};
-const tableCreateOwn = (spaces, table, rep) => {
-	rep >>>= 0;
-	table._createdReps.add(rep);
-	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
-	table[handle << 1] = 0;
-	table[(handle << 1) + 1] = rep + RESOURCE_TABLE_OWN;
-	return handle;
-};
-const tableEnsureBorrowDrop = (table, handle, scope) => {
-	if (table[handle << 1] === scope) throw new TypeError("Resource borrow was not dropped at end of call");
-};
-const tableRemove = (context, table, handle) => {
-	const scope = table[handle << 1];
-	const value = table[(handle << 1) + 1];
-	const own = value >= RESOURCE_TABLE_OWN;
-	const rep = own ? value - RESOURCE_TABLE_OWN : value;
-	if (value === void 0 || (scope & RESOURCE_TABLE_FLAG) !== 0) throw new context.RuntimeError("unknown handle index " + handle);
-	if (own && scope !== 0) throw new context.RuntimeError("cannot remove owned resource while borrowed");
-	const borrowTask = own ? void 0 : context.scopeTasks.get(scope);
-	table[handle << 1] = RESOURCE_TABLE_FLAG;
-	table[(handle << 1) + 1] = 0;
-	getHandleIndexSpace(context.indexSpaces, table._componentIdx ?? table).release(handle);
-	borrowTask?.removeBorrowedHandle();
-	return {
-		rep,
-		scope,
-		own
-	};
-};
-function getOrCreateTable(tables, tid) {
-	let table = tables[tid];
-	if (!table) {
-		table = Object.assign([RESOURCE_TABLE_FLAG, 0], { _createdReps: /* @__PURE__ */ new Set() });
-		tables[tid] = table;
-	}
-	return table;
-}
-const transferBorrow = (context, handle, fromTid, toTid) => {
-	const fromTable = context.tables[fromTid];
-	const { rep, own } = tableGet(context, fromTable, handle);
-	const toTable = getOrCreateTable(context.tables, toTid);
-	const componentIdx = toTable._componentIdx;
-	const meta = componentIdx === void 0 ? void 0 : getCurrentTaskMeta(context.taskLookup.registers, componentIdx);
-	const borrowTask = meta ? getCurrentTask(context.taskLookup, componentIdx, meta.taskID)?.task : void 0;
-	if (borrowTask && own) {
-		fromTable[handle << 1]++;
-		borrowTask.addResourceLender(fromTable, handle);
-	}
-	if (toTable._createdReps.has(rep)) return rep;
-	const newHandle = tableCreateBorrow(context.indexSpaces, toTable, rep, borrowTask?.resourceScopeId() ?? context.scope.value);
-	if (borrowTask) borrowTask.addBorrowedHandle();
-	else context.callBorrows.borrows.push({
-		rid: toTid,
-		handle: newHandle
-	});
-	return newHandle;
-};
-const transferBorrowValidLifting = transferBorrow;
-const transferOwn = (context, handle, fromTid, toTid) => {
-	const { rep } = tableRemove(context, context.tables[fromTid], handle);
-	return tableCreateOwn(context.indexSpaces, getOrCreateTable(context.tables, toTid), rep);
-};
-const callDestructor = (context, { componentIdx, dtor, rep }) => {
-	if (context.storeTrap.stopped) return;
-	const { task, threadID } = createNewCurrentImplicitThread(context.creation, {
-		componentIdx,
-		isAsync: false,
-		callingWasmExport: true,
-		entryFnName: "<resource-drop>"
-	});
-	task.enterSync();
-	return withCurrentTaskMeta(context.registers, {
-		taskID: task.id(),
-		threadID,
-		componentIdx,
-		fn: () => {
-			try {
-				const result = dtor(rep);
-				task.resolve([]);
-				task.exit();
-				return result;
-			} catch (error) {
-				if (!task.isResolvedState()) {
-					task.setErrored(error);
-					task.reject(error);
-				}
-				if (!task.isExited()) task.exit({ skipExclusiveLockCheck: true });
-				throw error;
-			}
-		}
-	});
-};
-
-//#endregion
-//#region runtime/intrinsics/conversion/numeric.js
-const isInt8 = (value) => typeof value === "number" && value === value << 24 >> 24;
-const isUint8 = (value) => typeof value === "number" && value === (value & 255);
-const isInt16 = (value) => typeof value === "number" && value === value << 16 >> 16;
-const isUint16 = (value) => typeof value === "number" && value === (value & 65535);
-const isInt32 = (value) => typeof value === "number" && value === value >> 0;
-const isUint32 = (value) => typeof value === "number" && value === value >>> 0;
-const isInt64 = (value) => typeof value === "bigint" && value === BigInt.asIntN(64, value);
-const isUint64 = (value) => typeof value === "bigint" && value === BigInt.asUintN(64, value);
-/** Report the same conversion failure for direct and type-dispatched validation. */
-function invalidNumericPrimitive(type, value) {
-	throw new TypeError(`invalid ${type} value [${value}]`);
-}
-
-//#endregion
-//#region runtime/intrinsics/conversion.js
-/** Allocate only the selected scratch family, once per instantiation. */
-const initializeBitcast32 = () => {
-	const i32 = /* @__PURE__ */ new Int32Array(1);
-	return {
-		i32,
-		f32: new Float32Array(i32.buffer)
-	};
-};
-const initializeBitcast64 = () => {
-	const i64 = /* @__PURE__ */ new BigInt64Array(1);
-	return {
-		i64,
-		f64: new Float64Array(i64.buffer)
-	};
-};
-const i32ToF32 = (context, value) => {
-	context.i32[0] = value;
-	return context.f32[0];
-};
-const f32ToI32 = (context, value) => {
-	context.f32[0] = value;
-	return context.i32[0];
-};
-const i64ToF64 = (context, value) => {
-	context.i64[0] = value;
-	return context.f64[0];
-};
-const f64ToI64 = (context, value) => {
-	context.f64[0] = value;
-	return context.i64[0];
-};
-const i32ToChar = (value) => {
-	if (typeof value !== "number" || !Number.isInteger(value)) throw new Error("invalid i32");
-	if (value < 0) throw new Error("i32 must be greater than zero");
-	if (value >= 1114112) throw new Error("invalid i32, out of range");
-	if (55296 <= value && value <= 57343) throw new Error("invalid i32 out of range");
-	return String.fromCodePoint(value);
-};
-const toInt8 = (context, value) => {
-	if (context.strict && !isInt8(value)) invalidNumericPrimitive("s8", value);
-	return value << 24 >> 24;
-};
-const toUint8 = (context, value) => {
-	if (context.strict && !isUint8(value)) invalidNumericPrimitive("u8", value);
-	return value & 255;
-};
-const toInt16 = (context, value) => {
-	if (context.strict && !isInt16(value)) invalidNumericPrimitive("s16", value);
-	return value << 16 >> 16;
-};
-const toUint16 = (context, value) => {
-	if (context.strict && !isUint16(value)) invalidNumericPrimitive("u16", value);
-	return value & 65535;
-};
-const toInt32 = (context, value) => {
-	if (context.strict && !isInt32(value)) invalidNumericPrimitive("s32", value);
-	return value >> 0;
-};
-const toUint32 = (context, value) => {
-	if (context.strict && !isUint32(value)) invalidNumericPrimitive("u32", value);
-	return value >>> 0;
-};
-const toInt64 = (context, value) => {
-	const converted = BigInt(value);
-	if (context.strict && !isInt64(converted)) invalidNumericPrimitive("s64", converted);
-	return BigInt.asIntN(64, converted);
-};
-const toUint64 = (context, value) => {
-	const converted = BigInt(value);
-	if (context.strict && !isUint64(converted)) invalidNumericPrimitive("u64", converted);
-	return BigInt.asUintN(64, converted);
-};
-const toString = (value) => {
-	if (typeof value === "symbol") throw new TypeError("symbols cannot be converted to strings");
-	return String(value);
-};
-const toResultString = (value) => {
-	return JSON.stringify(value, (_, v) => {
-		if (v && Object.getPrototypeOf(v) === Uint8Array.prototype) return `[${v[Symbol.toStringTag]} (${v.byteLength})]`;
-		else if (typeof v === "bigint") return v.toString();
-		return v;
-	});
-};
-const isValidNumericPrimitive = (type, value) => {
-	switch (type) {
-		case "bool": return value === 0 || value === 1;
-		case "s8": return isInt8(value);
-		case "u8": return isUint8(value);
-		case "s16": return isInt16(value);
-		case "u16": return isUint16(value);
-		case "s32": return isInt32(value);
-		case "u32": return isUint32(value);
-		case "s64": return isInt64(value);
-		case "u64": return isUint64(value);
-		case "f32":
-		case "f64": return typeof value === "number";
-		default: return false;
-	}
-};
-const requireValidNumericPrimitive = (type, value) => {
-	if (!isValidNumericPrimitive(type, value)) invalidNumericPrimitive(type, value);
-	return true;
-};
-const splitInt64 = (value) => {
-	return [Number(value & 4294967295n) | 0, Number(value >> 32n & 4294967295n) | 0];
-};
-const mergeInt64 = (low, high) => {
-	return BigInt(low | 0) | BigInt(high | 0) << 32n;
-};
-
-//#endregion
-//#region runtime/intrinsics/string.js
-function requireString(value) {
-	if (typeof value !== "string") throw new TypeError("expected a string, received [" + typeof value + "]");
-	return value;
-}
-function utf8Size(s) {
-	let len = 0;
-	let codepoints = 0;
-	for (let i = 0; i < s.length; i++) {
-		const ch = s.charCodeAt(i);
-		codepoints++;
-		if (ch < 128) len += 1;
-		else if (ch < 2048) len += 2;
-		else if (ch >= 55296 && ch <= 56319 && i + 1 < s.length && (s.charCodeAt(i + 1) & 64512) === 56320) {
-			len += 4;
-			i++;
-		} else len += 3;
-	}
-	return {
-		len,
-		codepoints
-	};
-}
-const initializeUtf8Decoder = () => new TextDecoder("utf-8", {
-	fatal: true,
-	ignoreBOM: true
-});
-const initializeUtf16Decoder = () => new TextDecoder("utf-16", {
-	fatal: true,
-	ignoreBOM: true
-});
-const initializeUtf8Encoder = () => new TextEncoder();
-const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16Array([1]).buffer)[0] === 1 });
-function writeUtf16(context, str, ptr, memory) {
-	const len = str.length;
-	const out = new Uint16Array(memory.buffer, ptr, len);
-	const put = context.littleEndian ? (i, ch) => {
-		out[i] = ch;
-	} : (i, ch) => {
-		out[i] = (ch & 255) << 8 | ch >>> 8;
-	};
-	for (let i = 0; i < len; i++) {
-		let ch = str.charCodeAt(i);
-		if ((ch & 63488) === 55296) {
-			if (ch < 56320 && i + 1 < len && (str.charCodeAt(i + 1) & 64512) === 56320) {
-				put(i++, ch);
-				ch = str.charCodeAt(i);
-			} else ch = 65533;
-		}
-		put(i, ch);
-	}
-	return {
-		ptr,
-		len,
-		codepoints: [...str].length
-	};
-}
-function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
-	const { read, written } = encoder.encodeInto(s, new Uint8Array(memory.buffer, ptr, len));
-	if (read !== s.length || written !== len) throw new Error("failed to encode whole string");
-	return {
-		ptr,
-		len,
-		codepoints
-	};
-}
-const utf16Encode = (context, value, realloc, memory) => {
-	const str = requireString(value);
-	return writeUtf16(context, str, realloc(0, 0, 2, str.length * 2), memory);
-};
-const utf16EncodeAsync = async (context, value, realloc, memory) => {
-	const str = requireString(value);
-	return writeUtf16(context, str, await realloc(0, 0, 2, str.length * 2), memory);
-};
-const utf16ValidatingCopy = (from, to) => {
-	let allLatin1 = true;
-	let highSurrogate = false;
-	for (let i = 0; i < from.length; i++) {
-		const unit = from[i];
-		if (highSurrogate !== ((unit & 64512) === 56320)) throw new Error("invalid utf16 encoding");
-		highSurrogate = (unit & 64512) === 55296;
-		if (unit > 255) allLatin1 = false;
-		to[i] = unit;
-	}
-	if (highSurrogate) throw new Error("invalid utf16 encoding");
-	return allLatin1;
-};
-const utf8Encode = (encoder, value, realloc, memory) => {
-	const s = requireString(value);
-	if (s.length === 0) return {
-		ptr: 1,
-		len: 0
-	};
-	const { len, codepoints } = utf8Size(s);
-	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory);
-};
-const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
-	const s = requireString(value);
-	if (s.length === 0) return {
-		ptr: 1,
-		len: 0
-	};
-	const { len, codepoints } = utf8Size(s);
-	return writeUtf8(encoder, s, await realloc(0, 0, 1, len), len, codepoints, memory);
-};
-const validateGuestChar = (value) => {
-	if (value > 1114111 || value >= 55296 && value <= 57343) throw new TypeError("not a valid char");
-	return String.fromCodePoint(value);
-};
-/** Lower exactly one Unicode scalar value from a host string. */
-const validateHostChar = (value) => {
-	if (typeof value !== "string") throw new TypeError("must be a string");
-	const codePoint = value.codePointAt(0);
-	if (codePoint === void 0 || codePoint >= 55296 && codePoint <= 57343 || value.length !== (codePoint > 65535 ? 2 : 1)) throw new TypeError("not a valid char");
-	return codePoint;
-};
-/** Decode canonical Latin-1 bytes directly; TextDecoder('latin1') uses Windows-1252. */
-const compactUtf16Decode = (decoder, memory, ptr, taggedLength) => {
-	ptr >>>= 0;
-	taggedLength >>>= 0;
-	if (ptr % 2 !== 0) throw new RangeError("unaligned compact UTF-16 string");
-	if (taggedLength & 2147483648) return decoder.decode(new Uint8Array(memory.buffer, ptr, (taggedLength & 2147483647) * 2));
-	const bytes = new Uint8Array(memory.buffer, ptr, taggedLength);
-	let value = "";
-	for (let i = 0; i < bytes.length; i += 32768) value += String.fromCharCode(...bytes.subarray(i, i + 32768));
-	return value;
-};
-const compactUtf16Encode = (context, value, realloc, memory) => {
-	if (typeof value !== "string") throw new TypeError("expected a string");
-	if (value.length >= 2147483648) throw new RangeError("compact UTF-16 string is too long");
-	for (let i = 0; i < value.length; i++) if (value.charCodeAt(i) > 255) {
-		const encoded = utf16Encode(context, value, realloc, memory);
-		return {
-			...encoded,
-			len: (encoded.len | 2147483648) >>> 0
-		};
-	}
-	const ptr = realloc(0, 0, 2, value.length) >>> 0;
-	if (ptr % 2 !== 0) throw new RangeError("unaligned compact UTF-16 allocation");
-	const bytes = new Uint8Array(memory.buffer, ptr, value.length);
-	for (let i = 0; i < value.length; i++) bytes[i] = value.charCodeAt(i);
-	return {
-		ptr,
-		len: value.length
-	};
-};
-
-//#endregion
-//#region runtime/intrinsics/webidl.js
-const initializeWebIdlProxyCache = () => ({ proxy: void 0 });
-const globalThisIdlProxy = (context) => {
-	if (context.proxy) return context.proxy;
-	const innerSymbol = Symbol("inner");
-	const isProxySymbol = Symbol("isProxy");
-	const uppercaseRegex = /html|Html|dom|Dom/g;
-	const globalNames = ["Window", "WorkerGlobalScope"];
-	function proxy(target, fake = {}) {
-		const origTarget = target;
-		return new Proxy(fake, {
-			get: (_, prop, receiver) => {
-				if (prop === innerSymbol) return origTarget;
-				if (prop === isProxySymbol) return true;
-				if (typeof prop !== "string") return maybeProxy(Reflect.get(origTarget, prop));
-				if (origTarget === globalThis && prop.startsWith("get") && globalNames.includes(prop.slice(3))) return () => receiver;
-				prop = prop.replaceAll(uppercaseRegex, (x) => x.toUpperCase());
-				if (prop.startsWith("set")) return (val) => Reflect.set(origTarget, `${prop[3].toLowerCase()}${prop.slice(4)}`, val);
-				if (prop.startsWith("as")) return () => receiver;
-				const res = Reflect.get(origTarget, prop);
-				if (res === void 0 && prop[0].toUpperCase() === prop[0]) {
-					const key = `${prop[0].toLowerCase()}${prop.slice(1)}`;
-					const obj = Reflect.get(globalThis, key);
-					if (obj) return Object.getPrototypeOf(obj).constructor;
-				}
-				return maybeProxy(res);
-			},
-			apply: (_, thisArg, args) => {
-				if (args.length === 1 && Array.isArray(args[0]) && Reflect.get(origTarget, "length") === 0) args = args[0];
-				const res = Reflect.apply(origTarget, proxyInner(thisArg), args.map((a) => a[isProxySymbol] ? proxyInner(a) : a));
-				return typeof res === "object" ? proxy(res) : res;
-			},
-			getPrototypeOf: () => Reflect.getPrototypeOf(origTarget),
-			construct: (_, args, newTarget) => maybeProxy(Reflect.construct(origTarget, args, newTarget)),
-			defineProperty: (_, property, attributes) => Reflect.defineProperty(origTarget, property, attributes),
-			deleteProperty: (_, property) => Reflect.deleteProperty(origTarget, property),
-			getOwnPropertyDescriptor: (_, property) => Reflect.getOwnPropertyDescriptor(origTarget, property),
-			has: (_, property) => Reflect.has(origTarget, property),
-			isExtensible: () => Reflect.isExtensible(origTarget),
-			ownKeys: () => maybeProxy(Reflect.ownKeys(origTarget)),
-			preventExtensions: () => Reflect.preventExtensions(origTarget),
-			set: (_, property, value, receiver) => Reflect.set(origTarget, property, value, receiver),
-			setPrototypeOf: (_, value) => Reflect.setPrototypeOf(origTarget, value)
-		});
-	}
-	function maybeProxy(res) {
-		if (typeof res === "function" && res.prototype?.constructor === res) return res;
-		if (typeof res === "function") return proxy(res, () => {});
-		if (typeof res === "object" && res !== null) return () => proxy(res);
-		return res;
-	}
-	function proxyInner(value) {
-		return value ? value[innerSymbol] : value;
-	}
-	return context.proxy = proxy(globalThis);
-};
 
 //#endregion
 //#region runtime/intrinsics/async-task/callback.js
@@ -4190,6 +3748,482 @@ function initializeThreadStartChecks(platform) {
 			0
 		]))
 	};
+}
+
+//#endregion
+//#region runtime/intrinsics/async-task/context.js
+/**
+* A core module that keeps the context slots of one component instance's
+* current thread in mutable globals, and exports a getter and a setter function
+* for each slot. While no thread's slots are loaded into the globals, the
+* functions call the imported JS implementations instead:
+*
+* ```wat
+* (module
+*   (import "context" "get0" (func $get0 (result i32)))
+*   (import "context" "set0" (func $set0 (param i32)))
+*   (import "context" "get1" (func $get1 (result i32)))
+*   (import "context" "set1" (func $set1 (param i32)))
+*   (global $loaded (export "loaded") (mut i32) (i32.const 0))
+*   (global $slot0 (export "slot0") (mut i32) (i32.const 0))
+*   (global $slot1 (export "slot1") (mut i32) (i32.const 0))
+*   (func (export "get0") (result i32)
+*     (if (result i32) (global.get $loaded)
+*       (then (global.get $slot0))
+*       (else (call $get0))))
+*   (func (export "set0") (param i32)
+*     (if (global.get $loaded)
+*       (then (global.set $slot0 (local.get 0)))
+*       (else (call $set0 (local.get 0)))))
+*   ;; ... and likewise "get1" and "set1" for $slot1
+* )
+* ```
+*
+* A guest that imports these functions reads and writes its context slots
+* without leaving WebAssembly. Toolchains keep the shadow stack pointer in a
+* context slot, so a guest may do so in every function prologue.
+*/
+const CONTEXT_SLOTS_MODULE = new Uint8Array([
+	0,
+	97,
+	115,
+	109,
+	1,
+	0,
+	0,
+	0,
+	1,
+	9,
+	2,
+	96,
+	0,
+	1,
+	127,
+	96,
+	1,
+	127,
+	0,
+	2,
+	61,
+	4,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	103,
+	101,
+	116,
+	48,
+	0,
+	0,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	115,
+	101,
+	116,
+	48,
+	0,
+	1,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	103,
+	101,
+	116,
+	49,
+	0,
+	0,
+	7,
+	99,
+	111,
+	110,
+	116,
+	101,
+	120,
+	116,
+	4,
+	115,
+	101,
+	116,
+	49,
+	0,
+	1,
+	3,
+	5,
+	4,
+	0,
+	1,
+	0,
+	1,
+	6,
+	16,
+	3,
+	127,
+	1,
+	65,
+	0,
+	11,
+	127,
+	1,
+	65,
+	0,
+	11,
+	127,
+	1,
+	65,
+	0,
+	11,
+	7,
+	54,
+	7,
+	6,
+	108,
+	111,
+	97,
+	100,
+	101,
+	100,
+	3,
+	0,
+	5,
+	115,
+	108,
+	111,
+	116,
+	48,
+	3,
+	1,
+	5,
+	115,
+	108,
+	111,
+	116,
+	49,
+	3,
+	2,
+	4,
+	103,
+	101,
+	116,
+	48,
+	0,
+	4,
+	4,
+	115,
+	101,
+	116,
+	48,
+	0,
+	5,
+	4,
+	103,
+	101,
+	116,
+	49,
+	0,
+	6,
+	4,
+	115,
+	101,
+	116,
+	49,
+	0,
+	7,
+	10,
+	61,
+	4,
+	12,
+	0,
+	35,
+	0,
+	4,
+	127,
+	35,
+	1,
+	5,
+	16,
+	0,
+	11,
+	11,
+	16,
+	0,
+	35,
+	0,
+	4,
+	64,
+	32,
+	0,
+	36,
+	1,
+	5,
+	32,
+	0,
+	16,
+	1,
+	11,
+	11,
+	12,
+	0,
+	35,
+	0,
+	4,
+	127,
+	35,
+	2,
+	5,
+	16,
+	2,
+	11,
+	11,
+	16,
+	0,
+	35,
+	0,
+	4,
+	64,
+	32,
+	0,
+	36,
+	2,
+	5,
+	32,
+	0,
+	16,
+	3,
+	11,
+	11
+]);
+/** The number of context slots each thread has. */
+const SLOT_COUNT = 2;
+/**
+* Find the live thread that a task register entry names.
+*
+* @param context Capabilities for looking up component state.
+* @param meta A task register entry.
+* @returns The thread, unless the entry is empty or names a thread which has exited.
+*/
+function resolveThread(context, meta) {
+	if (meta === void 0 || meta === null) return;
+	const { componentIdx, threadID } = meta;
+	if (componentIdx === -1 || threadID === void 0 || threadID === null || threadID === 0) return;
+	const thread = getOrCreateAsyncState(context.lookup, componentIdx).threads.get(threadID);
+	return thread && thread.taskID() === meta.taskID ? thread : void 0;
+}
+/**
+* Find the thread whose context slots a component instance's code accesses.
+*
+* Guest callbacks use their component's task register. FACT adapters have no
+* component index; post-return also runs after the callee register is cleared,
+* or while it still names a task which has exited. Both use the executing task,
+* whose context FACT temporarily saves and restores.
+*
+* @param context Capabilities for looking up the current thread.
+* @param componentIdx The component instance, if the code belongs to one.
+* @returns The thread, if there is one.
+*/
+function currentContextThread(context, componentIdx) {
+	const { registers } = context;
+	return (componentIdx === void 0 ? void 0 : resolveThread(context, registers[componentIdx])) ?? resolveThread(context, registers.current);
+}
+/**
+* Keep the context slot globals of one component instance loaded with the
+* slots of the thread that the instance's code accesses, selected as
+* `currentContextThread` does.
+*
+* @param context Capabilities for looking up the current thread.
+* @param globals The globals of the instance.
+*/
+function syncInstance(context, globals) {
+	const { registers } = context;
+	const own = resolveThread(context, registers[globals.componentIdx]);
+	globals.followsExecutingTask = own === void 0;
+	const thread = own ?? resolveThread(context, registers.current);
+	const next = thread !== void 0 && thread.componentIdx() === globals.componentIdx ? thread : void 0;
+	const previous = globals.thread;
+	if (previous === next) return;
+	if (previous !== void 0) {
+		for (let slot = 0; slot < SLOT_COUNT; slot++) previous.storage[slot] = globals.slots[slot].value;
+		previous.contextGlobals = void 0;
+	}
+	if (next !== void 0) {
+		for (let slot = 0; slot < SLOT_COUNT; slot++) globals.slots[slot].value = next.storage[slot];
+		next.contextGlobals = globals;
+	}
+	globals.thread = next;
+	globals.loaded.value = next === void 0 ? 0 : 1;
+}
+/**
+* Keep the context slot globals of every component instance loaded with the
+* slots of the thread that the instance's code accesses.
+*
+* That selection depends only on the task registers and on which threads are
+* live. Registers are watched for writes (see `watchRegister`); code which
+* changes a component's thread table must call this.
+*
+* @param registers The task registers of the store.
+*/
+function syncContextSlots(registers) {
+	const state = registers.contextSlots;
+	if (state === void 0) return;
+	for (const globals of state.components) syncInstance(state.context, globals);
+}
+/**
+* Run `onWrite` after every write to one task register.
+*
+* Registers are written from many places (entering and leaving tasks, and
+* restoring a task when a suspended stack resumes), including by runtime
+* providers which replace those operations. Watching the register itself keeps
+* the globals correct whichever code performs the write.
+*
+* @param registers The task registers of the store.
+* @param key The register: a component instance's, or that of the executing task.
+* @param onWrite Brings the globals which depend on the register up to date.
+*/
+function watchRegister(registers, key, onWrite) {
+	let value = registers[key];
+	Object.defineProperty(registers, key, {
+		enumerable: true,
+		configurable: true,
+		get: () => value,
+		set(next) {
+			value = next;
+			onWrite();
+		}
+	});
+}
+/**
+* Get the context slot globals of a component instance, creating them when the
+* host can instantiate WebAssembly modules synchronously.
+*
+* @param context Capabilities for looking up the current thread.
+* @param componentIdx The component instance.
+* @returns The globals, or `undefined` if they cannot be created.
+*/
+function contextSlotGlobals(context, componentIdx) {
+	const { registers } = context;
+	const existing = registers.contextSlots?.components.find((globals) => globals.componentIdx === componentIdx);
+	if (existing) return existing;
+	const wasm = globalThis.WebAssembly;
+	if (typeof wasm?.Module !== "function" || typeof wasm.Instance !== "function") return;
+	let exports;
+	try {
+		exports = new wasm.Instance(new wasm.Module(CONTEXT_SLOTS_MODULE), { context: {
+			get0: contextGet.bind(null, context, {
+				componentIdx,
+				slot: 0
+			}),
+			set0: contextSet.bind(null, context, {
+				componentIdx,
+				slot: 0
+			}),
+			get1: contextGet.bind(null, context, {
+				componentIdx,
+				slot: 1
+			}),
+			set1: contextSet.bind(null, context, {
+				componentIdx,
+				slot: 1
+			})
+		} }).exports;
+	} catch {
+		return;
+	}
+	const globals = {
+		componentIdx,
+		loaded: exports.loaded,
+		slots: [exports.slot0, exports.slot1],
+		getters: [exports.get0, exports.get1],
+		setters: [exports.set0, exports.set1],
+		followsExecutingTask: true,
+		thread: void 0
+	};
+	if (registers.contextSlots === void 0) {
+		const components = [];
+		registers.contextSlots = {
+			context,
+			components
+		};
+		watchRegister(registers, "current", () => {
+			for (const other of components) if (other.followsExecutingTask) syncInstance(context, other);
+		});
+	}
+	registers.contextSlots.components.push(globals);
+	watchRegister(registers, componentIdx, () => syncInstance(context, globals));
+	syncInstance(context, globals);
+	return globals;
+}
+/**
+* Create the function a core module imports for `canon context.get` or
+* `canon context.set` on one slot.
+*
+* Code that belongs to a component instance gets a WebAssembly function over
+* that instance's context slot globals where possible, and a JS function
+* otherwise. Debug logging also selects JS functions, which log each access.
+*
+* @param _context Capabilities for looking up the current thread.
+* @param ctx The slot, and the component instance of the importing code, if any.
+* @param operation Whether the function reads or writes the slot.
+* @returns The function to import.
+*/
+const contextSlotAccessor = (_context, ctx, operation) => {
+	const { componentIdx, slot } = ctx;
+	if (slot === void 0 || slot < 0 || slot >= SLOT_COUNT) throw new TypeError("invalid slot");
+	const globals = componentIdx === void 0 || debugLog.enabled ? void 0 : contextSlotGlobals(_context, componentIdx);
+	if (globals === void 0) return operation === "get" ? contextGet.bind(null, _context, ctx) : contextSet.bind(null, _context, ctx);
+	return operation === "get" ? globals.getters[slot] : globals.setters[slot];
+};
+/** Implements `canon context.set`. */
+function contextSet(_context, ctx, value) {
+	const { slot } = ctx;
+	if (slot === void 0) throw new TypeError("missing slot");
+	if (!typeCheckValidI32(value)) throw new Error("invalid value for context set (not valid i32)");
+	const thread = currentContextThread(_context, ctx.componentIdx);
+	if (!thread) throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context set`);
+	if (debugLog.enabled) debugLog("[contextSet()] args", {
+		slot,
+		value,
+		threadID: thread.id(),
+		taskID: thread.taskID(),
+		componentIdx: thread.componentIdx()
+	});
+	if (slot < 0 || slot >= thread.storage.length) throw new Error("invalid slot for current thread");
+	const globals = thread.contextGlobals;
+	if (globals === void 0) thread.storage[slot] = value;
+	else globals.slots[slot].value = value;
+}
+/** Implements `canon context.get`. */
+function contextGet(_context, ctx) {
+	const { slot } = ctx;
+	if (slot === void 0) throw new TypeError("missing slot");
+	const thread = currentContextThread(_context, ctx.componentIdx);
+	if (!thread) throw new Error(`missing/incomplete global current thread meta for component idx [${ctx.componentIdx}] during context get`);
+	if (debugLog.enabled) debugLog("[contextGet()] args", {
+		slot,
+		threadID: thread.id(),
+		taskID: thread.taskID(),
+		componentIdx: thread.componentIdx()
+	});
+	if (slot < 0 || slot >= thread.storage.length) throw new Error("invalid slot for current thread");
+	const globals = thread.contextGlobals;
+	return globals === void 0 ? thread.storage[slot] : globals.slots[slot].value;
 }
 
 //#endregion
