@@ -83,7 +83,8 @@
         "test:bench:external-runtime": "vitest run -c bench/external-runtime/vitest.functional.config.ts",
         "bench:external-runtime:verify": "vitest run -c bench/external-runtime/vitest.functional.config.ts",
         "build:embedded-runtime": "pnpm --filter @bytecodealliance/jco-cm-runtime build && node scripts/build-embedded-runtime.mjs",
-        "check:embedded-runtime": "pnpm --filter @bytecodealliance/jco-cm-runtime build && node scripts/build-embedded-runtime.mjs --check"
+        "check:embedded-runtime": "pnpm --filter @bytecodealliance/jco-cm-runtime build && node scripts/build-embedded-runtime.mjs --check",
+        "test:native-context": "cargo test --locked --manifest-path ../../scripts/context-access/transpile/Cargo.toml && cargo build --locked --manifest-path ../../scripts/context-access/transpile/Cargo.toml && node --experimental-wasm-jspi --test --test-isolation=none --test-concurrency=1 test/native-context/*.test.mjs"
     },
     "dependencies": {
         "@bytecodealliance/preview2-shim": "^0.31.1",
