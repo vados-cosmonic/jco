@@ -122,6 +122,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "context-access-transpile"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "js-component-bindgen",
+ "serde_json",
+ "wasmparser 0.262.0",
+ "wat",
+]
+
+[[package]]
 name = "cow-utils"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -210,14 +221,6 @@ dependencies = [
  "darling_core",
  "quote",
  "syn 2.0.118",
-]
-
-[[package]]
-name = "context-access-transpile"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "js-component-bindgen",
 ]
 
 [[package]]
@@ -1450,6 +1453,7 @@ dependencies = [
  "hashbrown 0.17.1",
  "indexmap",
  "semver",
+ "serde",
 ]
 
 [[package]]
