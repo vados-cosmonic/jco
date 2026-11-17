@@ -363,6 +363,8 @@ export interface ContextSlotGlobals {
     readonly getters: readonly (() => number)[];
     /** WebAssembly functions writing each slot. */
     readonly setters: readonly ((value: number) => void)[];
+    /** Whether the instance's own register names no live thread, so that of the executing task selects one. */
+    followsExecutingTask: boolean;
     /** The thread of this instance whose slots live in the globals rather than in its `storage`. */
     thread: AsyncThread | undefined;
 }

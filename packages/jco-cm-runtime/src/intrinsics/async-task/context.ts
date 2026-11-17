@@ -101,14 +101,53 @@ function currentContextThread(context: ThreadLookupContext, componentIdx?: numbe
 }
 
 /**
+ * Keep the context slot globals of one component instance loaded with the
+ * slots of the thread that the instance's code accesses, selected as
+ * `currentContextThread` does.
+ *
+ * @param context Capabilities for looking up the current thread.
+ * @param globals The globals of the instance.
+ */
+function syncInstance(context: ThreadLookupContext, globals: ContextSlotGlobals): void {
+    const { registers } = context;
+    const own = resolveThread(context, registers[globals.componentIdx]);
+    globals.followsExecutingTask = own === undefined;
+    const thread = own ?? resolveThread(context, registers.current);
+
+    // Only a thread of the instance itself moves into the instance's globals.
+    // A thread of another instance is the executing task that code running
+    // after its own task has exited falls back to; its slots may live in that
+    // other instance's globals, so they stay where they are and the accessors
+    // call into JS to reach them.
+    const next = thread !== undefined && thread.componentIdx() === globals.componentIdx ? thread : undefined;
+    const previous = globals.thread;
+    if (previous === next) {
+        return;
+    }
+
+    if (previous !== undefined) {
+        for (let slot = 0; slot < SLOT_COUNT; slot++) {
+            previous.storage[slot] = globals.slots[slot]!.value;
+        }
+        previous.contextGlobals = undefined;
+    }
+    if (next !== undefined) {
+        for (let slot = 0; slot < SLOT_COUNT; slot++) {
+            globals.slots[slot]!.value = next.storage[slot]!;
+        }
+        next.contextGlobals = globals;
+    }
+    globals.thread = next;
+    globals.loaded.value = next === undefined ? 0 : 1;
+}
+
+/**
  * Keep the context slot globals of every component instance loaded with the
- * slots of the thread that the instance's code accesses, as
- * `currentContextThread` selects it.
+ * slots of the thread that the instance's code accesses.
  *
  * That selection depends only on the task registers and on which threads are
- * live, so this must run after every write to a register and every change to a
- * component's thread table. Registers are watched for writes (see
- * `watchRegister`); code which changes a thread table calls this itself.
+ * live. Registers are watched for writes (see `watchRegister`); code which
+ * changes a component's thread table must call this.
  *
  * @param registers The task registers of the store.
  */
@@ -118,37 +157,12 @@ export function syncContextSlots(registers: TaskRegisters): void {
         return;
     }
     for (const globals of state.components) {
-        // Only a thread of the instance itself moves into the instance's
-        // globals. A thread of another instance is the executing task that
-        // code running after its own task has exited falls back to; its slots
-        // may live in that other instance's globals, so they stay where they
-        // are and the accessors call into JS to reach them.
-        const thread = currentContextThread(state.context, globals.componentIdx);
-        const next = thread !== undefined && thread.componentIdx() === globals.componentIdx ? thread : undefined;
-        const previous = globals.thread;
-        if (previous === next) {
-            continue;
-        }
-
-        if (previous !== undefined) {
-            for (let slot = 0; slot < SLOT_COUNT; slot++) {
-                previous.storage[slot] = globals.slots[slot]!.value;
-            }
-            previous.contextGlobals = undefined;
-        }
-        if (next !== undefined) {
-            for (let slot = 0; slot < SLOT_COUNT; slot++) {
-                globals.slots[slot]!.value = next.storage[slot]!;
-            }
-            next.contextGlobals = globals;
-        }
-        globals.thread = next;
-        globals.loaded.value = next === undefined ? 0 : 1;
+        syncInstance(state.context, globals);
     }
 }
 
 /**
- * Run `syncContextSlots` after every write to one task register.
+ * Run `onWrite` after every write to one task register.
  *
  * Registers are written from many places (entering and leaving tasks, and
  * restoring a task when a suspended stack resumes), including by runtime
@@ -157,8 +171,9 @@ export function syncContextSlots(registers: TaskRegisters): void {
  *
  * @param registers The task registers of the store.
  * @param key The register: a component instance's, or that of the executing task.
+ * @param onWrite Brings the globals which depend on the register up to date.
  */
-function watchRegister(registers: TaskRegisters, key: number | 'current'): void {
+function watchRegister(registers: TaskRegisters, key: number | 'current', onWrite: () => void): void {
     let value = registers[key];
     Object.defineProperty(registers, key, {
         enumerable: true,
@@ -166,7 +181,7 @@ function watchRegister(registers: TaskRegisters, key: number | 'current'): void 
         get: () => value,
         set(next: TaskMeta | null | undefined) {
             value = next;
-            syncContextSlots(registers);
+            onWrite();
         },
     });
 }
@@ -213,18 +228,29 @@ function contextSlotGlobals(context: ThreadLookupContext, componentIdx: number):
         slots: [exports.slot0 as WebAssembly.Global<'i32'>, exports.slot1 as WebAssembly.Global<'i32'>],
         getters: [exports.get0 as () => number, exports.get1 as () => number],
         setters: [exports.set0 as (value: number) => void, exports.set1 as (value: number) => void],
+        followsExecutingTask: true,
         thread: undefined,
     };
 
     // The thread an instance's code accesses is selected by the instance's own
     // register, then by that of the executing task.
     if (registers.contextSlots === undefined) {
-        registers.contextSlots = { context, components: [] };
-        watchRegister(registers, 'current');
+        const components: ContextSlotGlobals[] = [];
+        registers.contextSlots = { context, components };
+
+        // The executing task only selects the thread of an instance whose own
+        // register names no live thread.
+        watchRegister(registers, 'current', () => {
+            for (const other of components) {
+                if (other.followsExecutingTask) {
+                    syncInstance(context, other);
+                }
+            }
+        });
     }
     registers.contextSlots.components.push(globals);
-    watchRegister(registers, componentIdx);
-    syncContextSlots(registers);
+    watchRegister(registers, componentIdx, () => syncInstance(context, globals));
+    syncInstance(context, globals);
     return globals;
 }
 
