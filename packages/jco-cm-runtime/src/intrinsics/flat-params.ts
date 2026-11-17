@@ -1,18 +1,17 @@
 /** A private cursor leaves the public params property as the unconsumed array. */
 interface ParamsContext {
     params?: unknown[];
-    [cursorKey]?: ParamCursor;
 }
 interface ParamCursor {
     values: unknown[];
     offset: number;
     exposed: boolean;
 }
-const cursorKey = Symbol('flat parameter cursor');
+const cursors = /* @__PURE__ */ new WeakMap<ParamsContext, ParamCursor>();
 
 /** Materialize only when a consumer observes the public array. */
 function getParams(this: ParamsContext): unknown[] {
-    const cursor = this[cursorKey]!;
+    const cursor = cursors.get(this)!;
     if (cursor.offset !== 0) {
         cursor.values = cursor.values.slice(cursor.offset);
         cursor.offset = 0;
@@ -23,7 +22,7 @@ function getParams(this: ParamsContext): unknown[] {
 
 /** Replacing params starts a new argument sequence. */
 function setParams(this: ParamsContext, values: unknown[]) {
-    const cursor = this[cursorKey]!;
+    const cursor = cursors.get(this)!;
     cursor.values = values;
     cursor.offset = 0;
     cursor.exposed = true;
@@ -31,7 +30,7 @@ function setParams(this: ParamsContext, values: unknown[]) {
 
 /** Use a cursor for ordinary contexts, preserving custom property accessors. */
 function cursorFor(context: ParamsContext): ParamCursor | undefined {
-    let cursor = context[cursorKey];
+    let cursor = cursors.get(context);
     if (cursor !== undefined) {
         return cursor;
     }
@@ -40,7 +39,7 @@ function cursorFor(context: ParamsContext): ParamCursor | undefined {
         return undefined;
     }
     cursor = { values: descriptor.value, offset: 0, exposed: true };
-    Object.defineProperty(context, cursorKey, { value: cursor });
+    cursors.set(context, cursor);
     Object.defineProperty(context, 'params', {
         get: getParams,
         set: setParams,

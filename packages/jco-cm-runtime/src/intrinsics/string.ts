@@ -16,10 +16,13 @@ interface NativeBuffer {
         write(value: string, offset: number, length: number, encoding: 'utf8'): number;
     };
 }
-const nativeEncoderKey = Symbol('native UTF-8 encoder');
-type NativeEncoder = StringEncodeInto & {
-    [nativeEncoderKey]?: { buffer: NativeBuffer; encodeInto: StringEncodeInto['encodeInto'] };
-};
+const nativeEncoders = /* @__PURE__ */ new WeakMap<
+    StringEncodeInto,
+    {
+        buffer: NativeBuffer;
+        encodeInto: StringEncodeInto['encodeInto'];
+    }
+>();
 const surrogatePairs = /[\ud800-\udbff][\udc00-\udfff]/;
 
 /** Use Node's byte primitives only for the selected, unmodified default encoder. */
@@ -27,7 +30,7 @@ function nativeEncoder(encoder: StringEncodeInto, length: number): NativeBuffer 
     if (length < 256) {
         return undefined;
     }
-    const native = (encoder as NativeEncoder)[nativeEncoderKey];
+    const native = nativeEncoders.get(encoder);
     return native && native.encodeInto === encoder.encodeInto ? native.buffer : undefined;
 }
 
@@ -92,9 +95,7 @@ export const initializeUtf8Encoder: StringModule['initializeUtf8Encoder'] = () =
         typeof host.Buffer?.byteLength === 'function' &&
         typeof host.Buffer?.from === 'function'
     ) {
-        Object.defineProperty(encoder, nativeEncoderKey, {
-            value: { buffer: host.Buffer, encodeInto: encoder.encodeInto },
-        });
+        nativeEncoders.set(encoder, { buffer: host.Buffer, encodeInto: encoder.encodeInto });
     }
     return encoder;
 };
