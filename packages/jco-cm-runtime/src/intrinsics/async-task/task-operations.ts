@@ -12,7 +12,7 @@ import type {
     AsyncTaskMeta,
     TaskIdentity,
 } from '../../runtime.js';
-import { getCurrentTaskMeta, withCurrentTaskMeta } from '../task-context.js';
+import { getCurrentTaskMeta, registerSlot, withCurrentTaskMeta } from '../task-context.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
@@ -39,7 +39,7 @@ export function getCurrentTask<T extends TaskIdentity = AsyncTask>(
     // stack resumes). The component's most recently created task may
     // be another one, e.g. a prepared callee that has not entered yet
     // while an earlier task of the component is suspended.
-    const current = _context.registers[componentIdx];
+    const current = _context.registers[registerSlot(componentIdx)];
     if (current && current.taskID !== undefined) {
         const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
         if (currentMeta) {
@@ -127,19 +127,34 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     if (tasks.length == 0) {
         throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
     }
-    const taskIdx = taskID === undefined ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
+    // Calls nest, so the task being cleared is nearly always the most recent one.
+    // Look there first, and pop rather than splice, which allocates on every call.
+    const lastIdx = tasks.length - 1;
+    const taskIdx =
+        taskID === undefined || tasks[lastIdx].id === taskID ? lastIdx : tasks.findIndex((meta) => meta.id === taskID);
     if (taskIdx === -1) {
         return;
     }
     const taskMeta = tasks[taskIdx];
     if (!options.preserveTask) {
-        tasks.splice(taskIdx, 1);
+        if (taskIdx === lastIdx) {
+            tasks.pop();
+        } else {
+            tasks.splice(taskIdx, 1);
+        }
         _context.checkIdle?.();
     }
-    const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
-    if (globalTaskIdx !== -1) {
-        _context.taskIds.splice(globalTaskIdx, 1);
-        _context.componentIdxs.splice(globalTaskIdx, 1);
+
+    const { taskIds, componentIdxs } = _context;
+    if (taskIds.length > 0 && taskIds[taskIds.length - 1] === taskMeta.id) {
+        taskIds.pop();
+        componentIdxs.pop();
+    } else {
+        const globalTaskIdx = taskIds.lastIndexOf(taskMeta.id);
+        if (globalTaskIdx !== -1) {
+            taskIds.splice(globalTaskIdx, 1);
+            componentIdxs.splice(globalTaskIdx, 1);
+        }
     }
     return taskMeta.task;
 }

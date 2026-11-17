@@ -2,6 +2,7 @@ import type { ThreadLookupContext, AsyncTaskModule, TaskMeta } from '../../runti
 import { typeCheckValidI32 } from './helpers.js';
 import { getCurrentThread } from './thread-operations.js';
 import { debugLog } from '../core/debug.js';
+import { registerSlot } from '../task-context.js';
 import { getOrCreateAsyncState } from '../component.js';
 
 /**
@@ -37,7 +38,7 @@ function activeSlots(context: ThreadLookupContext, componentIdx: number | undefi
         registers.freshContextSlots ??
         (componentIdx === undefined || componentIdx === null
             ? undefined
-            : threadSlots(context, registers[componentIdx])) ??
+            : threadSlots(context, registers[registerSlot(componentIdx)])) ??
         threadSlots(context, registers.current);
     if (!slots) {
         throw new Error(

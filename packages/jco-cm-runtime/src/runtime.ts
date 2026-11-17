@@ -346,6 +346,8 @@ export interface TaskMeta {
 }
 export interface TaskRegisters {
     [componentIdx: number]: TaskMeta | null | undefined;
+    /** Register of host tasks, whose component index of -1 is not an array index. */
+    host?: TaskMeta | null;
     current?: TaskMeta | null;
     /**
      * Context slots in force in place of those of any thread. Set while a guest function wrapped

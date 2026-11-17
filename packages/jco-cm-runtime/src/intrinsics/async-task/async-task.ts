@@ -71,13 +71,17 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         #entryFnName: string | undefined;
         #onResolveHandlers: ((value: unknown) => void)[] = [];
         #progressWaiters: (() => void)[] = [];
-        #completionPromise!: Promise<unknown>;
+        // The promises of a task are created when first needed: a sync task that
+        // completes normally is never awaited, and every call creates a task.
+        #completionPromise: Promise<unknown> | undefined;
+        #resolveCompletionPromise: ((value: unknown) => void) | undefined;
+        #rejectCompletionPromise: ((reason: unknown) => void) | undefined;
+        #completionSettled = false;
         #completionValue: unknown;
         #completionReady = false;
-        #settleCompletionPromise!: () => void;
         #rejected = false;
-        #exitPromise!: Promise<void>;
-        #resolveExitPromise!: () => void;
+        #exitPromise: Promise<void> | undefined;
+        #resolveExitPromise: (() => void) | undefined;
         #memoryIdx: number | null | undefined = null;
         #memory: RuntimeMemory | null | undefined = null;
         #callbackFn: TaskCallback | null = null;
@@ -130,53 +134,23 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             // explicitly (they run host code nested inside the caller's
             // already-locked slice).
             this.#callingWasmExport = opts.callingWasmExport !== false;
-            const {
-                promise: completionPromise,
-                resolve: resolveCompletionPromise,
-                reject: rejectCompletionPromise,
-            } = promiseWithResolvers();
-            this.#completionPromise = completionPromise;
-            // A nested rejection can reach the root task while its Wasm
-            // entrypoint is still suspended, before the export wrapper awaits
-            // this promise. Mark it handled immediately while preserving the
-            // original rejected promise for the eventual caller.
-            // Do not forward successful results into a derived promise: that
-            // would assimilate a returned future and read it before the host.
-            completionPromise.then(emptyFunc, emptyFunc);
-            let completionSettled = false;
-            const settleCompletionPromise = () => {
-                if (completionSettled || !this.#completionReady) {
-                    return;
-                }
-                completionSettled = true;
-                if (this.#errored !== null) {
-                    rejectCompletionPromise(this.#errored);
-                } else if (this.#rejected) {
-                    rejectCompletionPromise(this.#completionValue);
-                } else if (this.#preserveFutureResult && this.#completionValue instanceof FutureValue) {
-                    this.#completionValue.resolveAsValue(resolveCompletionPromise);
-                } else {
-                    resolveCompletionPromise(this.#completionValue);
-                }
-            };
-            this.#settleCompletionPromise = settleCompletionPromise;
-            this.#onResolveHandlers.push((results) => {
-                if (this.#parentSubtask !== null) {
-                    return;
-                }
-                if (!this.#isAsync && !this.#isManualAsync) {
-                    return;
-                }
-                this.#completionValue = results;
-                this.#completionReady = true;
-                // Publish after the current guest slice returns, so a trap
-                // in that slice can still reject the call. Do not wait for
-                // task exit: detached work may require further host calls
-                // or consumption of a returned resource's stream.
-            });
-            const { promise: exitPromise, resolve: resolveExitPromise } = promiseWithResolvers<void>();
-            this.#exitPromise = exitPromise;
-            this.#resolveExitPromise = resolveExitPromise;
+            // Only an async task publishes its result through the completion promise,
+            // so only such a task needs the promise, and the handler that records
+            // the result, from the start.
+            if (this.#isAsync || this.#isManualAsync) {
+                this.#ensureCompletionPromise();
+                this.#onResolveHandlers.push((results) => {
+                    if (this.#parentSubtask !== null) {
+                        return;
+                    }
+                    this.#completionValue = results;
+                    this.#completionReady = true;
+                    // Publish after the current guest slice returns, so a trap
+                    // in that slice can still reject the call. Do not wait for
+                    // task exit: detached work may require further host calls
+                    // or consumption of a returned resource's stream.
+                });
+            }
             if (opts.callbackFn) {
                 this.#callbackFn = opts.callbackFn;
             }
@@ -253,13 +227,64 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             this.#resourceScopeExited = true;
             _scopeTasks.delete(this.#resourceScopeId);
         }
-        completionPromise() {
+        /**
+         * Create the completion promise if it does not exist yet.
+         *
+         * @returns the promise that settles with the outcome of the task
+         */
+        #ensureCompletionPromise(): Promise<unknown> {
+            if (this.#completionPromise === undefined) {
+                const { promise, resolve, reject } = promiseWithResolvers();
+                this.#completionPromise = promise;
+                this.#resolveCompletionPromise = resolve;
+                this.#rejectCompletionPromise = reject;
+                // A nested rejection can reach the root task while its Wasm
+                // entrypoint is still suspended, before the export wrapper awaits
+                // this promise. Mark it handled immediately while preserving the
+                // original rejected promise for the eventual caller.
+                // Do not forward successful results into a derived promise: that
+                // would assimilate a returned future and read it before the host.
+                promise.then(emptyFunc, emptyFunc);
+            }
             return this.#completionPromise;
+        }
+
+        /** Settle the completion promise, once, when the outcome of the task is known. */
+        #settleCompletionPromise() {
+            if (this.#completionSettled || !this.#completionReady) {
+                return;
+            }
+            this.#completionSettled = true;
+            this.#ensureCompletionPromise();
+            const resolve = this.#resolveCompletionPromise!;
+            const reject = this.#rejectCompletionPromise!;
+
+            if (this.#errored !== null) {
+                reject(this.#errored);
+            } else if (this.#rejected) {
+                reject(this.#completionValue);
+            } else if (this.#preserveFutureResult && this.#completionValue instanceof FutureValue) {
+                this.#completionValue.resolveAsValue(resolve);
+            } else {
+                resolve(this.#completionValue);
+            }
+        }
+        completionPromise() {
+            return this.#ensureCompletionPromise();
         }
         settleCompletion() {
             this.#settleCompletionPromise();
         }
         exitPromise() {
+            if (this.#exitPromise === undefined) {
+                if (this.#exited) {
+                    this.#exitPromise = Promise.resolve();
+                } else {
+                    const { promise, resolve } = promiseWithResolvers<void>();
+                    this.#exitPromise = promise;
+                    this.#resolveExitPromise = resolve;
+                }
+            }
             return this.#exitPromise;
         }
         waitForProgress() {
@@ -1042,7 +1067,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) {
                     this.#settleCompletionPromise();
                 }
-                this.#resolveExitPromise();
+                this.#resolveExitPromise?.();
             } catch (err) {
                 console.error('error during task exit handler', err);
                 throw err;
