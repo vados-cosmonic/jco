@@ -10,330 +10,372 @@ import type {
     FutureGuestCopyOptions,
     FutureHostReadOptions,
 } from '../../runtime.js';
+import { FutureEnd as FutureEndClass, futureEndStore, type FutureEndStore } from './end.js';
 import type { FutureEndSuperclass } from './inheritance.js';
 import { debugLog } from '../core/debug.js';
+import { asConstructorOf } from '../core/shared-class.js';
 import { getOrCreateAsyncState } from '../component.js';
 
-/** Create readable endpoints sharing the selected buffers, state, and constructor identities. */
-export function initializeFutureReadableEndClass(_context: FutureReadableClassContext): FutureReadableEndConstructor {
-    const FutureEnd: FutureEndSuperclass = _context.FutureEnd;
-    const { FutureValue } = _context;
+const FutureEnd: FutureEndSuperclass = FutureEndClass;
 
-    class FutureReadableEnd extends FutureEnd {
-        #globalFutureMapRep?: number;
-        #futureTableIdx: number;
-        #isHostOwned?: boolean;
-        #hostInjectFn?: FutureHostInjectFn;
-        #elemMeta: FutureElementMetadata;
-        #handle?: number;
-        #promise?: FutureValue;
+/** What one `initializeFutureReadableEndClass` call shares between the ends it constructs. */
+interface FutureReadableEndStore {
+    readonly base: FutureEndStore;
+    readonly FutureValue: FutureReadableClassContext['FutureValue'];
+}
 
-        target: unknown;
+class FutureReadableEnd extends FutureEnd {
+    #context: FutureReadableClassContext;
+    #store: FutureReadableEndStore;
 
-        constructor(args: FutureEndpointOptions) {
-            DEBUG: debugLog('[FutureReadableEnd#constructor()] args', args);
-            super(args);
+    /**
+     * Whether a value was constructed through one `initializeFutureReadableEndClass` call.
+     *
+     * @param value - any value
+     * @param store - the store of that call
+     * @returns whether the value is an instance belonging to that store
+     */
+    static constructedIn(value: unknown, store: object): boolean {
+        return typeof value === 'object' && value !== null && #store in value && value.#store === store;
+    }
 
-            if (!args.elemMeta) {
-                throw new Error('missing/invalid element meta');
-            }
-            this.#elemMeta = args.elemMeta;
+    #globalFutureMapRep?: number;
+    #futureTableIdx: number;
+    #isHostOwned?: boolean;
+    #hostInjectFn?: FutureHostInjectFn;
+    #elemMeta: FutureElementMetadata;
+    #handle?: number;
+    #promise?: FutureValue;
 
-            if (args.tableIdx === undefined) {
-                throw new Error('missing index for future table idx');
-            }
-            this.#futureTableIdx = args.tableIdx;
+    target: unknown;
 
-            this.#hostInjectFn = args.hostInjectFn;
-            this.#isHostOwned = args.hostOwned;
+    constructor(context: FutureReadableClassContext, store: FutureReadableEndStore, args: FutureEndpointOptions) {
+        DEBUG: debugLog('[FutureReadableEnd#constructor()] args', args);
+        super(store.base, args);
+        this.#context = context;
+        this.#store = store;
+
+        if (!args.elemMeta) {
+            throw new Error('missing/invalid element meta');
         }
+        this.#elemMeta = args.elemMeta;
 
-        isReadable() {
-            return true;
+        if (args.tableIdx === undefined) {
+            throw new Error('missing index for future table idx');
         }
-        isWritable() {
-            return false;
-        }
+        this.#futureTableIdx = args.tableIdx;
 
-        setTarget(tgt: unknown) {
-            this.target = tgt;
-        }
+        this.#hostInjectFn = args.hostInjectFn;
+        this.#isHostOwned = args.hostOwned;
+    }
 
-        getElemMeta() {
-            return { ...this.#elemMeta };
-        }
-        futureTableIdx() {
-            return this.#futureTableIdx;
-        }
-        setFutureTableIdx(idx: number) {
-            this.#futureTableIdx = idx;
-        }
+    isReadable() {
+        return true;
+    }
+    isWritable() {
+        return false;
+    }
 
-        globalFutureMapRep() {
-            return this.#globalFutureMapRep;
-        }
-        setGlobalFutureMapRep(rep: number) {
-            this.#globalFutureMapRep = rep;
-        }
+    setTarget(tgt: unknown) {
+        this.target = tgt;
+    }
 
-        waitableIdx() {
-            return this.getWaitable().idx();
-        }
-        setWaitableIdx(idx: number) {
-            const w = this.getWaitable();
-            w.setIdx(idx);
-            w.setTarget(`waitable for FutureReadableEnd (waitable [${idx}])`);
-        }
+    getElemMeta() {
+        return { ...this.#elemMeta };
+    }
+    futureTableIdx() {
+        return this.#futureTableIdx;
+    }
+    setFutureTableIdx(idx: number) {
+        this.#futureTableIdx = idx;
+    }
 
-        handle() {
-            return this.#handle;
-        }
-        setHandle(h: number) {
-            this.#handle = h;
-        }
+    globalFutureMapRep() {
+        return this.#globalFutureMapRep;
+    }
+    setGlobalFutureMapRep(rep: number) {
+        this.#globalFutureMapRep = rep;
+    }
 
-        setHostInjectFn(f: FutureHostInjectFn) {
-            if (this.#hostInjectFn) {
-                throw new Error('host injection fn is already set');
-            }
-            this.#hostInjectFn = f;
+    waitableIdx() {
+        return this.getWaitable().idx();
+    }
+    setWaitableIdx(idx: number) {
+        const w = this.getWaitable();
+        w.setIdx(idx);
+        w.setTarget(`waitable for FutureReadableEnd (waitable [${idx}])`);
+    }
+
+    handle() {
+        return this.#handle;
+    }
+    setHandle(h: number) {
+        this.#handle = h;
+    }
+
+    setHostInjectFn(f: FutureHostInjectFn) {
+        if (this.#hostInjectFn) {
+            throw new Error('host injection fn is already set');
         }
+        this.#hostInjectFn = f;
+    }
 
-        promise() {
-            if (this.#promise) {
-                return this.#promise;
-            }
-            // NOTE: we return a "thenable" here to ensure that simply lifting the future does
-            // not trigger a host read.
-
-            this.#promise = new FutureValue(
-                () => this.hostRead({ stringEncoding: 'utf8' }),
-                () => this.hostDrop(),
-            );
+    promise() {
+        if (this.#promise) {
             return this.#promise;
         }
+        // NOTE: we return a "thenable" here to ensure that simply lifting the future does
+        // not trigger a host read.
 
-        cancel() {
-            DEBUG: debugLog('[FutureEnd#cancel()]');
-            this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
+        this.#promise = new this.#store.FutureValue(
+            () => this.hostRead({ stringEncoding: 'utf8' }),
+            () => this.hostDrop(),
+        );
+        return this.#promise;
+    }
+
+    cancel() {
+        DEBUG: debugLog('[FutureEnd#cancel()]');
+        this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
+    }
+
+    _read(args: FutureCopyOptions) {
+        const { buffer, onCopyDoneFn, componentIdx } = args;
+        if (!buffer) {
+            throw new Error('missing buffer for future read');
         }
 
-        _read(args: FutureCopyOptions) {
-            const { buffer, onCopyDoneFn, componentIdx } = args;
-            if (!buffer) {
-                throw new Error('missing buffer for future read');
-            }
-
-            if (this.isDropped()) {
-                throw new Error('cannot read from dropped future');
-            }
-            if (buffer.remaining() !== 1) {
-                throw new Error(`invalid remaining values in buffer (expecetd one, received [${buffer.remaining()}]`);
-            }
-
-            const meta = this.getPendingBufferMeta();
-            if (!meta) {
-                throw new Error('missing pending buffer metadata');
-            }
-            if (!meta.buffer) {
-                this.setPendingBufferMeta({
-                    buffer,
-                    componentIdx,
-                    isWrite: false,
-                    onCopyDoneFn,
-                });
-                return;
-            }
-
-            if (
-                componentIdx === meta.componentIdx &&
-                componentIdx !== -1 &&
-                !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)
-            ) {
-                throw new _context.RuntimeError('cannot read from and write to intra-component future');
-            }
-
-            const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-            transferBuffer(meta.buffer, buffer, 1, { transferResources });
-            this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
-            onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
+        if (this.isDropped()) {
+            throw new Error('cannot read from dropped future');
+        }
+        if (buffer.remaining() !== 1) {
+            throw new Error(`invalid remaining values in buffer (expecetd one, received [${buffer.remaining()}]`);
         }
 
-        // TODO: rename, guestRead also handles host reads (when data is present)...
-        guestRead(args: FutureGuestCopyOptions) {
-            DEBUG: debugLog('[FutureReadableEnd#guestRead()] args', args);
-            const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
-
-            const elemMeta = {
-                ...(args.elemMeta ?? this.#elemMeta),
-                stringEncoding: stringEncoding ?? this.#elemMeta.stringEncoding,
-                getReallocFn: args.getReallocFn ?? this.#elemMeta.getReallocFn,
-            };
-            if (elemMeta.isBorrowed) {
-                throw new Error('cannot call future.read on a borrow');
-            }
-
-            let buffer = args.buffer;
-            if (!buffer) {
-                const createBufferRes = _context.buffers.createBuffer({
-                    componentIdx,
-                    memory,
-                    realloc,
-                    start: ptr,
-                    data,
-                    count: 1,
-                    isReadable: this.isWritable(),
-                    isWritable: this.isReadable(),
-                    elemMeta,
-                });
-                buffer = createBufferRes.buffer;
-            }
-
-            const futureEvent = (res: number) => {
-                if (buffer.remaining() === 0) {
-                    if (res !== FutureEnd.CopyResult.COMPLETED) {
-                        throw new Error('invalid buffer state, expected zero remaining post-completion');
-                    }
-                } else {
-                    if (res === FutureEnd.CopyResult.COMPLETED) {
-                        throw new Error('invalid buffer state, expected 1 remaining post-completion');
-                    }
-                }
-                if (res === FutureEnd.CopyResult.DROPPED || res === FutureEnd.CopyResult.COMPLETED) {
-                    this.setCopyState(FutureEnd.CopyState.DONE);
-                } else {
-                    this.setCopyState(FutureEnd.CopyState.IDLE);
-                }
-                return { code: _context.events.FUTURE_READ, payload0: this.waitableIdx()!, payload1: res };
-            };
-
-            const isReadableEnd = this.isReadable();
-            const onCopyDoneFn = (res: number) => {
-                if (res === FutureEnd.CopyResult.DROPPED && isReadableEnd) {
-                    throw new Error('cannot read from a dropped future');
-                }
-                this.setPendingEvent(() => futureEvent(res));
-            };
-
-            // Before performing this read, if we're dealing with a host-controlled
-            // future, start injecting the write. The injection may depend on sibling
-            // guest work running, so cleanup is attached without awaiting here; the
-            // canonical read must be able to return BLOCKED first.
-            let injectedWritePromise;
-            if (this.#hostInjectFn) {
-                injectedWritePromise = this.#hostInjectFn({ count: 1 });
-            }
-
-            this._read({
+        const meta = this.getPendingBufferMeta();
+        if (!meta) {
+            throw new Error('missing pending buffer metadata');
+        }
+        if (!meta.buffer) {
+            this.setPendingBufferMeta({
                 buffer,
-                onCopyDoneFn,
                 componentIdx,
+                isWrite: false,
+                onCopyDoneFn,
             });
-
-            if (injectedWritePromise) {
-                injectedWritePromise.then(
-                    (cleanupFn) => cleanupFn(),
-                    (err) =>
-                        this.setPendingEvent(() => {
-                            throw err;
-                        }),
-                );
-            }
-
-            return { buffer };
+            return;
         }
 
-        async hostRead(args: FutureHostReadOptions) {
-            if (_context.storeTrap.stopped) {
-                throw _context.storeTrap.error;
-            }
-            const { stringEncoding } = args;
+        if (
+            componentIdx === meta.componentIdx &&
+            componentIdx !== -1 &&
+            !(this.#elemMeta.isNone || this.#elemMeta.isNumeric)
+        ) {
+            throw new this.#context.RuntimeError('cannot read from and write to intra-component future');
+        }
 
-            const { buffer } = await this.guestRead({
-                stringEncoding,
-                isAsync: true,
-                data: [],
-                componentIdx: -1,
+        const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
+        transferBuffer(meta.buffer, buffer, 1, { transferResources });
+        this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
+        onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
+    }
+
+    // TODO: rename, guestRead also handles host reads (when data is present)...
+    guestRead(args: FutureGuestCopyOptions) {
+        DEBUG: debugLog('[FutureReadableEnd#guestRead()] args', args);
+        const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
+
+        const elemMeta = {
+            ...(args.elemMeta ?? this.#elemMeta),
+            stringEncoding: stringEncoding ?? this.#elemMeta.stringEncoding,
+            getReallocFn: args.getReallocFn ?? this.#elemMeta.getReallocFn,
+        };
+        if (elemMeta.isBorrowed) {
+            throw new Error('cannot call future.read on a borrow');
+        }
+
+        let buffer = args.buffer;
+        if (!buffer) {
+            const createBufferRes = this.#context.buffers.createBuffer({
+                componentIdx,
+                memory,
+                realloc,
+                start: ptr,
+                data,
+                count: 1,
+                isReadable: this.isWritable(),
+                isWritable: this.isReadable(),
+                elemMeta,
+            });
+            buffer = createBufferRes.buffer;
+        }
+
+        const futureEvent = (res: number) => {
+            if (buffer.remaining() === 0) {
+                if (res !== FutureEnd.CopyResult.COMPLETED) {
+                    throw new Error('invalid buffer state, expected zero remaining post-completion');
+                }
+            } else {
+                if (res === FutureEnd.CopyResult.COMPLETED) {
+                    throw new Error('invalid buffer state, expected 1 remaining post-completion');
+                }
+            }
+            if (res === FutureEnd.CopyResult.DROPPED || res === FutureEnd.CopyResult.COMPLETED) {
+                this.setCopyState(FutureEnd.CopyState.DONE);
+            } else {
+                this.setCopyState(FutureEnd.CopyState.IDLE);
+            }
+            return { code: this.#context.events.FUTURE_READ, payload0: this.waitableIdx()!, payload1: res };
+        };
+
+        const isReadableEnd = this.isReadable();
+        const onCopyDoneFn = (res: number) => {
+            if (res === FutureEnd.CopyResult.DROPPED && isReadableEnd) {
+                throw new Error('cannot read from a dropped future');
+            }
+            this.setPendingEvent(() => futureEvent(res));
+        };
+
+        // Before performing this read, if we're dealing with a host-controlled
+        // future, start injecting the write. The injection may depend on sibling
+        // guest work running, so cleanup is attached without awaiting here; the
+        // canonical read must be able to return BLOCKED first.
+        let injectedWritePromise;
+        if (this.#hostInjectFn) {
+            injectedWritePromise = this.#hostInjectFn({ count: 1 });
+        }
+
+        this._read({
+            buffer,
+            onCopyDoneFn,
+            componentIdx,
+        });
+
+        if (injectedWritePromise) {
+            injectedWritePromise.then(
+                (cleanupFn) => cleanupFn(),
+                (err) =>
+                    this.setPendingEvent(() => {
+                        throw err;
+                    }),
+            );
+        }
+
+        return { buffer };
+    }
+
+    async hostRead(args: FutureHostReadOptions) {
+        if (this.#context.storeTrap.stopped) {
+            throw this.#context.storeTrap.error;
+        }
+        const { stringEncoding } = args;
+
+        const { buffer } = await this.guestRead({
+            stringEncoding,
+            isAsync: true,
+            data: [],
+            componentIdx: -1,
+        });
+
+        if (!this.hasPendingEvent()) {
+            this.setCopyState(FutureEnd.CopyState.ASYNC_COPYING);
+
+            // Wait for the write to complete
+            await new Promise<void>((resolve) => {
+                let waitInterval = setInterval(() => {
+                    if (!this.hasPendingEvent() && !this.isDropped()) {
+                        return;
+                    }
+                    clearInterval(waitInterval);
+                    resolve();
+                });
             });
 
             if (!this.hasPendingEvent()) {
-                this.setCopyState(FutureEnd.CopyState.ASYNC_COPYING);
-
-                // Wait for the write to complete
-                await new Promise<void>((resolve) => {
-                    let waitInterval = setInterval(() => {
-                        if (!this.hasPendingEvent() && !this.isDropped()) {
-                            return;
-                        }
-                        clearInterval(waitInterval);
-                        resolve();
-                    });
-                });
-
-                if (!this.hasPendingEvent()) {
-                    throw new Error('future dropped while being read');
-                }
+                throw new Error('future dropped while being read');
             }
-
-            const { code, payload0: index, payload1: payload } = this.getPendingEvent()!;
-
-            if (code !== _context.events.FUTURE_READ) {
-                throw new Error(`mismatched event code [${code}] for host future read`);
-            }
-            if (index !== this.waitableIdx()) {
-                throw new Error('mismatched future end index');
-            }
-
-            if (payload === FutureEnd.CopyResult.DROPPED && _context.storeTrap.stopped) {
-                throw _context.storeTrap.error;
-            }
-
-            const vs = buffer.read(1);
-            if (vs.length !== 1) {
-                throw new Error('multiple results from future');
-            }
-
-            // The copy event is published from inside the guest's current
-            // callback slice.
-            //
-            // Here we avoid exposing the lifted value to host code
-            // until that slice has returned and released the instance lock, because
-            // the consumer could immediately make a synchronous call on the lifted value
-            // (e.g. if it's a resource)
-            const componentIdx = this.getWaitable().componentIdx();
-            if (componentIdx !== -1) {
-                await getOrCreateAsyncState(_context.lookup, componentIdx!).waitForExclusiveRelease();
-            }
-
-            return { value: vs[0] };
         }
 
-        /** A host may discard its pending read without trapping the guest. */
-        hostDrop() {
-            if (this.isDropped()) {
-                return;
-            }
-            const meta = this.getPendingBufferMeta();
-            if (meta.buffer && !meta.isWrite) {
-                this.resetPendingBufferMeta();
-            }
-            this.drop();
+        const { code, payload0: index, payload1: payload } = this.getPendingEvent()!;
+
+        if (code !== this.#context.events.FUTURE_READ) {
+            throw new Error(`mismatched event code [${code}] for host future read`);
+        }
+        if (index !== this.waitableIdx()) {
+            throw new Error('mismatched future end index');
         }
 
-        drop() {
-            super.drop();
-            // Let a host-provided future know if its value was discarded
-            this.#hostInjectFn?.drop?.();
+        if (payload === FutureEnd.CopyResult.DROPPED && this.#context.storeTrap.stopped) {
+            throw this.#context.storeTrap.error;
         }
-        /** Stop the endpoint and notify a host source that its value was discarded. */
-        onInstanceStop() {
-            if (this.isDropped()) {
-                return;
-            }
-            super.onInstanceStop();
-            this.#hostInjectFn?.drop?.();
+
+        const vs = buffer.read(1);
+        if (vs.length !== 1) {
+            throw new Error('multiple results from future');
         }
+
+        // The copy event is published from inside the guest's current
+        // callback slice.
+        //
+        // Here we avoid exposing the lifted value to host code
+        // until that slice has returned and released the instance lock, because
+        // the consumer could immediately make a synchronous call on the lifted value
+        // (e.g. if it's a resource)
+        const componentIdx = this.getWaitable().componentIdx();
+        if (componentIdx !== -1) {
+            await getOrCreateAsyncState(this.#context.lookup, componentIdx!).waitForExclusiveRelease();
+        }
+
+        return { value: vs[0] };
     }
 
-    return FutureReadableEnd;
+    /** A host may discard its pending read without trapping the guest. */
+    hostDrop() {
+        if (this.isDropped()) {
+            return;
+        }
+        const meta = this.getPendingBufferMeta();
+        if (meta.buffer && !meta.isWrite) {
+            this.resetPendingBufferMeta();
+        }
+        this.drop();
+    }
+
+    drop() {
+        super.drop();
+        // Let a host-provided future know if its value was discarded
+        this.#hostInjectFn?.drop?.();
+    }
+    /** Stop the endpoint and notify a host source that its value was discarded. */
+    onInstanceStop() {
+        if (this.isDropped()) {
+            return;
+        }
+        super.onInstanceStop();
+        this.#hostInjectFn?.drop?.();
+    }
+}
+
+/** Create readable endpoints sharing the selected buffers, state, and constructor identities. */
+export function initializeFutureReadableEndClass(_context: FutureReadableClassContext): FutureReadableEndConstructor {
+    const store: FutureReadableEndStore = {
+        base: futureEndStore(_context.FutureEnd),
+        FutureValue: _context.FutureValue,
+    };
+
+    /**
+     * Construct a readable end that uses the context.
+     *
+     * @param args - options of the future end
+     * @returns the readable end
+     */
+    function StoreFutureReadableEnd(args: FutureEndpointOptions) {
+        return new FutureReadableEnd(_context, store, args);
+    }
+    const bound = asConstructorOf<FutureReadableEndConstructor>(StoreFutureReadableEnd, FutureReadableEnd, (value) =>
+        FutureReadableEnd.constructedIn(value, store),
+    );
+    // Static members come from the class of the context, the superclass of this one.
+    Object.setPrototypeOf(bound, _context.FutureEnd);
+    return bound;
 }

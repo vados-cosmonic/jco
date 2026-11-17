@@ -7,184 +7,220 @@ import type {
     StreamInnerCopyOptions,
 } from '../../runtime.js';
 import { debugLog } from '../core/debug.js';
+import { asConstructorOf } from '../core/shared-class.js';
+import { StreamEnd as StreamEndClass, streamEndStore, type StreamEndStore } from './end.js';
 import type { StreamEndSuperclass } from './inheritance.js';
-export function initializeStreamWritableEndClass(_context: StreamEndpointClassContext): StreamWritableEndConstructor {
-    const StreamEnd: StreamEndSuperclass = _context.StreamEnd;
 
-    class StreamWritableEnd extends StreamEnd {
-        #elemMeta: StreamElementMetadata;
-        #sourceRebufferFn: ((items: unknown[]) => void) | null = null;
+const StreamEnd: StreamEndSuperclass = StreamEndClass;
 
-        constructor(args: StreamEndOptions) {
-            DEBUG: debugLog('[StreamWritableEnd#constructor()] args', args);
-            super(args);
-            this.#elemMeta = args.elemMeta;
+class StreamWritableEnd extends StreamEnd {
+    #context: StreamEndpointClassContext;
+    // What one `initializeStreamWritableEndClass` call shares between the instances it constructs.
+    #store: { readonly base: StreamEndStore };
+
+    /**
+     * Whether a value was constructed through one `initializeStreamWritableEndClass` call.
+     *
+     * @param value - any value
+     * @param store - the store of that call
+     * @returns whether the value is an instance belonging to that store
+     */
+    static constructedIn(value: unknown, store: object): boolean {
+        return typeof value === 'object' && value !== null && #store in value && value.#store === store;
+    }
+
+    #elemMeta: StreamElementMetadata;
+    #sourceRebufferFn: ((items: unknown[]) => void) | null = null;
+
+    constructor(context: StreamEndpointClassContext, store: { readonly base: StreamEndStore }, args: StreamEndOptions) {
+        DEBUG: debugLog('[StreamWritableEnd#constructor()] args', args);
+        super(store.base, args);
+        this.#context = context;
+        this.#store = store;
+        this.#elemMeta = args.elemMeta;
+    }
+
+    isReadable() {
+        return false;
+    }
+    isWritable() {
+        return true;
+    }
+
+    setSourceRebufferFn(f: (items: unknown[]) => void) {
+        this.#sourceRebufferFn = f;
+    }
+
+    async write(v: unknown) {
+        DEBUG: debugLog('[StreamWritableEnd#write()] args', { v });
+
+        let data;
+        if (this.#elemMeta.isNumeric) {
+            if (v instanceof ArrayBuffer) {
+                v = new Uint8Array(v);
+            }
+            data =
+                Array.isArray(v) || (ArrayBuffer.isView(v) && 'length' in v && typeof v.length === 'number')
+                    ? Array.from(v as ArrayLike<unknown>)
+                    : [v];
+        } else {
+            data = [v];
+        }
+        return this.writeMany(data);
+    }
+
+    /**
+     * Offers `values` to the reader. Every writable end is written by the host, just in time
+     * for a guest read, so a write the reader has not taken yet stays pending and is not awaited.
+     */
+    async writeMany(values: unknown[], opts: { dropAfterCopy?: boolean } = {}) {
+        DEBUG: debugLog('[StreamWritableEnd#writeMany()] args', { values });
+        if (!Array.isArray(values)) {
+            throw new TypeError('writeMany values must be an array');
         }
 
-        isReadable() {
-            return false;
+        const count = values.length;
+        const { id: bufferID, buffer } = this.#context.buffers.createBuffer({
+            componentIdx: -1,
+            count,
+            isReadable: true, // we need to read from this buffer later
+            isWritable: false,
+            elemMeta: this.#elemMeta,
+            data: values,
+        });
+        buffer.setTarget(`host stream write buffer (id [${bufferID}], count [${count}])`);
+
+        const copied = this.copy({
+            isAsync: true,
+            count,
+            buffer,
+            eventCode: this.#context.events.STREAM_WRITE,
+            componentIdx: -1,
+            dropAfterCopy: opts.dropAfterCopy === true,
+        });
+        if (this.hasPendingEvent()) {
+            // The guest read path consumes the pending event, so waiting here can deadlock.
+            Promise.resolve(copied).catch(() => {});
+            return;
         }
-        isWritable() {
-            return true;
+        await copied;
+    }
+
+    /** Drains the writer's buffer into the buffer a reader left pending, or leaves the writer's pending. */
+    _transfer(args: StreamInnerCopyOptions) {
+        const { buffer, onCopyFn, onCopyDoneFn, componentIdx, dropAfterCopy } = args;
+        const pending = this.getPendingBufferMeta();
+        if (!buffer) {
+            throw new TypeError('missing/invalid buffer');
+        }
+        if (!onCopyFn) {
+            throw new TypeError('missing/invalid onCopy handler');
+        }
+        if (!onCopyDoneFn) {
+            throw new TypeError('missing/invalid onCopyDone handler');
+        }
+        if (this.isDropped()) {
+            onCopyDoneFn(StreamEnd.CopyResult.DROPPED);
+            return;
         }
 
-        setSourceRebufferFn(f: (items: unknown[]) => void) {
-            this.#sourceRebufferFn = f;
-        }
-
-        async write(v: unknown) {
-            DEBUG: debugLog('[StreamWritableEnd#write()] args', { v });
-
-            let data;
-            if (this.#elemMeta.isNumeric) {
-                if (v instanceof ArrayBuffer) {
-                    v = new Uint8Array(v);
+        if (!pending.buffer) {
+            // A just-in-time host-injected write found no reader buffer: the
+            // target read was cancelled. Return the undelivered items to the
+            // source (redelivered by a later read) instead of stranding
+            // (which blocks on a future read -- can deadlock a stream whose
+            // write waits on its reader -- or is dropped at stream end).
+            if (this.#sourceRebufferFn && buffer.isHostOwned()) {
+                const remaining = buffer.remaining();
+                if (remaining > 0) {
+                    this.#sourceRebufferFn(buffer.read(remaining));
                 }
-                data =
-                    Array.isArray(v) || (ArrayBuffer.isView(v) && 'length' in v && typeof v.length === 'number')
-                        ? Array.from(v as ArrayLike<unknown>)
-                        : [v];
-            } else {
-                data = [v];
-            }
-            return this.writeMany(data);
-        }
-
-        /**
-         * Offers `values` to the reader. Every writable end is written by the host, just in time
-         * for a guest read, so a write the reader has not taken yet stays pending and is not awaited.
-         */
-        async writeMany(values: unknown[], opts: { dropAfterCopy?: boolean } = {}) {
-            DEBUG: debugLog('[StreamWritableEnd#writeMany()] args', { values });
-            if (!Array.isArray(values)) {
-                throw new TypeError('writeMany values must be an array');
-            }
-
-            const count = values.length;
-            const { id: bufferID, buffer } = _context.buffers.createBuffer({
-                componentIdx: -1,
-                count,
-                isReadable: true, // we need to read from this buffer later
-                isWritable: false,
-                elemMeta: this.#elemMeta,
-                data: values,
-            });
-            buffer.setTarget(`host stream write buffer (id [${bufferID}], count [${count}])`);
-
-            const copied = this.copy({
-                isAsync: true,
-                count,
-                buffer,
-                eventCode: _context.events.STREAM_WRITE,
-                componentIdx: -1,
-                dropAfterCopy: opts.dropAfterCopy === true,
-            });
-            if (this.hasPendingEvent()) {
-                // The guest read path consumes the pending event, so waiting here can deadlock.
-                Promise.resolve(copied).catch(() => {});
-                return;
-            }
-            await copied;
-        }
-
-        /** Drains the writer's buffer into the buffer a reader left pending, or leaves the writer's pending. */
-        _transfer(args: StreamInnerCopyOptions) {
-            const { buffer, onCopyFn, onCopyDoneFn, componentIdx, dropAfterCopy } = args;
-            const pending = this.getPendingBufferMeta();
-            if (!buffer) {
-                throw new TypeError('missing/invalid buffer');
-            }
-            if (!onCopyFn) {
-                throw new TypeError('missing/invalid onCopy handler');
-            }
-            if (!onCopyDoneFn) {
-                throw new TypeError('missing/invalid onCopyDone handler');
-            }
-            if (this.isDropped()) {
-                onCopyDoneFn(StreamEnd.CopyResult.DROPPED);
-                return;
-            }
-
-            if (!pending.buffer) {
-                // A just-in-time host-injected write found no reader buffer: the
-                // target read was cancelled. Return the undelivered items to the
-                // source (redelivered by a later read) instead of stranding
-                // (which blocks on a future read -- can deadlock a stream whose
-                // write waits on its reader -- or is dropped at stream end).
-                if (this.#sourceRebufferFn && buffer.isHostOwned()) {
-                    const remaining = buffer.remaining();
-                    if (remaining > 0) {
-                        this.#sourceRebufferFn(buffer.read(remaining));
-                    }
-                    onCopyDoneFn(StreamEnd.CopyResult.COMPLETED);
-                    return;
-                }
-                this.setPendingBufferMeta({ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy });
-                return;
-            }
-
-            const pendingElemMeta = pending.buffer.getElemMeta();
-            const newBufferElemMeta = buffer.getElemMeta();
-            if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {
-                throw new _context.RuntimeError('stream end type does not match internal buffer');
-            }
-
-            // If the buffer came from the same component that is currently doing the operation
-            // we're doing a inter-component write, and only unit or numeric types are allowed
-            const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
-            // End.copy checks the payload type even when either buffer is empty.
-            if (
-                pending.componentIdx === buffer.componentIdx() &&
-                buffer.componentIdx() !== -1 &&
-                !pendingElemIsNoneOrNumeric
-            ) {
-                throw new _context.RuntimeError(
-                    'cannot read from and write to intra-component future/stream with non-numeric payload',
-                );
-            }
-
-            // If original capacities were zero, we're dealing with a unit stream,
-            // a write to the unit stream is instantly copied without any work.
-            if (buffer.capacity === 0 && pending.buffer.capacity === 0) {
                 onCopyDoneFn(StreamEnd.CopyResult.COMPLETED);
                 return;
             }
+            this.setPendingBufferMeta({ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy });
+            return;
+        }
 
-            // If the internal buffer has no space left to take writes,
-            // the write is complete, we must reset and wait for another read
-            // to clear up space in the buffer.
-            if (pending.buffer.remaining() === 0) {
-                this.resetAndNotifyPending(StreamEnd.CopyResult.COMPLETED);
-                this.setPendingBufferMeta({ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy });
+        const pendingElemMeta = pending.buffer.getElemMeta();
+        const newBufferElemMeta = buffer.getElemMeta();
+        if (pendingElemMeta.payloadTypeName !== newBufferElemMeta.payloadTypeName) {
+            throw new this.#context.RuntimeError('stream end type does not match internal buffer');
+        }
+
+        // If the buffer came from the same component that is currently doing the operation
+        // we're doing a inter-component write, and only unit or numeric types are allowed
+        const pendingElemIsNoneOrNumeric = pendingElemMeta.isNone || pendingElemMeta.isNumeric;
+        // End.copy checks the payload type even when either buffer is empty.
+        if (
+            pending.componentIdx === buffer.componentIdx() &&
+            buffer.componentIdx() !== -1 &&
+            !pendingElemIsNoneOrNumeric
+        ) {
+            throw new this.#context.RuntimeError(
+                'cannot read from and write to intra-component future/stream with non-numeric payload',
+            );
+        }
+
+        // If original capacities were zero, we're dealing with a unit stream,
+        // a write to the unit stream is instantly copied without any work.
+        if (buffer.capacity === 0 && pending.buffer.capacity === 0) {
+            onCopyDoneFn(StreamEnd.CopyResult.COMPLETED);
+            return;
+        }
+
+        // If the internal buffer has no space left to take writes,
+        // the write is complete, we must reset and wait for another read
+        // to clear up space in the buffer.
+        if (pending.buffer.remaining() === 0) {
+            this.resetAndNotifyPending(StreamEnd.CopyResult.COMPLETED);
+            this.setPendingBufferMeta({ componentIdx, buffer, onCopyFn, onCopyDoneFn, dropAfterCopy });
+            return;
+        }
+
+        const shouldDropAfterCopy = dropAfterCopy || pending.dropAfterCopy;
+
+        // At this point it is implied that remaining is > 0,
+        // so if there is still remaining capacity in the incoming buffer, perform copy of values
+        // to the internal buffer from the incoming buffer
+        if (buffer.remaining() > 0) {
+            const rejectLength = pending.rejectLength;
+            if (rejectLength !== undefined && buffer.remaining() > rejectLength) {
+                const pendingOnCopyDoneFn = pending.onCopyDoneFn;
+                this.resetPendingBufferMeta();
+                pendingOnCopyDoneFn!(StreamEnd.CopyResult.DROPPED, buffer.remaining());
+                onCopyDoneFn(StreamEnd.CopyResult.DROPPED);
                 return;
             }
-
-            const shouldDropAfterCopy = dropAfterCopy || pending.dropAfterCopy;
-
-            // At this point it is implied that remaining is > 0,
-            // so if there is still remaining capacity in the incoming buffer, perform copy of values
-            // to the internal buffer from the incoming buffer
-            if (buffer.remaining() > 0) {
-                const rejectLength = pending.rejectLength;
-                if (rejectLength !== undefined && buffer.remaining() > rejectLength) {
-                    const pendingOnCopyDoneFn = pending.onCopyDoneFn;
-                    this.resetPendingBufferMeta();
-                    pendingOnCopyDoneFn!(StreamEnd.CopyResult.DROPPED, buffer.remaining());
-                    onCopyDoneFn(StreamEnd.CopyResult.DROPPED);
-                    return;
-                }
-                const numElements = Math.min(buffer.remaining(), pending.buffer.remaining());
-                const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                transferBuffer(buffer, pending.buffer, numElements, { transferResources });
-                pending.onCopyFn!(
-                    () => this.resetPendingBufferMeta(),
-                    shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,
-                );
-            }
-
-            onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
+            const numElements = Math.min(buffer.remaining(), pending.buffer.remaining());
+            const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
+            transferBuffer(buffer, pending.buffer, numElements, { transferResources });
+            pending.onCopyFn!(
+                () => this.resetPendingBufferMeta(),
+                shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,
+            );
         }
-    }
 
-    return StreamWritableEnd;
+        onCopyDoneFn(shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED);
+    }
+}
+
+export function initializeStreamWritableEndClass(_context: StreamEndpointClassContext): StreamWritableEndConstructor {
+    const store = { base: streamEndStore(_context.StreamEnd) };
+
+    /**
+     * Construct a writable end that uses the context.
+     *
+     * @param args - options of the stream end
+     * @returns the writable end
+     */
+    function StoreStreamWritableEnd(args: StreamEndOptions) {
+        return new StreamWritableEnd(_context, store, args);
+    }
+    const bound = asConstructorOf<StreamWritableEndConstructor>(StoreStreamWritableEnd, StreamWritableEnd, (value) =>
+        StreamWritableEnd.constructedIn(value, store),
+    );
+    // Static members come from the class of the context, the superclass of this one.
+    Object.setPrototypeOf(bound, _context.StreamEnd);
+    return bound;
 }
