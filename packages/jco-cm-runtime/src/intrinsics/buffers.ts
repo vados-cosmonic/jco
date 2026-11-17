@@ -26,6 +26,8 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         capacity: number;
         processed = 0;
         #hostOnlyData!: unknown[]; // initial data (only filled out for host-owned)
+        #hostOffset = 0;
+        #hostDataBorrowed = true;
         target: unknown;
 
         static validateGuestBuffer(
@@ -120,8 +122,23 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                 values = [...new Array(count)].map(() => null);
             } else {
                 if (this.isHostOwned()) {
-                    values = this.#hostOnlyData.slice(0, count);
-                    this.#hostOnlyData = this.#hostOnlyData.slice(count);
+                    values = this.#hostOnlyData.slice(this.#hostOffset, this.#hostOffset + count);
+                    if (this.#hostDataBorrowed) {
+                        // Preserve snapshots held by the caller of the constructor.
+                        this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset + count);
+                        this.#hostDataBorrowed = false;
+                        this.#hostOffset = 0;
+                    } else {
+                        this.#hostOnlyData.fill(undefined, this.#hostOffset, this.#hostOffset + count);
+                        this.#hostOffset += count;
+                        if (this.#hostOffset === this.#hostOnlyData.length) {
+                            this.#hostOnlyData = [];
+                            this.#hostOffset = 0;
+                        } else if (this.#hostOffset >= 1024 && this.#hostOffset * 2 >= this.#hostOnlyData.length) {
+                            this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+                            this.#hostOffset = 0;
+                        }
+                    }
                 } else if (this.#elemMeta.payloadTypeName === 'U8') {
                     values = Array.from(new Uint8Array(this.#memory!.buffer, this.#ptr, count));
                     this.#ptr += count;
@@ -178,7 +195,14 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                 }
             } else {
                 if (this.isHostOwned()) {
-                    this.#hostOnlyData = this.#hostOnlyData.concat(values);
+                    if (this.#hostDataBorrowed) {
+                        this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
+                        this.#hostOffset = 0;
+                        this.#hostDataBorrowed = false;
+                    }
+                    for (const value of values) {
+                        this.#hostOnlyData.push(value);
+                    }
                 } else if (this.#elemMeta.payloadTypeName === 'U8') {
                     new Uint8Array(this.#memory!.buffer, this.#ptr, values.length).set(values as number[]);
                     this.#ptr += values.length;

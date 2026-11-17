@@ -15,8 +15,9 @@ export function initializePendingValueQueueClass(
         #elemMeta: StreamElementMetadata;
         #done = false;
         #sourceReadPromise: Promise<number> | null = null;
-        #chunks: StreamChunk[] = [];
-        #offset = 0;
+        #chunks: ({ data: StreamChunk; offset: number } | undefined)[] = [];
+        #head = 0;
+        #prepended: { data: StreamChunk; offset: number }[] = [];
         #length = 0;
 
         constructor(readFn: StreamReadFn, elemMeta: StreamElementMetadata) {
@@ -38,7 +39,7 @@ export function initializePendingValueQueueClass(
             if (source.length === 0) {
                 return 0;
             }
-            this.#chunks.push(source);
+            this.#chunks.push({ data: source, offset: 0 });
             this.#length += source.length;
             return source.length;
         }
@@ -100,11 +101,7 @@ export function initializePendingValueQueueClass(
             if (source.length === 0) {
                 return;
             }
-            if (this.#offset !== 0 && this.#chunks.length > 0) {
-                this.#chunks[0] = this.#chunks[0].slice(this.#offset);
-                this.#offset = 0;
-            }
-            this.#chunks.unshift(source);
+            this.#prepended.push({ data: source, offset: 0 });
             this.#length += source.length;
         }
 
@@ -112,18 +109,30 @@ export function initializePendingValueQueueClass(
             let transferred = 0;
             let remaining = Math.min(maxCount, this.#length);
             while (remaining > 0) {
-                const chunk = this.#chunks[0];
-                const transfer = Math.min(remaining, chunk.length - this.#offset);
+                const front = this.#prepended.length > 0;
+                const cursor = front ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head]!;
+                const chunk = cursor.data;
+                const transfer = Math.min(remaining, chunk.length - cursor.offset);
                 for (let i = 0; i < transfer; i++) {
-                    target.push(chunk[this.#offset + i]);
+                    target.push(chunk[cursor.offset + i]);
                 }
-                this.#offset += transfer;
+                cursor.offset += transfer;
                 this.#length -= transfer;
                 transferred += transfer;
                 remaining -= transfer;
-                if (this.#offset === chunk.length) {
-                    this.#chunks.shift();
-                    this.#offset = 0;
+                if (cursor.offset === chunk.length) {
+                    if (front) {
+                        this.#prepended.pop();
+                    } else {
+                        this.#chunks[this.#head++] = undefined;
+                        if (this.#head === this.#chunks.length) {
+                            this.#chunks = [];
+                            this.#head = 0;
+                        } else if (this.#head >= 1024 && this.#head * 2 >= this.#chunks.length) {
+                            this.#chunks = this.#chunks.slice(this.#head);
+                            this.#head = 0;
+                        }
+                    }
                 }
             }
             return transferred;
