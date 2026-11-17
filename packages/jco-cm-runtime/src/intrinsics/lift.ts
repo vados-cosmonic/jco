@@ -1,3 +1,4 @@
+import { defineScalarLift, scalarLiftValue } from './scalar-lift.js';
 import { consumeParams, readParam, remainingParams, copyParams } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
@@ -94,7 +95,9 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
     scratch: new DataView(new ArrayBuffer(8)),
 });
 
-export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatBool = /* @__PURE__ */ defineScalarLift(liftFlatBoolValue);
+
+function liftFlatBoolValue(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
     let val;
 
@@ -104,7 +107,7 @@ export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0) === 1;
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
@@ -118,10 +121,12 @@ export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Value);
+
+function liftFlatS8Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
     let val;
 
@@ -131,7 +136,7 @@ export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
@@ -144,10 +149,12 @@ export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Value);
+
+function liftFlatU8Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
     let val;
 
@@ -157,7 +164,7 @@ export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
@@ -171,10 +178,12 @@ export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 1;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Value);
+
+function liftFlatS16Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
     let val;
 
@@ -184,7 +193,7 @@ export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
@@ -197,10 +206,12 @@ export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 2;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Value);
+
+function liftFlatU16Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
     let val;
 
@@ -210,7 +221,7 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
@@ -229,10 +240,12 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storagePtr! += 2 - rem;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Value);
+
+function liftFlatS32Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
     let val;
 
@@ -242,7 +255,7 @@ export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
@@ -255,10 +268,12 @@ export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Value);
+
+function liftFlatU32Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU32()] args', { ctx });
     let val;
 
@@ -269,7 +284,7 @@ export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         // core i32 values arrive as signed numbers
         val = (readParam(ctx, 0) as number) >>> 0;
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
@@ -281,10 +296,12 @@ export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Value);
+
+function liftFlatS64Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
     let val;
 
@@ -297,7 +314,7 @@ export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
@@ -310,10 +327,12 @@ export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Value);
+
+function liftFlatU64Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
     let val;
 
@@ -327,7 +346,7 @@ export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         // core i64 values arrive as signed BigInts
         val = BigInt.asUintN(64, readParam(ctx, 0) as bigint);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
@@ -340,10 +359,12 @@ export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(liftFlatFloat32Value);
+
+function liftFlatFloat32Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
     let val;
 
@@ -354,7 +375,7 @@ export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
 
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
@@ -368,10 +389,12 @@ export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(liftFlatFloat64Value);
+
+function liftFlatFloat64Value(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
     let val;
 
@@ -382,7 +405,7 @@ export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext
         val = readParam(ctx, 0);
         consumeParams(ctx, 1);
 
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
@@ -395,10 +418,12 @@ export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext
         ctx.storageLen -= 8;
     }
 
-    return [val, ctx];
+    return val;
 }
 
-export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+export const liftFlatChar = /* @__PURE__ */ defineScalarLift(liftFlatCharValue);
+
+function liftFlatCharValue(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
     let val;
 
@@ -408,7 +433,7 @@ export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         }
         val = i32ToChar(readParam(ctx, 0) as number);
         consumeParams(ctx, 1);
-        return [val, ctx];
+        return val;
     }
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
@@ -421,7 +446,7 @@ export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.storageLen -= 4;
     }
 
-    return [val, ctx];
+    return val;
 }
 
 export function liftFlatStringAny(_context: LiftStringContext, ctx: TaskLiftContext): [unknown, TaskLiftContext] {
@@ -581,9 +606,14 @@ export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => 
                 fieldLen = ctx.storageLen;
             }
 
-            let [val, newCtx] = liftFn(ctx);
-            res[key] = val;
-            ctx = newCtx;
+            const scalar = scalarLiftValue(liftFn);
+            if (scalar) {
+                res[key] = scalar(ctx);
+            } else {
+                const [val, newCtx] = liftFn(ctx);
+                res[key] = val;
+                ctx = newCtx;
+            }
 
             if (fieldPtr !== undefined) {
                 ctx.storagePtr! = Math.max(ctx.storagePtr!, fieldPtr + size32);
@@ -627,20 +657,17 @@ export function liftFlatVariant(
         const origUseParams = ctx.useDirectParams;
 
         let caseIdx: number;
-        let liftRes;
         const originalPtr = ctx.storagePtr!;
         const numCases = caseMetas.length;
         if (caseMetas.length < 256) {
-            liftRes = liftFlatU8(ctx);
+            caseIdx = liftFlatU8Value(ctx) as number;
         } else if (numCases >= 256 && numCases < 65536) {
-            liftRes = liftFlatU16(ctx);
+            caseIdx = liftFlatU16Value(ctx) as number;
         } else if (numCases >= 65536 && numCases < 4_294_967_296) {
-            liftRes = liftFlatU32(ctx);
+            caseIdx = liftFlatU32Value(ctx) as number;
         } else {
             throw new Error(`unsupported number of variant cases [${numCases}]`);
         }
-        caseIdx = liftRes[0] as number;
-        ctx = liftRes[1];
 
         const [tag, liftFn, , , caseFlatCount, caseFlatTypes] = caseMetas[caseIdx];
 
@@ -778,9 +805,14 @@ export function liftFlatList(
             for (let i = 0; i < len; i++) {
                 const elemPtr = dataPtr + i * elemSize32;
                 ctx.storagePtr = elemPtr;
-                const [res, nextCtx] = elemLiftFn(ctx);
-                values.push(res);
-                ctx = nextCtx;
+                const scalar = scalarLiftValue(elemLiftFn);
+                if (scalar) {
+                    values.push(scalar(ctx));
+                } else {
+                    const [res, nextCtx] = elemLiftFn(ctx);
+                    values.push(res);
+                    ctx = nextCtx;
+                }
 
                 ctx.storagePtr = Math.max(ctx.storagePtr!, elemPtr + elemSize32);
             }
@@ -839,13 +871,8 @@ export function liftFlatList(
                 const originalLen = ctx.storageLen;
                 ctx.storageLen = 8;
 
-                const dataPtrLiftRes = liftFlatU32(ctx);
-                const dataPtr = dataPtrLiftRes[0] as number;
-                ctx = dataPtrLiftRes[1];
-
-                const lenLiftRes = liftFlatU32(ctx);
-                const len = lenLiftRes[0] as number;
-                ctx = lenLiftRes[1];
+                const dataPtr = liftFlatU32Value(ctx) as number;
+                const len = liftFlatU32Value(ctx) as number;
 
                 const originalPtr = ctx.storagePtr!;
                 ctx.storagePtr! = dataPtr;
@@ -902,12 +929,8 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
             consumeParams(ctx, 2);
         } else {
             ctx.storageLen = 8;
-            let lifted = liftFlatU32(ctx);
-            dataPtr = lifted[0] as number;
-            ctx = lifted[1];
-            lifted = liftFlatU32(ctx);
-            len = lifted[0] as number;
-            ctx = lifted[1];
+            dataPtr = liftFlatU32Value(ctx) as number;
+            len = liftFlatU32Value(ctx) as number;
             originalPtr = ctx.storagePtr!;
         }
 
@@ -948,9 +971,14 @@ export function liftFlatTuple(meta: LiftTupleMeta): (ctx: TaskLiftContext) => [u
                 elemLen = ctx.storageLen;
             }
 
-            const [newValue, newCtx] = liftFn(ctx);
-            val.push(newValue);
-            ctx = newCtx;
+            const scalar = scalarLiftValue(liftFn);
+            if (scalar) {
+                val.push(scalar(ctx));
+            } else {
+                const [newValue, newCtx] = liftFn(ctx);
+                val.push(newValue);
+                ctx = newCtx;
+            }
 
             if (elemPtr !== undefined) {
                 ctx.storagePtr! = Math.max(ctx.storagePtr!, elemPtr + size32);
@@ -1033,22 +1061,21 @@ export function liftFlatFlags(
 
         let val = _context.asBigInt ? null : {};
 
-        let liftRes;
+        let bits: number;
         switch (intSizeBytes) {
             case 1:
-                liftRes = liftFlatU8(ctx);
+                bits = liftFlatU8Value(ctx) as number;
                 break;
             case 2:
-                liftRes = liftFlatU16(ctx);
+                bits = liftFlatU16Value(ctx) as number;
                 break;
             case 4:
-                liftRes = liftFlatU32(ctx);
+                bits = liftFlatU32Value(ctx) as number;
                 break;
             default:
                 throw new Error('invalid flags size');
         }
-        let bits = liftRes[0] as number;
-        ctx = liftRes[1];
+
 
         if (_context.asBigInt) {
             val = BigInt(bits >>> 0);

@@ -1,3 +1,4 @@
+import { scalarLiftValue } from '../scalar-lift.js';
 import type {
     TaskReturnRuntimeContext,
     TaskReturnOptions,
@@ -245,9 +246,14 @@ export function taskReturn(
             DEBUG: debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
             throw new Error('ran out of storage while writing');
         }
-        const [val, newLiftCtx] = liftFn(liftCtx);
-        liftCtx = newLiftCtx;
-        liftedResults.push(val);
+        const scalar = scalarLiftValue(liftFn);
+        if (scalar) {
+            liftedResults.push(scalar(liftCtx));
+        } else {
+            const [val, newLiftCtx] = liftFn(liftCtx);
+            liftCtx = newLiftCtx;
+            liftedResults.push(val);
+        }
     }
     task.resolve(liftedResults);
 }
