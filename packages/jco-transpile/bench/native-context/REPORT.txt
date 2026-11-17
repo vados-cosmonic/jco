@@ -1,0 +1,129 @@
+ISOLATED NATIVE CONTEXT RESULTS
+===============================
+
+The isolated native accessor is substantially faster than checked caching in the
+context-intensive Rust reproduction. It is slower in workloads that cross a
+host boundary between every few context operations. It remains an opt-in
+prototype; these results do not justify replacing the default implementation
+for every workload.
+
+Implementation and validation
+-----------------------------
+
+The prototype retains two durable slots per AsyncThread. Private Wasm globals
+cache those slots only between guarded runtime boundaries. See README.txt for
+the ownership, invalidation, real JSPI-resume hooks, and supported-output limits.
+
+64 context tests pass: 19 integration cases each for baseline, checked-cache,
+and native output; one integration negative control; six native runtime/adapter
+checks. These include minification, both slots, fresh/recycled tasks, cooperative
+threads, overlapping callback tasks, independent instances, realloc, FACT,
+post-return, destructors, cancellation before entry and after start, rejection,
+and traps. The negative control intentionally shares thread slots and is caught.
+Two Rust signature-metadata tests and two retired-candidate guard tests also pass.
+JS formatting, Rust formatting, and git diff whitespace checks pass.
+
+Two native configurations were measured:
+  1. Initial isolated cache with guards on every ordinary import and export.
+  2. Final isolated cache which reuses an existing guard for the same signature
+     and manager rather than wrapping it again.
+Both retain all isolation hooks and pass their respective suites. Guard reuse
+reduces redundant wrapper construction; these measurements do not establish a
+throughput improvement from that refinement. The boundary fixture does not
+specifically isolate repeated wrapping through a chain of core modules.
+
+Final Rust comparison
+---------------------
+
+One million Rust steps, milliseconds, nine fresh processes per variant:
+
+Implementation                  Median          Middle 50%        vs P2 time
+WASIp2                           22.878         22.462 - 23.080       1.00x
+PR #2483 WASIp3                  288.093        277.841 - 298.708     12.59x
+Checked cache                   144.443        128.068 - 147.810      6.31x
+Table-generation cache          146.536        138.149 - 154.095      6.41x
+Isolated native                  34.570         32.339 - 34.712       1.51x
+
+Ratios of medians: isolated native is 8.33x faster than the PR baseline, 4.18x
+faster than checked caching, and 4.24x faster than generation-based caching.
+It removes 95.6% of the baseline's excess time over WASIp2 in this workload;
+it still takes 51% more time than WASIp2.
+
+Using paired rounds rather than ratios of separate medians, the native speedup
+over checked caching is 4.18x, with an exploratory bootstrap 95% interval of
+3.34x - 4.57x. Native/P2 paired time is 1.52x [1.42x - 1.89x]. Nine pairs on a
+shared host do not establish portable engine or production-workload guarantees.
+
+At 1,000 steps, final medians were baseline 4.217 ms, checked 2.476 ms,
+generation-cache 2.541 ms, native 0.852 ms, and P2 0.905 ms. This short run is
+sensitive to tiering and scheduling; the slight native/P2 inversion should not
+be interpreted as a general advantage over P2.
+
+Boundary-heavy comparison
+-------------------------
+
+These are deliberately unfavorable cases for the native cache: each iteration
+sets context, calls the host, then reads and checks context. Each fresh process
+warms up with 5 x 100 iterations before its timed loop. Guest results are checked.
+
+Workload                     Baseline    Checked    Generation    Native
+100,000 synchronous calls    1051.508     713.205      788.599     1325.034 ms
+10,000 JSPI suspensions       412.911     354.175      392.243      506.725 ms
+
+The native/checked ratio of separate medians is 1.86x for synchronous boundaries
+and 1.43x for JSPI. Paired-round median ratios are 1.54x [1.42x - 1.90x] and
+1.52x [1.24x - 1.80x], respectively. The difference between these summaries
+reflects substantial host noise. Both show a regression, not a general win.
+
+Measured import/instantiate startup medians for the boundary fixtures were:
+  Synchronous: checked 20.51 ms; native 33.07 ms.
+  JSPI:        checked 30.89 ms; native 35.12 ms.
+These include module loading/compilation and are noisy cold-start observations.
+They are separate from the loop timings above.
+
+The native Rust binding JS is about 6.7 KB larger than baseline, plus the shared
+runtime.mjs implementation and runtime-created helper instances/globals. Core
+Wasm guest binaries are identical across the P3 variants.
+
+Initial cohort and uncertainty
+------------------------------
+
+The initial configuration's million-step medians were P2 12.117 ms, baseline
+162.725 ms, checked 77.440 ms, generation-cache 89.945 ms, native 20.364 ms.
+Its paired native speedup over checked was 4.12x [3.81x - 4.32x], and its paired
+native/P2 time was 1.57x [1.33x - 1.98x]. Its paired native boundary costs versus
+checked were 1.43x synchronous and 1.39x JSPI. Thus both cohorts support the
+same qualitative conclusion despite very different absolute execution times.
+Do not compare raw times across cohorts to infer a guard-reuse speedup.
+
+Environment and reproducibility
+-------------------------------
+
+Node 24.13.0, V8 13.6.233.17-node.37, Linux 6.12.111, Intel Xeon @ 2.60 GHz,
+six visible CPUs. No CPU pinning. Serial processes; seeded shuffled variant order
+within rounds; nine rounds per workload. Rust uses its in-guest timer with no
+explicit warmup. Debug logging is disabled. All checksums/results are validated.
+There are 162 process observations per cohort, 324 total. No builds or test
+suites ran concurrently with the measurements.
+
+The generated Rust baseline SHA-256 is:
+203f84b3dc50dc577f96c7977fad46215160b5924b7cb53e5d3322fe216ca45b
+This is identical to the earlier PR #2483 reproduction. P2 uses the existing P2
+build of the same Rust source. Compiler and dependency details for those guest
+artifacts are recorded in scripts/context-access/README.txt and its results.
+
+results/samples.jsonl, environment.json, and summary.json contain the final
+cohort. initial-* files retain the initial cohort. Summaries contain minima,
+quartiles, medians, and maxima. Exploratory intervals resample the nine paired
+round ratios 10,000 times (seed 2481), taking the 2.5th and 97.5th percentiles
+of the median. They describe these measurements, not systematic host effects.
+
+Recommendation
+--------------
+
+Keep pursuing native accessors for context-heavy compiled guests: the isolation
+machinery preserves most of the attractive hot-loop speedup. Checked caching is
+still the simpler general-purpose candidate. Before a production native path,
+move the lifecycle hooks into the runtime/bindgen, reduce boundary overhead,
+expand engine/runtime coverage, and repeat the sandbox-oriented review. Avoid
+removing lifecycle checks to recover boundary throughput.

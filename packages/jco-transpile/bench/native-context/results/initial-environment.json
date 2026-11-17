@@ -1,0 +1,36 @@
+{
+  "node": "v24.13.0",
+  "v8": "13.6.233.17-node.37",
+  "cpu": "Intel(R) Xeon(R) Processor @ 2.60GHz",
+  "cpus": 6,
+  "kernel": "6.12.111",
+  "repetitions": 9,
+  "seed": 2481,
+  "manifest": {
+    "variants": [
+      "pr2483",
+      "cache-checked",
+      "cache-epoch",
+      "native-isolated"
+    ],
+    "fixture": "/home/agent/workspace/jco/.llm/benchmarks/2481",
+    "metadata": {
+      "rust": {
+        "sha256": "203f84b3dc50dc577f96c7977fad46215160b5924b7cb53e5d3322fe216ca45b",
+        "sourceBytes": 364061,
+        "nativeBytes": 370748
+      },
+      "sync": {
+        "sha256": "d97d2200871bea0fc0b239958eeef8d3f4b725a1b8f9ce731e7704a06f4c8ef4",
+        "sourceBytes": 114340,
+        "nativeBytes": 115508
+      },
+      "jspi": {
+        "sha256": "b3395a5f03975225859493443c96d141922716eba29b887a01b116c51557d7de",
+        "sourceBytes": 119772,
+        "nativeBytes": 120940
+      }
+    }
+  },
+  "methodology": "Serial fresh processes, shuffled order per paired round. Rust in-guest timer without explicit warmup; boundary loop JS timer after 5 x 100 warmup calls. No CPU pinning."
+}
