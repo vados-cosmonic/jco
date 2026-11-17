@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 97de4e07944f19b0da5d87123acacdf1606b2133
+// generated from commit 7dc120e24fa3dbeb1297b754b281a7f7bde90a48
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -36,6 +36,19 @@ const debugLog = globalThis?.process?.env?.JCO_DEBUG ? (...args) => console.debu
 //#endregion
 //#region runtime/intrinsics/task-context.js
 const initializeTaskRegisters = () => ({});
+/**
+* Key of the register of a component instance.
+*
+* Host tasks use the component index -1. A negative number is not an array index,
+* so engines look it up as a string-keyed property; a named slot keeps the access
+* that every host call makes on the fast path.
+*
+* @param componentIdx - index of a component instance, or -1 for the host
+* @returns the key of that register in the registers object
+*/
+function registerSlot(componentIdx) {
+	return componentIdx === -1 ? "host" : componentIdx;
+}
 function validate(args) {
 	if (!args) throw new TypeError("args missing");
 	if (args.taskID === void 0) throw new TypeError("missing task ID");
@@ -43,13 +56,13 @@ function validate(args) {
 	if (args.componentIdx === void 0) throw new TypeError("missing component idx");
 }
 const getCurrentTaskMeta = (registers, componentIdx) => {
-	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[componentIdx];
+	const value = componentIdx === void 0 || componentIdx === null ? registers.current : registers[registerSlot(componentIdx)];
 	return value === void 0 || value === null ? void 0 : { ...value };
 };
 const setCurrentTaskMeta = (registers, args) => {
 	validate(args);
 	const { taskID, threadID, componentIdx } = args;
-	return registers.current = registers[componentIdx] = {
+	return registers.current = registers[registerSlot(componentIdx)] = {
 		taskID,
 		threadID,
 		componentIdx
@@ -60,10 +73,10 @@ function withCurrentTaskMeta(registers, args) {
 	validate(args);
 	if (!args.fn) throw new TypeError("missing fn");
 	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
+	const previous = registers[registerSlot(componentIdx)] ?? null;
 	const previousCurrent = registers.current ?? null;
 	try {
-		registers.current = registers[componentIdx] = {
+		registers.current = registers[registerSlot(componentIdx)] = {
 			taskID,
 			threadID,
 			componentIdx
@@ -76,7 +89,7 @@ function withCurrentTaskMeta(registers, args) {
 		});
 		throw error;
 	} finally {
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 	}
 }
@@ -85,11 +98,11 @@ function withCurrentTaskMetaAsync(registers, args) {
 	validate(args);
 	if (!args.fn) throw new TypeError("missing fn");
 	const { taskID, threadID, componentIdx, fn } = args;
-	const previous = registers[componentIdx] ?? null;
+	const previous = registers[registerSlot(componentIdx)] ?? null;
 	const previousCurrent = registers.current ?? null;
 	let result;
 	try {
-		registers.current = registers[componentIdx] = {
+		registers.current = registers[registerSlot(componentIdx)] = {
 			taskID,
 			threadID,
 			componentIdx
@@ -100,12 +113,12 @@ function withCurrentTaskMetaAsync(registers, args) {
 			...args,
 			err: error
 		});
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 		throw error;
 	}
 	if (!isPromiseLike(result)) {
-		registers[componentIdx] = previous;
+		registers[registerSlot(componentIdx)] = previous;
 		registers.current = previousCurrent;
 		return result;
 	}
@@ -119,7 +132,7 @@ function withCurrentTaskMetaAsync(registers, args) {
 			});
 			throw error;
 		} finally {
-			if (registers[componentIdx]?.threadID === threadID && registers[componentIdx]?.taskID === taskID) registers[componentIdx] = null;
+			if (registers[registerSlot(componentIdx)]?.threadID === threadID && registers[registerSlot(componentIdx)]?.taskID === taskID) registers[registerSlot(componentIdx)] = null;
 			if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
 		}
 	})();
@@ -128,12 +141,12 @@ const clearCurrentTaskMeta = async (registers, args) => {
 	debugLog("[_clearCurrentTask()] args", args);
 	validate(args);
 	const { taskID, threadID, componentIdx } = args;
-	const meta = registers[componentIdx];
+	const meta = registers[registerSlot(componentIdx)];
 	if (!meta) throw new Error(`missing current thread meta for component idx [${componentIdx}]`);
 	if (meta.threadID !== threadID) throw new Error(`thread ID [${meta.threadID}] != requested ID [${threadID}]`);
 	if (meta.taskID !== taskID) throw new Error(`task ID [${meta.taskID}] != requested ID [${taskID}]`);
 	if (meta.componentIdx !== componentIdx) throw new Error(`component idx [${meta.componentIdx}] != requested idx [${componentIdx}]`);
-	registers[componentIdx] = null;
+	registers[registerSlot(componentIdx)] = null;
 	if (registers.current?.threadID === threadID && registers.current?.taskID === taskID) registers.current = null;
 };
 
@@ -1019,7 +1032,7 @@ function getCurrentTask(_context, componentIdx, taskID) {
 	const taskMetas = _context.tasks.get(componentIdx);
 	if (taskMetas === void 0 || taskMetas.length === 0) return;
 	if (taskID) return taskMetas.find((meta) => meta.task.id() === taskID);
-	const current = _context.registers[componentIdx];
+	const current = _context.registers[registerSlot(componentIdx)];
 	if (current && current.taskID !== void 0) {
 		const currentMeta = taskMetas.find((meta) => meta.task.id() === current.taskID);
 		if (currentMeta) return currentMeta;
@@ -1080,17 +1093,25 @@ function clearCurrentThread(_context, componentIdx, taskID, options = {}) {
 	const tasks = _context.tasks.get(componentIdx);
 	if (!tasks || !Array.isArray(tasks)) throw new Error("missing/invalid tasks for component instance while ending task");
 	if (tasks.length == 0) throw new Error(`no current tasks for component instance [${componentIdx}] while ending task`);
-	const taskIdx = taskID === void 0 ? tasks.length - 1 : tasks.findIndex((meta) => meta.id === taskID);
+	const lastIdx = tasks.length - 1;
+	const taskIdx = taskID === void 0 || tasks[lastIdx].id === taskID ? lastIdx : tasks.findIndex((meta) => meta.id === taskID);
 	if (taskIdx === -1) return;
 	const taskMeta = tasks[taskIdx];
 	if (!options.preserveTask) {
-		tasks.splice(taskIdx, 1);
+		if (taskIdx === lastIdx) tasks.pop();
+		else tasks.splice(taskIdx, 1);
 		_context.checkIdle?.();
 	}
-	const globalTaskIdx = _context.taskIds.lastIndexOf(taskMeta.id);
-	if (globalTaskIdx !== -1) {
-		_context.taskIds.splice(globalTaskIdx, 1);
-		_context.componentIdxs.splice(globalTaskIdx, 1);
+	const { taskIds, componentIdxs } = _context;
+	if (taskIds.length > 0 && taskIds[taskIds.length - 1] === taskMeta.id) {
+		taskIds.pop();
+		componentIdxs.pop();
+	} else {
+		const globalTaskIdx = taskIds.lastIndexOf(taskMeta.id);
+		if (globalTaskIdx !== -1) {
+			taskIds.splice(globalTaskIdx, 1);
+			componentIdxs.splice(globalTaskIdx, 1);
+		}
 	}
 	return taskMeta.task;
 }
@@ -1694,7 +1715,7 @@ const maybeSyncGenerator = (genFn) => function(...args) {
 /** Instantiates the module that calls a host import directly, or through JSPI when the current task may block. */
 const conditionalSuspendingHostImport = (context, module, componentIdx, fn) => new context.WebAssembly.Instance(module, { "": {
 	mayBlock: () => {
-		const saved = context.threads.registers[componentIdx];
+		const saved = context.threads.registers[registerSlot(componentIdx)];
 		return (saved ? getCurrentThread(context.threads, saved.componentIdx, saved.threadID) : null)?.task.mayBlock() ?? false;
 	},
 	fast: fn,
@@ -3783,9 +3804,11 @@ function initializeAsyncTaskClass(context) {
 		#onResolveHandlers = [];
 		#progressWaiters = [];
 		#completionPromise;
+		#resolveCompletionPromise;
+		#rejectCompletionPromise;
+		#completionSettled = false;
 		#completionValue;
 		#completionReady = false;
-		#settleCompletionPromise;
 		#rejected = false;
 		#exitPromise;
 		#resolveExitPromise;
@@ -3831,28 +3854,14 @@ function initializeAsyncTaskClass(context) {
 			this.#preserveFutureResult = opts.preserveFutureResult ?? false;
 			this.#entryFnName = opts.entryFnName;
 			this.#callingWasmExport = opts.callingWasmExport !== false;
-			const { promise: completionPromise, resolve: resolveCompletionPromise, reject: rejectCompletionPromise } = promiseWithResolvers();
-			this.#completionPromise = completionPromise;
-			completionPromise.then(emptyFunc, emptyFunc);
-			let completionSettled = false;
-			const settleCompletionPromise = () => {
-				if (completionSettled || !this.#completionReady) return;
-				completionSettled = true;
-				if (this.#errored !== null) rejectCompletionPromise(this.#errored);
-				else if (this.#rejected) rejectCompletionPromise(this.#completionValue);
-				else if (this.#preserveFutureResult && this.#completionValue instanceof FutureValue) this.#completionValue.resolveAsValue(resolveCompletionPromise);
-				else resolveCompletionPromise(this.#completionValue);
-			};
-			this.#settleCompletionPromise = settleCompletionPromise;
-			this.#onResolveHandlers.push((results) => {
-				if (this.#parentSubtask !== null) return;
-				if (!this.#isAsync && !this.#isManualAsync) return;
-				this.#completionValue = results;
-				this.#completionReady = true;
-			});
-			const { promise: exitPromise, resolve: resolveExitPromise } = promiseWithResolvers();
-			this.#exitPromise = exitPromise;
-			this.#resolveExitPromise = resolveExitPromise;
+			if (this.#isAsync || this.#isManualAsync) {
+				this.#ensureCompletionPromise();
+				this.#onResolveHandlers.push((results) => {
+					if (this.#parentSubtask !== null) return;
+					this.#completionValue = results;
+					this.#completionReady = true;
+				});
+			}
 			if (opts.callbackFn) this.#callbackFn = opts.callbackFn;
 			if (opts.callbackFnName) this.#callbackFnName = opts.callbackFnName;
 			if (opts.getCalleeParamsFn) this.#getCalleeParamsFn = opts.getCalleeParamsFn;
@@ -3908,13 +3917,48 @@ function initializeAsyncTaskClass(context) {
 			this.#resourceScopeExited = true;
 			_scopeTasks.delete(this.#resourceScopeId);
 		}
-		completionPromise() {
+		/**
+		* Create the completion promise if it does not exist yet.
+		*
+		* @returns the promise that settles with the outcome of the task
+		*/
+		#ensureCompletionPromise() {
+			if (this.#completionPromise === void 0) {
+				const { promise, resolve, reject } = promiseWithResolvers();
+				this.#completionPromise = promise;
+				this.#resolveCompletionPromise = resolve;
+				this.#rejectCompletionPromise = reject;
+				promise.then(emptyFunc, emptyFunc);
+			}
 			return this.#completionPromise;
+		}
+		/** Settle the completion promise, once, when the outcome of the task is known. */
+		#settleCompletionPromise() {
+			if (this.#completionSettled || !this.#completionReady) return;
+			this.#completionSettled = true;
+			this.#ensureCompletionPromise();
+			const resolve = this.#resolveCompletionPromise;
+			const reject = this.#rejectCompletionPromise;
+			if (this.#errored !== null) reject(this.#errored);
+			else if (this.#rejected) reject(this.#completionValue);
+			else if (this.#preserveFutureResult && this.#completionValue instanceof FutureValue) this.#completionValue.resolveAsValue(resolve);
+			else resolve(this.#completionValue);
+		}
+		completionPromise() {
+			return this.#ensureCompletionPromise();
 		}
 		settleCompletion() {
 			this.#settleCompletionPromise();
 		}
 		exitPromise() {
+			if (this.#exitPromise === void 0) {
+				if (this.#exited) this.#exitPromise = Promise.resolve();
+				else {
+					const { promise, resolve } = promiseWithResolvers();
+					this.#exitPromise = promise;
+					this.#resolveExitPromise = resolve;
+				}
+			}
 			return this.#exitPromise;
 		}
 		waitForProgress() {
@@ -4463,7 +4507,7 @@ function initializeAsyncTaskClass(context) {
 			this.notifyProgress();
 			try {
 				if (this.#parentSubtask === null && (this.#isAsync || this.#isManualAsync)) this.#settleCompletionPromise();
-				this.#resolveExitPromise();
+				this.#resolveExitPromise?.();
 			} catch (err) {
 				console.error("error during task exit handler", err);
 				throw err;
@@ -4920,7 +4964,7 @@ function threadSlots(context, meta) {
 */
 function activeSlots(context, componentIdx, operation) {
 	const { registers } = context;
-	const slots = registers.freshContextSlots ?? (componentIdx === void 0 || componentIdx === null ? void 0 : threadSlots(context, registers[componentIdx])) ?? threadSlots(context, registers.current);
+	const slots = registers.freshContextSlots ?? (componentIdx === void 0 || componentIdx === null ? void 0 : threadSlots(context, registers[registerSlot(componentIdx)])) ?? threadSlots(context, registers.current);
 	if (!slots) throw new Error(`missing/incomplete global current thread meta for component idx [${componentIdx}] during context ${operation}`);
 	return slots;
 }
