@@ -1,6 +1,5 @@
-import type { ThreadLookupContext, AsyncTaskModule, TaskMeta } from '../../runtime.js';
+import type { ThreadLookupContext, AsyncTaskModule, TaskMeta, AsyncThreadMeta } from '../../runtime.js';
 import { typeCheckValidI32 } from './helpers.js';
-import { getCurrentThread } from './thread-operations.js';
 import { debugLog } from '../core/debug.js';
 import { getOrCreateAsyncState } from '../component.js';
 
@@ -12,10 +11,15 @@ import { getOrCreateAsyncState } from '../component.js';
  * @returns the slots, or `undefined` when the register is empty or its thread no longer exists
  */
 function threadSlots(context: ThreadLookupContext, meta: TaskMeta | null | undefined): number[] | undefined {
-    if (!meta) {
+    if (!meta || meta.componentIdx === -1 || meta.threadID == null || meta.threadID === 0) {
         return undefined;
     }
-    return getCurrentThread(context, meta.componentIdx, meta.threadID, meta.taskID)?.thread?.storage;
+    const state = getOrCreateAsyncState(context.lookup, meta.componentIdx);
+    const thread = state.threads.get(meta.threadID) as AsyncThreadMeta['thread'] | undefined;
+    if (!thread || (meta.taskID !== undefined && thread.taskID() !== meta.taskID)) {
+        return undefined;
+    }
+    return thread.storage;
 }
 
 /**
