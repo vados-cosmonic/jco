@@ -2774,6 +2774,8 @@ export interface PendingValueQueue {
     readonly push: (source: StreamChunk) => number;
     readonly appendReadValue: (value: unknown) => number;
     readonly readSource: () => Promise<number>;
+    /** Optional synchronous completion capability for ready sources. */
+    readonly readSourceOrPromise?: () => number | Promise<number>;
     readonly prepend: (source: StreamChunk) => void;
     readonly drainInto: (target: unknown[], maxCount: number) => number;
 }

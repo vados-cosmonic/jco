@@ -94,7 +94,10 @@ export function genStreamHostInjectFn(
         }
         if (count === 0) {
             if (pendingValues.length === 0 && !pendingValues.done) {
-                await pendingValues.readSource();
+                const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+                if (typeof result !== 'number') {
+                    await result;
+                }
                 if (readEnd.hasPendingEvent() || !hasPendingReadBuffer()) {
                     return doNothingFn;
                 }
@@ -119,7 +122,8 @@ export function genStreamHostInjectFn(
         // once: waiting on the source for more would hold them until it produces
         // again, and a read cancelled meanwhile would strand them
         while (count > 0 && !pendingValues.done && (values.length === 0 || pendingValues.sourceIsSync)) {
-            const appended = await pendingValues.readSource();
+            const result = pendingValues.readSourceOrPromise?.() ?? pendingValues.readSource();
+            const appended = typeof result === 'number' ? result : await result;
             if (readEnd.hasPendingEvent()) {
                 return bail();
             }

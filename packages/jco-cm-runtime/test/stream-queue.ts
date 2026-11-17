@@ -27,3 +27,26 @@ test.concurrent('queued chunks survive partial reads and repeated prepends witho
     queue.drainInto(tail, 3);
     expect(tail).toEqual([3, 2]);
 });
+
+test.concurrent('ready reads avoid promises while the public API coalesces reads', async () => {
+    const s = create();
+    let calls = 0;
+    const queue = new s.PendingValueQueue(() => ({ done: false, value: ++calls }), { align32: 1 });
+    expect(queue.readSourceOrPromise!()).toBe(1);
+    expect(queue.length).toBe(1);
+    const first = queue.readSource();
+    const second = queue.readSource();
+    expect(first).toBeInstanceOf(Promise);
+    expect(calls).toBe(2);
+    expect(await first).toBe(1);
+    expect(await second).toBe(1);
+    const error = new Error('read failed');
+    const failing = new s.PendingValueQueue(
+        () => {
+            throw error;
+        },
+        { align32: 1 },
+    );
+    await expect(failing.readSource()).rejects.toBe(error);
+    expect(() => failing.readSourceOrPromise!()).toThrow(error);
+});
