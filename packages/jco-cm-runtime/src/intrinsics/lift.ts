@@ -95,7 +95,15 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
     scratch: new DataView(new ArrayBuffer(8)),
 });
 
-export const liftFlatBool = /* @__PURE__ */ defineScalarLift(liftFlatBoolDirect, liftFlatBoolMemory);
+export const liftFlatBool = /* @__PURE__ */ defineScalarLift(
+    liftFlatBoolPublic,
+    liftFlatBoolDirect,
+    liftFlatBoolMemory,
+);
+
+function liftFlatBoolPublic(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx), ctx];
+}
 
 function liftFlatBoolDirect(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
@@ -127,7 +135,20 @@ function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Direct, liftFlatS8Memory, true);
+export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Public, liftFlatS8Direct, liftFlatS8Memory);
+
+function liftFlatS8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+        DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
+        if (ctx.params.length === 0) {
+            throw new Error('expected at least a single i32 argument');
+        }
+        const value = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+        return [value, ctx];
+    }
+    return [ctx.useDirectParams ? liftFlatS8Direct(ctx) : liftFlatS8Memory(ctx), ctx];
+}
 
 function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
@@ -151,7 +172,20 @@ function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Direct, liftFlatU8Memory, true);
+export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Public, liftFlatU8Direct, liftFlatU8Memory);
+
+function liftFlatU8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+        DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
+        if (ctx.params.length === 0) {
+            throw new Error('expected at least a single i32 argument');
+        }
+        const value = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+        return [value, ctx];
+    }
+    return [ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx), ctx];
+}
 
 function liftFlatU8Value(ctx: TaskLiftContext): unknown {
     return ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx);
@@ -180,7 +214,20 @@ function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Direct, liftFlatS16Memory, true);
+export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Public, liftFlatS16Direct, liftFlatS16Memory);
+
+function liftFlatS16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+        DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
+        if (ctx.params.length === 0) {
+            throw new Error('expected at least a single i32 argument');
+        }
+        const value = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+        return [value, ctx];
+    }
+    return [ctx.useDirectParams ? liftFlatS16Direct(ctx) : liftFlatS16Memory(ctx), ctx];
+}
 
 function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
@@ -204,7 +251,20 @@ function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Direct, liftFlatU16Memory, true);
+export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Public, liftFlatU16Direct, liftFlatU16Memory);
+
+function liftFlatU16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+        DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
+        if (ctx.params.length === 0) {
+            throw new Error('expected at least a single i32 argument');
+        }
+        const value = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+        return [value, ctx];
+    }
+    return [ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx), ctx];
+}
 
 function liftFlatU16Value(ctx: TaskLiftContext): unknown {
     return ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx);
@@ -238,7 +298,20 @@ function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Direct, liftFlatS32Memory, true);
+export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Public, liftFlatS32Direct, liftFlatS32Memory);
+
+function liftFlatS32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+        DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
+        if (ctx.params.length === 0) {
+            throw new Error('expected at least a single i32 argument');
+        }
+        const value = ctx.params[0];
+        ctx.params = ctx.params.slice(1);
+        return [value, ctx];
+    }
+    return [ctx.useDirectParams ? liftFlatS32Direct(ctx) : liftFlatS32Memory(ctx), ctx];
+}
 
 function liftFlatS32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
@@ -262,7 +335,11 @@ function liftFlatS32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Direct, liftFlatU32Memory);
+export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Public, liftFlatU32Direct, liftFlatU32Memory);
+
+function liftFlatU32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx), ctx];
+}
 
 function liftFlatU32Value(ctx: TaskLiftContext): unknown {
     return ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx);
@@ -297,7 +374,11 @@ function liftFlatU32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Direct, liftFlatS64Memory);
+export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Public, liftFlatS64Direct, liftFlatS64Memory);
+
+function liftFlatS64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx), ctx];
+}
 
 function liftFlatS64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
@@ -331,7 +412,11 @@ function liftFlatS64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Direct, liftFlatU64Memory);
+export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Public, liftFlatU64Direct, liftFlatU64Memory);
+
+function liftFlatU64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx), ctx];
+}
 
 function liftFlatU64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
@@ -366,7 +451,15 @@ function liftFlatU64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(liftFlatFloat32Direct, liftFlatFloat32Memory);
+export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(
+    liftFlatFloat32Public,
+    liftFlatFloat32Direct,
+    liftFlatFloat32Memory,
+);
+
+function liftFlatFloat32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx), ctx];
+}
 
 function liftFlatFloat32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
@@ -399,7 +492,15 @@ function liftFlatFloat32Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(liftFlatFloat64Direct, liftFlatFloat64Memory);
+export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(
+    liftFlatFloat64Public,
+    liftFlatFloat64Direct,
+    liftFlatFloat64Memory,
+);
+
+function liftFlatFloat64Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx), ctx];
+}
 
 function liftFlatFloat64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
@@ -431,7 +532,15 @@ function liftFlatFloat64Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatChar = /* @__PURE__ */ defineScalarLift(liftFlatCharDirect, liftFlatCharMemory);
+export const liftFlatChar = /* @__PURE__ */ defineScalarLift(
+    liftFlatCharPublic,
+    liftFlatCharDirect,
+    liftFlatCharMemory,
+);
+
+function liftFlatCharPublic(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+    return [ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx), ctx];
+}
 
 function liftFlatCharDirect(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
@@ -589,14 +698,11 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
     return [val, ctx];
 }
 
-export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
+function liftFlatRecordPlain(meta: LiftRecordMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
     const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
-    return function liftFlatRecordInner(ctx) {
+    return function liftFlatRecordPlainInner(ctx) {
         DEBUG: debugLog('[_liftFlatRecord()] args', { ctx });
 
-        // V8 can scalar-replace public result pairs in short direct calls; avoid
-        // a per-field metadata lookup unless memory or cursor work benefits.
-        const useScalar = !ctx.useDirectParams || hasParamCursor(ctx);
         const originalPtr = ctx.storagePtr!;
         const res: Record<string, unknown> = {};
         for (const [key, liftFn, size32, align32] of fieldMetas) {
@@ -622,7 +728,65 @@ export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => 
                 fieldLen = ctx.storageLen;
             }
 
-            const scalar = useScalar ? scalarLiftValue(liftFn, ctx.useDirectParams) : undefined;
+            let [val, newCtx] = liftFn(ctx);
+            res[key] = val;
+            ctx = newCtx;
+
+            if (fieldPtr !== undefined) {
+                ctx.storagePtr! = Math.max(ctx.storagePtr!, fieldPtr + size32);
+            }
+            if (fieldLen !== undefined) {
+                ctx.storageLen = fieldLen - size32;
+            }
+        }
+
+        if (originalPtr !== undefined) {
+            ctx.storagePtr! = Math.max(ctx.storagePtr!, originalPtr + recordSize32);
+        }
+
+        if (ctx.storagePtr! !== undefined) {
+            const rem = ctx.storagePtr! % recordAlign32;
+            if (rem !== 0) {
+                ctx.storagePtr! += recordAlign32 - rem;
+            }
+        }
+
+        return [res, ctx];
+    };
+}
+
+export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => [unknown, TaskLiftContext] {
+    const { fieldMetas, size32: recordSize32, align32: recordAlign32 } = meta;
+    const plain = liftFlatRecordPlain(meta);
+    const scalarRecord = function liftFlatRecordInner(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
+        DEBUG: debugLog('[_liftFlatRecord()] args', { ctx });
+
+        const originalPtr = ctx.storagePtr!;
+        const res: Record<string, unknown> = {};
+        for (const [key, liftFn, size32, align32] of fieldMetas) {
+            let fieldPtr;
+            if (ctx.storagePtr! !== undefined) {
+                const rem = ctx.storagePtr! % align32;
+                if (rem !== 0) {
+                    ctx.storagePtr! += align32 - rem;
+                }
+                fieldPtr = ctx.storagePtr!;
+            }
+
+            // A field occupies exactly size32 bytes of the record's
+            // flat storage. Capture the remaining storage budget before
+            // lifting the field and restore it afterwards: a field's own
+            // lift fn may repurpose storageLen internally (e.g. a list
+            // sets it to the element-buffer length while reading
+            // out-of-line data and never restores it), which would
+            // otherwise corrupt the budget the next field sees.
+            // See https://github.com/bytecodealliance/jco/issues/1585.
+            let fieldLen;
+            if (ctx.storageLen !== undefined) {
+                fieldLen = ctx.storageLen;
+            }
+
+            const scalar = scalarLiftValue(liftFn, ctx.useDirectParams);
             if (scalar) {
                 res[key] = scalar(ctx);
             } else {
@@ -652,6 +816,8 @@ export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => 
 
         return [res, ctx];
     };
+    // Select once per record so the ordinary flat loop retains its compact shape.
+    return (ctx) => (ctx.useDirectParams && !hasParamCursor(ctx) ? plain(ctx) : scalarRecord(ctx));
 }
 
 export function liftFlatVariant(
