@@ -9,12 +9,68 @@ the inline intrinsics in `js-component-bindgen` are to be replaced by the bundle
 
 ## Summary
 
+- Implemented so far (options 1, 6, 8 and part of 7): 1.8–4.7× against the external runtime,
+  1.3–1.8× with the runtime bundled. See Status.
+- Defining runtime classes once, instead of per component instance, is the largest effect: 2–4×
+  as soon as a process holds two instances.
 - Stripping every debug log buys 5–17%.
 - Three small runtime fixes plus debug stripping give 1.2–1.9×.
 - Per-call task bookkeeping costs roughly 100× a direct call on scalar exports,
   and about 17× on sync host imports. Sync fast paths are where the headroom is.
 
+## Status
+
+Implemented on this branch: options 1, 6 and 8, and the per-element costs found under option 7.
+Not started: options 2 and 3. Deferred: options 4 and 5.
+
+Nanoseconds per call against the external runtime, fastest of 5 interleaved process runs,
+all four fixtures loaded in one process:
+
+| Case | main | + option 1 | + option 8 | + option 6 | + option 7 | total |
+| --- | --- | --- | --- | --- | --- | --- |
+| export `u32 -> u32` | 1325 | 868 | 875 | 766 | 712 | 1.86× |
+| export `f64 -> f64` | 1362 | 906 | 917 | 786 | 744 | 1.83× |
+| export `string -> string` | 6530 | 6071 | 2860 | 2631 | 2154 | 3.03× |
+| export `list<u8> -> list<u8>` | 7361 | 6392 | 3076 | 2914 | 2766 | 2.66× |
+| export record round trip | 4759 | 3979 | 1163 | 997 | 1013 | 4.70× |
+| export tuple swap | 4189 | 4117 | 972 | 983 | 963 | 4.35× |
+| guest makes 39 numeric host imports | 226042 | 183548 | 71010 | 77538 | 76970 | 2.94× |
+| guest makes 2 string host imports | 22365 | 18677 | 6445 | 6445 | 6030 | 3.71× |
+
+With the runtime bundled into each module (the default), main to this branch is 1.28–1.79×:
+there every module already had a runtime of its own, so option 8 changes nothing for it.
+
+Option 8 is what the large factors come from, and it only shows when a process holds
+more than one component instance. The first two rows are the cases least affected by it.
+
+Verification:
+
+- `packages/jco-cm-runtime`: type check, lint, format and all 404 tests pass.
+- `js-component-bindgen` unit tests: 168 pass.
+  `shipped_runtime_uses_only_reserved_globals` fails on `MessageChannel`;
+  that use and the reserved list are unchanged from main, so the failure is not from this branch
+  (established by diff, the test was not run on main).
+- `jco-transpile` suite, embedded and external runtime: 800 pass, 218 fail, 330 skipped.
+  Every failure is a missing file under `test/fixtures/generated/rust-test-components`
+  (not built on the machine used) or a missing browser.
+  **Most P3 async tests are among those that could not run.**
+  That run predates the last list-lowering change, which was checked by hand only.
+
+To review before a pull request:
+
+- `packages/jco-cm-runtime/test/async-task.ts`: the test of store-local classes was rewritten.
+  It asserted distinct method identities and a `TypeError` when a method of one store's class
+  is applied to another store's instance. Both are gone by design; it now asserts `instanceof`
+  in both directions, per-store statics and per-store state.
+- A lone instance pays 7–10% for option 8 (one more call per construction).
+- Bindings that export `instantiate` now share at most two bundled runtimes per module,
+  one per debug setting, instead of one per instance.
+- About 20 other class factories (streams, futures, waitable sets, buffers, error contexts)
+  still define a class per store. They are not on the sync path measured here.
+
 ## Measurements
+
+The tables below are the original experiments, made on copies of the built runtime before any source change.
 
 Node 26.13, Linux x86_64.
 Sync P2 fixtures (`numbers`, `strings`, `lists`, `records`) transpiled against the external runtime.
@@ -75,7 +131,8 @@ Ordered roughly by payoff per effort.
 
 ### 1. Small runtime fixes
 
-Measured: 1.2–1.9× combined with debug stripping. Each is a few lines.
+Implemented, except the BigInt item: 1.02–1.53× on their own (see Status).
+In the experiments: 1.2–1.9× combined with debug stripping. Each is a few lines.
 
 - **Pop instead of splice in `clearCurrentThread`.**
   The task being cleared is almost always the last entry of `tasks`, `taskIds` and `componentIdxs`.
@@ -135,39 +192,82 @@ The subtask, the host task and thread, and the second trampoline can all go for 
 
 ### 6. Leaner generated wrappers
 
-Measured: 1.11× on one hand-edited export.
+Implemented in part. 1.07–1.20× on exports, nothing on imports.
 
-- Hoist the static options object out of the call.
-- Drop the `getCallbackFn: () => null` closure.
-- Replace the two nested `_withGlobalCurrentThreadMeta` closures with one inlined register window.
-- Drop dead code such as `if (null !== null) { ... }` and the duplicated result conversion in import trampolines.
+Done:
+
+- A sync export calls its core function directly.
+  It had installed its task a second time around that call,
+  although nothing can suspend between the body's own install and the call.
+- No `getCallbackFn: () => null` closure for functions without a callback.
+- No `if (null !== null)` return-memory block where there is no memory.
+- A result is converted once for both the task and the caller.
+
+Not done:
+
+- Hoisting the static options object out of the call.
+- The same single install for async exports, which can suspend during argument lowering.
+- Slimming the import path: `lowerImportBackwardsCompat` and the second trampoline
+  still create a subtask, a host task and a thread for each sync host call.
+  That is the import side of options 4 and 5.
 
 Moving the per-call protocol into one runtime helper would also shrink bindings:
 `strings.js` is 141 KB before the runtime.
 
 ### 7. Straight-line lift and lower
 
-Not measured in isolation.
+The premise was wrong for sync calls, and the real costs were elsewhere.
 
-Record and string round trips cost 3.5–5.5 µs beyond the scalar path.
-Imports pass `paramLiftFns` and `resultLowerFns` arrays of bound functions that are interpreted per call;
-generated straight-line code would let V8 inline them.
-Related small items seen in profiles: `memory.buffer` read per call, the `mayLeave` setter around realloc.
+Sync exports and sync host imports already lift and lower with straight-line generated code.
+`paramLiftFns` and `resultLowerFns` are built once when the module loads.
+`resultLowerFns` is called only when an async-lowered import writes its result through a pointer;
+`paramLiftFns` is not read by the runtime at all.
+Replacing them is P3 work that the fixtures available here cannot measure.
+
+What profiles of the string and list cases did show, now fixed:
+
+- **UTF-16 string lowering** called a closure per code unit
+  and spread the string into an array to count code points. 1.27× on the string export.
+- **List lowering from a plain array** emitted `check.bind(null, 'u8')(v)` inside the element loop.
+  About 1.2–1.4× for a 64-element array (`list-array.mjs`; a `Uint8Array` takes the copy path and is unaffected).
+
+Still open, small: `memory.buffer` and a fresh `DataView` per access,
+the `mayLeave` setter around realloc, the redundant `(() => memory0)()`.
 
 ### 8. Share classes across component instances
 
-Inferred, not confirmed. Up to about 2.7×.
+Implemented. Confirmed as the largest single effect: 2–4× once a process holds two instances.
 
-The same import case ran in 78 µs alone and 210 µs after the other three fixtures had run in the process.
-The likely cause is that `initialize*Class(context)` creates a distinct `AsyncTask` class per component,
-so shared runtime functions become megamorphic. Not confirmed with inline-cache traces.
+`initialize*Class(context)` defined a class per store.
+V8 shares feedback between the closures made from one function body,
+but each class had its own private names, so with two stores alive
+no `#private` access in the shared methods could be cached.
+Constructing and reading a field was about 80× slower in a microbenchmark.
+
+Nanoseconds per call on the first instance as further instances are created (`sharing.mjs`):
+
+| | 1 instance | 2 | 3 | 4 |
+| --- | --- | --- | --- | --- |
+| export, before | 1142 | 5218 | — | — |
+| export, after | 864 | 903 | 816 | 863 |
+| 39 imports, before | 85000 | 311000 | — | — |
+| 39 imports, after | 77098 | 83224 | 72833 | 74050 |
+
+The task, thread, subtask, rep-table, waitable and component-state classes are now defined once
+and take their context as a constructor argument; each store gets a small constructor function
+that keeps its own statics and `instanceof`.
+
+Bundled runtimes had the same problem in `instantiate` mode, where the linker wrapped
+the whole runtime in a function called per instance (853 ns, then 4614 ns from the second instance).
+The linker now keeps one runtime per debug setting (835–970 ns across five instances).
 
 ## Suggested order
 
-1. Land the fixes in option 1; they are tiny and give more than stripping.
+1. Build the Rust test components and run the P3 tests against this branch.
 2. Land the `DEBUG:` pass (option 2).
-3. Design options 4 and 5 together, with option 6 as the bindings side of the same work.
-4. Revisit options 3, 7 and 8 with fresh profiles once the fast paths exist.
+3. Hoist the remaining per-store class factories (rest of option 8).
+4. Design options 4 and 5 together, with the import half of option 6 as the bindings side.
+5. Revisit option 3 with fresh profiles once the fast paths exist.
 
 ## Open decisions
 
