@@ -114,3 +114,16 @@ test.concurrent('cancelling at a batch boundary delivers buffered values in sour
         dropPair(s.pair);
     }
 });
+
+test.concurrent('prepending snapshots an already partially consumed input chunk', () => {
+    const s = create();
+    const queue = new s.PendingValueQueue(() => ({ done: true, value: undefined }), { align32: 1 });
+    const original = [1, 2, 3];
+    queue.push(original);
+    queue.drainInto([], 1);
+    queue.prepend([0]);
+    original[1] = 99;
+    const result: unknown[] = [];
+    queue.drainInto(result, 3);
+    expect(result).toEqual([0, 2, 3]);
+});

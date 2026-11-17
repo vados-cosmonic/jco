@@ -135,6 +135,14 @@ export function initializePendingValueQueueClass(
             if (source.length === 0) {
                 return;
             }
+            const current =
+                this.#prepended.length > 0 ? this.#prepended[this.#prepended.length - 1] : this.#chunks[this.#head];
+            if (current && current.offset !== 0) {
+                // As before, prepend snapshots the unread part of an active chunk.
+                // Ordinary partial reads keep their cursor without copying it.
+                current.data = current.data.slice(current.offset);
+                current.offset = 0;
+            }
             this.#prepended.push({ data: source, offset: 0 });
             this.#length += source.length;
         }
