@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     StreamReadableEndConstructor,
     StreamEndpointClassContext,
@@ -167,10 +168,12 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = null;
                 }
                 if (transferred > 0) {
-                    const values = buffer.read(transferred);
                     const { typedArray } = this.#elemMeta;
+                    const bytes = typedArray === Uint8Array ? buffer.readBytes?.(transferred) : undefined;
+                    const values = bytes ? undefined : buffer.read(transferred);
                     const value =
-                        typedArray === undefined ? (count === 1 ? values[0] : values) : new typedArray(values);
+                        bytes ??
+                        (typedArray === undefined ? (count === 1 ? values![0] : values!) : new typedArray(values!));
                     // An option's none value is undefined, but still an item.
                     resolve({ value, done: false });
                 } else {
@@ -274,9 +277,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                 if (bufferRemaining > 0) {
                     const count = Math.min(pendingRemaining, bufferRemaining);
                     const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                    buffer.write(pending.buffer.read(count, { transferResources }), {
-                        transferResources,
-                    });
+                    transferBuffer(pending.buffer, buffer, count, { transferResources });
                     pending.onCopyFn!(
                         () => this.resetPendingBufferMeta(),
                         shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,

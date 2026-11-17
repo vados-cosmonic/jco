@@ -433,6 +433,10 @@ export interface ManagedBufferOptions {
     target?: unknown;
 }
 export interface ManagedBuffer {
+    /** Optional bulk byte capability; false falls back to resource-aware read/write. */
+    readonly copyTo?: (target: ManagedBuffer, count: number) => boolean;
+    /** An owned byte chunk, or undefined when the provider requires generic reads. */
+    readonly readBytes?: (count: number) => Uint8Array | undefined;
     capacity: number;
     processed: number;
     target: unknown;

@@ -3,6 +3,7 @@ import type {
     RuntimeMemory,
     ManagedBufferOptions,
     ManagedBuffer,
+    ManagedBuffer as ManagedBufferType,
     BufferElementMetadata,
     BufferElementContext,
     CreateBufferOptions,
@@ -26,6 +27,8 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         capacity: number;
         processed = 0;
         #hostOnlyData!: unknown[]; // initial data (only filled out for host-owned)
+        #hostBytes: Uint8Array | null = null;
+        #hostByteLength = 0;
         #hostOffset = 0;
         #hostDataBorrowed = true;
         target: unknown;
@@ -106,8 +109,86 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
             return !this.#memory;
         }
 
+        /** Copy bytes in bulk; return false for another provider or a non-byte payload. */
+        copyTo(target: ManagedBufferType, count: number): boolean {
+            if (
+                target === this ||
+                !(target instanceof ManagedBuffer) ||
+                this.#elemMeta.payloadTypeName !== 'U8' ||
+                target.#elemMeta.payloadTypeName !== 'U8'
+            ) {
+                return false;
+            }
+            if (
+                (!this.#memory && !this.#hostBytes) ||
+                (!target.#memory && !target.#hostBytes && target.#hostOnlyData.length !== 0)
+            ) {
+                return false;
+            }
+            if (!Number.isInteger(count) || count < 0 || count > this.remaining() || count > target.remaining()) {
+                throw new RangeError('byte copy exceeds remaining buffer capacity');
+            }
+            const source = this.#memory
+                ? new Uint8Array(this.#memory.buffer, this.#ptr, count)
+                : this.#hostBytes!.subarray(this.#hostOffset, this.#hostOffset + count);
+            if (source.length !== count) {
+                throw new RangeError('byte copy exceeds available host data');
+            }
+            if (target.#memory) {
+                new Uint8Array(target.#memory.buffer, target.#ptr, count).set(source);
+                target.#ptr += count;
+            } else {
+                const length = target.#hostByteLength + count;
+                if (!target.#hostBytes || target.#hostBytes.length < length) {
+                    const bytes = new Uint8Array(
+                        Math.min(target.capacity, Math.max(length, (target.#hostBytes?.length ?? 0) * 2, 64)),
+                    );
+                    if (target.#hostBytes) {
+                        bytes.set(target.#hostBytes.subarray(0, target.#hostByteLength));
+                    }
+                    target.#hostBytes = bytes;
+                }
+                target.#hostBytes.set(source, target.#hostByteLength);
+                target.#hostByteLength = length;
+            }
+            if (this.#memory) {
+                this.#ptr += count;
+            } else {
+                this.#hostOffset += count;
+            }
+            this.processed += count;
+            target.processed += count;
+            return true;
+        }
+
+        /** Return an owned byte chunk; guest memory never escapes to the host. */
+        readBytes(count: number): Uint8Array | undefined {
+            if (this.#elemMeta.payloadTypeName !== 'U8' || (!this.#memory && !this.#hostBytes)) {
+                return undefined;
+            }
+            if (!Number.isInteger(count) || count <= 0 || count > this.capacity) {
+                throw new RangeError('invalid byte read count');
+            }
+            let bytes: Uint8Array;
+            if (this.#memory) {
+                bytes = new Uint8Array(this.#memory.buffer, this.#ptr, count).slice();
+                this.#ptr += count;
+            } else {
+                if (this.#hostOffset + count > this.#hostByteLength) {
+                    throw new RangeError('byte read exceeds available host data');
+                }
+                bytes = this.#hostBytes!.slice(this.#hostOffset, this.#hostOffset + count);
+                this.#hostOffset += count;
+            }
+            this.processed += count;
+            return bytes;
+        }
+
         read(count: number, opts: { transferResources?: boolean } = {}): unknown[] {
             DEBUG: debugLog('[ManagedBuffer#read()] args', { count });
+            if (this.#hostBytes) {
+                return Array.from(this.readBytes(count)!);
+            }
             if (count === undefined || count <= 0) {
                 throw new TypeError(`missing/invalid count [${count}]`);
             }
@@ -195,6 +276,15 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                 }
             } else {
                 if (this.isHostOwned()) {
+                    if (this.#hostBytes) {
+                        this.#hostOnlyData = Array.from(
+                            this.#hostBytes.subarray(this.#hostOffset, this.#hostByteLength),
+                        );
+                        this.#hostBytes = null;
+                        this.#hostByteLength = 0;
+                        this.#hostOffset = 0;
+                        this.#hostDataBorrowed = false;
+                    }
                     if (this.#hostDataBorrowed) {
                         this.#hostOnlyData = this.#hostOnlyData.slice(this.#hostOffset);
                         this.#hostOffset = 0;
@@ -322,4 +412,17 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
     }
 
     return BufferManager;
+}
+
+/** Prefer a provider's bulk byte copy and retain the generic resource-aware fallback. */
+export function transferBuffer(
+    source: ManagedBuffer,
+    target: ManagedBuffer,
+    count: number,
+    options: { transferResources?: boolean } = {},
+): void {
+    if (source.copyTo?.(target, count)) {
+        return;
+    }
+    target.write(source.read(count, options), options);
 }

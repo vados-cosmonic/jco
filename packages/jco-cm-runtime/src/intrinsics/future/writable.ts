@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     FutureEndpointClassContext,
     FutureWritableEndConstructor,
@@ -159,7 +160,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
             }
 
             const transferResources = buffer.componentIdx() !== -1 && meta.buffer.componentIdx() !== -1;
-            meta.buffer.write(buffer.read(1, { transferResources }), { transferResources });
+            transferBuffer(buffer, meta.buffer, 1, { transferResources });
             this.resetAndNotifyPending(FutureEnd.CopyResult.COMPLETED);
             onCopyDoneFn(FutureEnd.CopyResult.COMPLETED);
         }

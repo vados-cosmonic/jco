@@ -1,3 +1,4 @@
+import { transferBuffer } from '../buffers.js';
 import type {
     StreamWritableEndConstructor,
     StreamEndpointClassContext,
@@ -174,9 +175,7 @@ export function initializeStreamWritableEndClass(_context: StreamEndpointClassCo
                 }
                 const numElements = Math.min(buffer.remaining(), pending.buffer.remaining());
                 const transferResources = buffer.componentIdx() !== -1 && pending.buffer.componentIdx() !== -1;
-                pending.buffer.write(buffer.read(numElements, { transferResources }), {
-                    transferResources,
-                });
+                transferBuffer(buffer, pending.buffer, numElements, { transferResources });
                 pending.onCopyFn!(
                     () => this.resetPendingBufferMeta(),
                     shouldDropAfterCopy ? StreamEnd.CopyResult.DROPPED : StreamEnd.CopyResult.COMPLETED,
