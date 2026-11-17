@@ -1861,7 +1861,7 @@ impl Bindgen for FunctionBindgen<'_> {
                 self.emit_realloc_check(&format!("ptr{tmp}"), &format!("len{tmp}"), size, align);
 
                 // Determine what methods to use with a DataView when setting the data
-                let (dataview_set_method, check_fn_intrinsic) =
+                let (dataview_set_method, check_call_prefix) =
                     gen_dataview_set_and_check_fn_js_for_numeric_type(resolve, element);
 
                 // Detect whether we're dealing with a regular array
@@ -1875,7 +1875,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             let offset = 0;
                             const dv{tmp} = new DataView({memory}.buffer);
                             for (const v of val{tmp}) {{
-                                {check_fn_intrinsic}(v);
+                                {check_call_prefix}v);
                                 dv{tmp}.{dataview_set_method}(ptr{tmp} + offset, v, true);
                                 offset += {size};
                             }}
@@ -4538,6 +4538,9 @@ pub fn js_array_ty(resolve: &Resolve, element_ty: &Type) -> Option<&'static str>
 
 /// Generate the JS `DataView` set and numeric checks for a given numeric type
 ///
+/// Returns the name of the `DataView` method that writes the type, and the start of a
+/// call that checks a value of it, to be completed with the value and `)`.
+///
 /// # Arguments
 ///
 /// * `ty` - the [`Type`] to check
@@ -4549,19 +4552,19 @@ fn gen_dataview_set_and_check_fn_js_for_numeric_type(
     let check_fn = Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
     match ty {
         // Unsigned Integers
-        Type::Bool => ("setUint8", format!("{check_fn}.bind(null, 'u8')",)),
-        Type::U8 => ("setUint8", format!("{check_fn}.bind(null, 'u8')",)),
-        Type::U16 => ("setUint16", format!("{check_fn}.bind(null, 'u16')",)),
-        Type::U32 => ("setUint32", format!("{check_fn}.bind(null, 'u32')",)),
-        Type::U64 => ("setBigUint64", format!("{check_fn}.bind(null, 'u64')",)),
+        Type::Bool => ("setUint8", format!("{check_fn}('u8', ")),
+        Type::U8 => ("setUint8", format!("{check_fn}('u8', ")),
+        Type::U16 => ("setUint16", format!("{check_fn}('u16', ")),
+        Type::U32 => ("setUint32", format!("{check_fn}('u32', ")),
+        Type::U64 => ("setBigUint64", format!("{check_fn}('u64', ")),
         // Signed integers
-        Type::S8 => ("setInt8", format!("{check_fn}.bind(null, 's8')",)),
-        Type::S16 => ("setInt16", format!("{check_fn}.bind(null, 's16')",)),
-        Type::S32 => ("setInt32", format!("{check_fn}.bind(null, 's32')",)),
-        Type::S64 => ("setBigInt64", format!("{check_fn}.bind(null, 's64')",)),
+        Type::S8 => ("setInt8", format!("{check_fn}('s8', ")),
+        Type::S16 => ("setInt16", format!("{check_fn}('s16', ")),
+        Type::S32 => ("setInt32", format!("{check_fn}('s32', ")),
+        Type::S64 => ("setBigInt64", format!("{check_fn}('s64', ")),
         // Floating point
-        Type::F32 => ("setFloat32", format!("{check_fn}.bind(null, 'f32')",)),
-        Type::F64 => ("setFloat64", format!("{check_fn}.bind(null, 'f64')",)),
+        Type::F32 => ("setFloat32", format!("{check_fn}('f32', ")),
+        Type::F64 => ("setFloat64", format!("{check_fn}('f64', ")),
         Type::Id(id) => match resolve.types.get(*id) {
             // Type aliases should resolve to types that have the kind `TypeDefKind::Type`
             Some(TypeDef {
@@ -4758,7 +4761,7 @@ mod tests {
 
         let ty_ = Type::Id(ty_id);
 
-        let (dataview_set_method, check_fn_intrinsic) =
+        let (dataview_set_method, check_call_prefix) =
             gen_dataview_set_and_check_fn_js_for_numeric_type(&resolve, &ty_);
 
         assert_eq!(dataview_set_method, "setBigUint64");
@@ -4766,6 +4769,6 @@ mod tests {
         let check_fn =
             Intrinsic::Conversion(ConversionIntrinsic::RequireValidNumericPrimitive).name();
 
-        assert_eq!(check_fn_intrinsic, format!("{check_fn}.bind(null, 'u64')",));
+        assert_eq!(check_call_prefix, format!("{check_fn}('u64', "));
     }
 }
