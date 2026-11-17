@@ -138,7 +138,7 @@ at least 64 arguments because setup outweighs slicing for short calls. Scalar me
 memory growth. Custom lift functions keep the pair-returning API and may replace
 their context; built-in scalar composition can avoid constructing those pairs.
 
-The default Node UTF-8 codec uses native byte primitives for strings of at least
+The default Node UTF-8 codec uses native byte primitives for ASCII strings of at least
 256 UTF-16 code units. Browser codecs and custom `encodeInto` implementations keep
 the portable path. Reallocations remain exact and occur once per string.
 

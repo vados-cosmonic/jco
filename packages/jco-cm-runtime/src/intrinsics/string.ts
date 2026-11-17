@@ -7,7 +7,6 @@ import type {
 } from '../runtime.js';
 
 interface NativeBuffer {
-    byteLength(value: string, encoding: 'utf8'): number;
     from(
         buffer: ArrayBufferLike,
         offset: number,
@@ -23,30 +22,15 @@ const nativeEncoders = /* @__PURE__ */ new WeakMap<
         encodeInto: StringEncodeInto['encodeInto'];
     }
 >();
-const surrogatePairs = /[\ud800-\udbff][\udc00-\udfff]/;
+const nonAscii = /[^\x00-\x7f]/;
 
 /** Use Node's byte primitives only for the selected, unmodified default encoder. */
-function nativeEncoder(encoder: StringEncodeInto, length: number): NativeBuffer | undefined {
-    if (length < 256) {
+function nativeEncoder(encoder: StringEncodeInto, value: string): NativeBuffer | undefined {
+    if (value.length < 256 || nonAscii.test(value)) {
         return undefined;
     }
     const native = nativeEncoders.get(encoder);
     return native && native.encodeInto === encoder.encodeInto ? native.buffer : undefined;
-}
-
-/** Count scalar values without allocating an array of characters. */
-function codepointCount(value: string): number {
-    if (!surrogatePairs.test(value)) {
-        return value.length;
-    }
-    let count = value.length;
-    for (let index = 0; index < value.length - 1; index++) {
-        if ((value.charCodeAt(index) & 0xfc00) === 0xd800 && (value.charCodeAt(index + 1) & 0xfc00) === 0xdc00) {
-            count--;
-            index++;
-        }
-    }
-    return count;
 }
 
 function requireString(value: unknown): string {
@@ -57,9 +41,9 @@ function requireString(value: unknown): string {
 }
 
 function utf8Size(s: string, encoder: StringEncodeInto): { len: number; codepoints: number } {
-    const native = nativeEncoder(encoder, s.length);
+    const native = nativeEncoder(encoder, s);
     if (native) {
-        return { len: native.byteLength(s, 'utf8'), codepoints: codepointCount(s) };
+        return { len: s.length, codepoints: s.length };
     }
     let len = 0;
     let codepoints = 0;
@@ -90,11 +74,7 @@ export const initializeUtf8Encoder: StringModule['initializeUtf8Encoder'] = () =
         process?: { versions?: { node?: string } };
         Buffer?: NativeBuffer;
     };
-    if (
-        host.process?.versions?.node &&
-        typeof host.Buffer?.byteLength === 'function' &&
-        typeof host.Buffer?.from === 'function'
-    ) {
+    if (host.process?.versions?.node && typeof host.Buffer?.from === 'function') {
         nativeEncoders.set(encoder, { buffer: host.Buffer, encodeInto: encoder.encodeInto });
     }
     return encoder;
@@ -138,7 +118,7 @@ function writeUtf8(
     codepoints: number,
     memory: StringMemory,
 ): StringAllocation {
-    const native = nativeEncoder(encoder, s.length);
+    const native = nativeEncoder(encoder, s);
     if (native) {
         const written = native.from(memory.buffer, ptr, len).write(s, 0, len, 'utf8');
         if (written !== len) {

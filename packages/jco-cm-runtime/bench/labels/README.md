@@ -25,7 +25,7 @@ Each opportunity has its own commit on `perf/glue-labels`:
 | Bulk bytes                | Typed guest-to-guest and guest-to-host copies, owned host chunks, array fallback for custom providers.              |
 | Ready streams             | Optional synchronous read capability while retaining the public Promise-returning API.                              |
 | Batching                  | Coalesce host-completion wakeups and yield after 64 synchronous source reads.                                       |
-| Native UTF-8              | Node byte primitives for large strings; portable/custom codec fallback and exact single allocation.                 |
+| Native UTF-8              | Node byte primitives for large ASCII strings; portable/custom codec fallback and exact single allocation.           |
 
 Wasm-side context slots are intentionally deferred to the separate PR. No gain
 from these runtime changes should be interpreted as faster V8 Wasm execution.
