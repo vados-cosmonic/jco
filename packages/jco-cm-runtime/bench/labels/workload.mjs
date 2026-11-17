@@ -88,7 +88,8 @@ export function workloads() {
     const memory = new WebAssembly.Memory({ initial: 4 });
     const view = new DataView(memory.buffer);
     params.forEach((value, index) => view.setInt32(index * 4, value, true));
-    const flat = createLiftContext({ componentIdx: 0, params, useDirectParams: true, paramIndex: 0 }, true);
+    const flat = { componentIdx: 0, params, useDirectParams: true, paramIndex: 0 };
+    const cursorContext = createLiftContext({ componentIdx: 0, params, useDirectParams: true }, true);
     const indirect = {
         params: [],
         useDirectParams: false,
@@ -123,6 +124,19 @@ export function workloads() {
         size32: 512,
     });
     const cases = [
+        {
+            name: 'record-flat-16-reused',
+            units: 16,
+            expected: 15,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    cursorContext.params = params;
+                    sum += recordLift(cursorContext)[0].f15;
+                }
+                return sum;
+            },
+        },
         {
             name: 'record-flat-128-owned',
             units: 128,

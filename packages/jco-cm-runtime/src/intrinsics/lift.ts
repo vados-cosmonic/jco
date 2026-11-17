@@ -138,7 +138,7 @@ function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
 export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Public, liftFlatS8Direct, liftFlatS8Memory);
 
 function liftFlatS8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+    if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
@@ -147,7 +147,7 @@ function liftFlatS8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.params = ctx.params.slice(1);
         return [value, ctx];
     }
-    return [ctx.useDirectParams ? liftFlatS8Direct(ctx) : liftFlatS8Memory(ctx), ctx];
+    return [liftFlatS8Memory(ctx), ctx];
 }
 
 function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
@@ -175,7 +175,7 @@ function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
 export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Public, liftFlatU8Direct, liftFlatU8Memory);
 
 function liftFlatU8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+    if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
@@ -184,7 +184,7 @@ function liftFlatU8Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.params = ctx.params.slice(1);
         return [value, ctx];
     }
-    return [ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx), ctx];
+    return [liftFlatU8Memory(ctx), ctx];
 }
 
 function liftFlatU8Value(ctx: TaskLiftContext): unknown {
@@ -217,7 +217,7 @@ function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
 export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Public, liftFlatS16Direct, liftFlatS16Memory);
 
 function liftFlatS16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+    if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
@@ -226,7 +226,7 @@ function liftFlatS16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.params = ctx.params.slice(1);
         return [value, ctx];
     }
-    return [ctx.useDirectParams ? liftFlatS16Direct(ctx) : liftFlatS16Memory(ctx), ctx];
+    return [liftFlatS16Memory(ctx), ctx];
 }
 
 function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
@@ -254,7 +254,7 @@ function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
 export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Public, liftFlatU16Direct, liftFlatU16Memory);
 
 function liftFlatU16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+    if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
@@ -263,7 +263,7 @@ function liftFlatU16Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.params = ctx.params.slice(1);
         return [value, ctx];
     }
-    return [ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx), ctx];
+    return [liftFlatU16Memory(ctx), ctx];
 }
 
 function liftFlatU16Value(ctx: TaskLiftContext): unknown {
@@ -301,7 +301,7 @@ function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
 export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Public, liftFlatS32Direct, liftFlatS32Memory);
 
 function liftFlatS32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
-    if (ctx.useDirectParams && !hasParamCursor(ctx)) {
+    if (ctx.useDirectParams) {
         DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
         if (ctx.params.length === 0) {
             throw new Error('expected at least a single i32 argument');
@@ -310,7 +310,7 @@ function liftFlatS32Public(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         ctx.params = ctx.params.slice(1);
         return [value, ctx];
     }
-    return [ctx.useDirectParams ? liftFlatS32Direct(ctx) : liftFlatS32Memory(ctx), ctx];
+    return [liftFlatS32Memory(ctx), ctx];
 }
 
 function liftFlatS32Direct(ctx: TaskLiftContext): unknown {

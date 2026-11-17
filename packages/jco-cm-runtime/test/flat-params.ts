@@ -34,7 +34,7 @@ test.concurrent('flat cursors preserve non-configurable accessors', () => {
     expect(params).toEqual([2]);
 });
 
-test.concurrent('custom record lifts see only unconsumed parameters', () => {
+test.each([false, true])('custom record lifts see unconsumed parameters (owned=%s)', (owned) => {
     const lift = liftFlatRecord({
         fieldMetas: [
             ['first', liftFlatS32, 4, 4],
@@ -52,6 +52,7 @@ test.concurrent('custom record lifts see only unconsumed parameters', () => {
         align32: 4,
     });
     const ctx: TaskLiftContext = { componentIdx: 0, params: [1, 2, 3], useDirectParams: true };
-    expect(lift(ctx)[0]).toEqual({ first: 1, second: 2 });
-    expect(ctx.params).toEqual([3]);
+    const context = owned ? createLiftContext(ctx, true) : ctx;
+    expect(lift(context)[0]).toEqual({ first: 1, second: 2 });
+    expect(context.params).toEqual([3]);
 });

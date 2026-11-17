@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const comparisons = [
     ['retained', 'optimized', 'context-wasm'],
     ...[
+        'record-flat-16-reused',
         'record-flat-16-fresh',
         'record-flat-16-owned',
         'record-flat-128-owned',

@@ -94,7 +94,7 @@ for the implementations on this branch. In particular, applying accessors to
 arbitrary caller-created contexts proved too expensive in the fresh-record
 benchmark, despite the earlier reused-context cursor probe looking promising. Cursor setup
 is now limited to vectors of at least 64 arguments, or explicit reuse by an
-internal caller. The reused 16-scalar probe explicitly opts in; the fresh
+internal caller. The reused 16-field record probe explicitly opts in; the fresh
 16-field probes do not. The 128-field test explores a generic helper beyond the
 usual Canonical ABI flat-argument limit; it is not a typical generated call.
 The current harness measures complete implementations instead of substitutions.
