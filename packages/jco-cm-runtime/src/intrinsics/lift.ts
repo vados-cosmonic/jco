@@ -1,5 +1,5 @@
 import { defineScalarLift, scalarLiftValue } from './scalar-lift.js';
-import { consumeParams, readParam, remainingParams, copyParams } from './flat-params.js';
+import { consumeParams, readParam, remainingParams, copyParams, takeParam } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
     LiftModule,
@@ -139,14 +139,7 @@ function liftFlatS8Value(ctx: TaskLiftContext): unknown {
 
 function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
-    let val;
-
-    if (remainingParams(ctx) === 0) {
-        throw new Error('expected at least a single i32 argument');
-    }
-    val = readParam(ctx, 0);
-    consumeParams(ctx, 1);
-    return val;
+    return takeParam(ctx, 'expected at least a single i32 argument');
 }
 
 function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
@@ -174,14 +167,7 @@ function liftFlatU8Value(ctx: TaskLiftContext): unknown {
 
 function liftFlatU8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
-    let val;
-
-    if (remainingParams(ctx) === 0) {
-        throw new Error('expected at least a single i32 argument');
-    }
-    val = readParam(ctx, 0);
-    consumeParams(ctx, 1);
-    return val;
+    return takeParam(ctx, 'expected at least a single i32 argument');
 }
 
 function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
@@ -210,14 +196,7 @@ function liftFlatS16Value(ctx: TaskLiftContext): unknown {
 
 function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
-    let val;
-
-    if (remainingParams(ctx) === 0) {
-        throw new Error('expected at least a single i32 argument');
-    }
-    val = readParam(ctx, 0);
-    consumeParams(ctx, 1);
-    return val;
+    return takeParam(ctx, 'expected at least a single i32 argument');
 }
 
 function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
@@ -245,14 +224,7 @@ function liftFlatU16Value(ctx: TaskLiftContext): unknown {
 
 function liftFlatU16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
-    let val;
-
-    if (remainingParams(ctx) === 0) {
-        throw new Error('expected at least a single i32 argument');
-    }
-    val = readParam(ctx, 0);
-    consumeParams(ctx, 1);
-    return val;
+    return takeParam(ctx, 'expected at least a single i32 argument');
 }
 
 function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
@@ -286,14 +258,7 @@ function liftFlatS32Value(ctx: TaskLiftContext): unknown {
 
 function liftFlatS32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
-    let val;
-
-    if (remainingParams(ctx) === 0) {
-        throw new Error('expected at least a single i32 argument');
-    }
-    val = readParam(ctx, 0);
-    consumeParams(ctx, 1);
-    return val;
+    return takeParam(ctx, 'expected at least a single i32 argument');
 }
 
 function liftFlatS32Memory(ctx: TaskLiftContext): unknown {

@@ -81,3 +81,28 @@ export function consumeParams(context: ParamsContext, count: number): void {
         cursor.offset = Math.min(cursor.values.length, cursor.offset + count);
     }
 }
+
+/** Read and consume an unconverted scalar with one cursor lookup. */
+export function takeParam(context: ParamsContext, error: string): unknown {
+    const cursor = cursorFor(context);
+    if (!cursor) {
+        if (context.params!.length === 0) {
+            throw new Error(error);
+        }
+        const value = context.params![0];
+        context.params = context.params!.slice(1);
+        return value;
+    }
+    if (cursor.offset === cursor.values.length) {
+        throw new Error(error);
+    }
+    const value = cursor.values[cursor.offset];
+    if (cursor.exposed) {
+        cursor.values = cursor.values.slice(cursor.offset + 1);
+        cursor.offset = 0;
+        cursor.exposed = false;
+    } else {
+        cursor.offset++;
+    }
+    return value;
+}
