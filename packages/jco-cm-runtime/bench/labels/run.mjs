@@ -23,7 +23,9 @@ function median(values) {
 /** Run a single process's samples; launch overhead and all setup are excluded. */
 async function worker(bundle) {
     const { workloads } = await import(pathToFileURL(bundle).href);
-    const cases = workloads();
+    const selected = process.env.JCO_LABEL_BENCH_CASES?.split(',');
+    const cases = workloads().filter((item) => !selected || selected.includes(item.name));
+    assert.ok(cases.length > 0, 'select at least one known workload');
     const observations = [];
     for (const item of cases) {
         let iterations = 1;
@@ -147,6 +149,7 @@ async function main() {
         platform: process.platform,
         arch: process.arch,
         processes,
+        selectedCases: process.env.JCO_LABEL_BENCH_CASES?.split(',') ?? null,
         samplesPerProcess: 9,
         builtAt: new Date().toISOString(),
         builds,

@@ -104,3 +104,100 @@ The current harness measures complete implementations instead of substitutions.
 Results are microbenchmarks, not application-level throughput or latency claims.
 Small differences whose process ranges overlap one are inconclusive. Bundle
 sizes include the benchmark harness and are not application bundle sizes.
+
+Measured source: `f11b4acd8c5131882736a5766891ecbd0825193a`.
+Baseline: `d7e296bed`, with `DEBUG` stripped on both sides.
+CPU: Intel(R) Xeon(R) Processor @ 2.60GHz, Linux x64.
+Node 24.21.0 / V8 13.6.233.17-node.53; Node 26.13.0 / V8 14.6.202.34-node.40.
+
+Each cell is the median of five process median speedup ratios. Parentheses show
+the range of those process ratios, not a confidence interval. Values above one
+are faster. The first row compares current retained and stripped implementations;
+other rows compare the pre-optimization baseline with the current implementation.
+
+| Workload                       | Node 24 speedup (range) | Node 26 speedup (range) |
+| ------------------------------ | ----------------------- | ----------------------- |
+| Strip DEBUG: context Wasm loop | 1.02× (0.92–1.05)       | 1.01× (0.92–1.02)       |
+| record-flat-16-reused          | 1.60× (1.56–1.82)       | 1.65× (1.64–1.66)       |
+| record-flat-16-fresh           | 1.02× (0.96–1.11)       | 1.03× (1.01–1.05)       |
+| record-flat-16-owned           | 1.02× (1.00–1.16)       | 1.02× (0.97–1.05)       |
+| record-flat-128-owned          | 1.54× (1.47–1.65)       | 1.53× (1.48–1.58)       |
+| context-js                     | 1.12× (1.09–1.14)       | 1.18× (1.17–1.20)       |
+| context-wasm                   | 1.16× (1.09–1.17)       | 1.18× (1.15–1.18)       |
+| rep-get                        | 0.31× (0.28–0.32)       | 1.00× (0.99–1.01)       |
+| rep-recycle                    | 0.80× (0.79–0.81)       | 1.02× (0.97–1.03)       |
+| lift-flat-16                   | 0.78× (0.77–0.82)       | 1.01× (0.99–1.02)       |
+| lift-memory-16                 | 2.53× (2.31–2.79)       | 4.26× (4.16–4.73)       |
+| utf16-1280-units               | 1.45× (1.41–1.51)       | 1.45× (1.44–1.47)       |
+| utf8-ascii-4096                | 2.10× (1.67–2.12)       | 2.31× (2.28–2.35)       |
+| utf8-mixed-4096                | 1.02× (0.97–1.04)       | 1.01× (0.99–1.06)       |
+| queue-4096-chunks              | 3.08× (3.02–3.12)       | 2.59× (2.53–2.73)       |
+| bulk-bytes-4096                | 140.02× (134.35–143.54) | 282.07× (274.34–292.80) |
+
+The short-record regression encountered during implementation was removed by
+keeping public integer consumption on its ordinary array path, selecting the
+plain record loop once per call, and using named public functions instead of a
+shared closure dispatcher. Cursor and scalar-capability paths remain private to
+optimized composition. Fresh short records are approximately neutral; reused
+records and long vectors benefit. The direct public scalar loop is a control,
+not a cursor benchmark.
+
+**Node 24 paired-control anomaly:** the paired run reports regressions for
+`rep-get`, `rep-recycle`, and direct public scalar calls. The representation-table
+implementation is unchanged from the baseline. A separate five-process isolated
+check, using byte-for-byte identical bundle hashes, did not reproduce those
+regressions:
+
+| Node 24 isolated control | Baseline ns/op (process range) | Current ns/op (process range) |
+| ------------------------ | ------------------------------ | ----------------------------- |
+| rep-get                  | 2.38 (2.12–2.48)               | 2.31 (2.29–2.70)              |
+| rep-recycle              | 11.52 (9.91–13.66)             | 11.24 (9.72–12.21)            |
+| lift-flat-16             | 56.21 (54.90–67.18)            | 55.36 (48.79–57.66)           |
+
+This indicates sensitivity to the combined benchmark/JIT context; it does not
+establish a production regression or a speedup for those controls. Absolute
+values also varied with machine load. The large allocation/byte-copy gains appear
+in both isolated and paired measurements, but application-level throughput,
+JSPI latency, cold start, and GC behavior remain unmeasured.
+
+To reproduce the isolated check with Node 24, from this package:
+
+```sh
+JCO_LABEL_BENCH_PROCESSES=5 \
+JCO_LABEL_BENCH_CASES=rep-get,rep-recycle,lift-flat-16 \
+JCO_LABEL_BENCH_OUTPUT=bench/output/controls24 node bench/labels/run.mjs
+```
+
+Raw local artifacts are in `bench/output/validated24`, `validated26`, and
+`controls24`, including paired samples and matching bundle SHA-256 hashes.
+
+### Bundle size
+
+These are the same benchmark entrypoint, including its test setup and workloads.
+Node 24 and Node 26 produced identical bundle hashes.
+
+| Build     | Minified bytes | Gzip bytes |
+| --------- | -------------: | ---------: |
+| baseline  |        102,657 |     29,610 |
+| optimized |        108,214 |     31,082 |
+| retained  |        120,827 |     33,694 |
+| lean      |        108,110 |     31,028 |
+
+Dropping DEBUG removes 10.4% of current minified bytes and 7.8% of gzip
+bytes. The additional fast paths have a code-size cost: the current stripped
+bundle is 5.4% larger than the already-stripped pre-optimization baseline.
+Label stripping and the aggregate implementation-size change are separate effects.
+
+### Final validation
+
+- TypeScript type checking, formatting, lint, and bundled label/trap verification pass.
+- Node 26: all 429 tests pass with labels retained, DEBUG removed, and DEBUG+SAFETY removed.
+- Node 24: all 429 tests pass with labels retained.
+- Every full suite also builds release and lean packages and runs standalone runtime conformance on both.
+- Minimal-capability package imports, custom callback/context handoffs, memory growth, cancellation ordering, fairness, and owned-byte lifetimes are covered.
+
+The native UTF-8 candidate was restricted to large ASCII strings after mixed
+Unicode regressed on Node 24. Creating accessors on arbitrary caller objects was
+also rejected: a V8 fast-properties probe confirmed that converting existing
+`params` data properties puts those objects in dictionary mode, while adding a
+shared accessor to a fresh runtime-owned context retains fast properties.
