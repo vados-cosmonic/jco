@@ -240,21 +240,21 @@ export function guardTrap<A extends unknown[], T, R>(
 
 /** Implements `canon backpressure.inc`. */
 export function backpressureInc(context: ComponentStateLookupContext, componentIdx: number) {
-    debugLog('[backpressureInc()] args', { componentIdx });
+    DEBUG: debugLog('[backpressureInc()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);
     if (!state) {
         throw new Error(`missing component state for component [${componentIdx}]`);
     }
     const newValue = state.incrementBackpressure();
-    debugLog('[backpressureInc()] incremented', { componentIdx, newValue });
+    DEBUG: debugLog('[backpressureInc()] incremented', { componentIdx, newValue });
 }
 
 /** Implements `canon backpressure.dec`. */
 export function backpressureDec(context: ComponentStateLookupContext, componentIdx: number) {
-    debugLog('[backpressureDec()] args', { componentIdx });
+    DEBUG: debugLog('[backpressureDec()] args', { componentIdx });
     const state = getOrCreateAsyncState(context, componentIdx);
     const newValue = state.decrementBackpressure();
-    debugLog('[backpressureDec()] decremented', { componentIdx, newValue });
+    DEBUG: debugLog('[backpressureDec()] decremented', { componentIdx, newValue });
 }
 
 export function getOrCreateAsyncState(context: ComponentStateLookupContext, componentIdx: number) {
@@ -267,7 +267,7 @@ export function getOrCreateAsyncState(context: ComponentStateLookupContext, comp
 }
 
 export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
-    debugLog('[_ComponentStateSetAllError()]');
+    DEBUG: debugLog('[_ComponentStateSetAllError()]');
     for (const state of states.values()) {
         state.setErrored();
     }
@@ -403,7 +403,10 @@ export function initializeComponentAsyncStateClass(
             return this.#errored !== null;
         }
         setErrored(err?: unknown) {
-            debugLog('[ComponentAsyncState#setErrored()] component errored', { err, componentIdx: this.#componentIdx });
+            DEBUG: debugLog('[ComponentAsyncState#setErrored()] component errored', {
+                err,
+                componentIdx: this.#componentIdx,
+            });
             if (this.#errored) {
                 return;
             }
@@ -424,7 +427,7 @@ export function initializeComponentAsyncStateClass(
             if (this.#trapError === null) {
                 this.#trapError = trap;
             }
-            debugLog('[ComponentAsyncState#markTrapped()] component trapped', {
+            DEBUG: debugLog('[ComponentAsyncState#markTrapped()] component trapped', {
                 err,
                 componentIdx: this.#componentIdx,
             });
@@ -603,7 +606,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         exclusiveLock(taskID: bigint) {
-            debugLog('[ComponentAsyncState#exclusiveLock()]', {
+            DEBUG: debugLog('[ComponentAsyncState#exclusiveLock()]', {
                 holder: this.#lockHolderTaskID,
                 requester: taskID,
                 componentIdx: this.#componentIdx,
@@ -628,7 +631,7 @@ export function initializeComponentAsyncStateClass(
             }
             if (this.#lockHolderTaskID === null) {
                 this.#lockHolderTaskID = taskID;
-                debugLog('[ComponentAsyncState#acquireExclusiveLock()] acquired', {
+                DEBUG: debugLog('[ComponentAsyncState#acquireExclusiveLock()] acquired', {
                     holder: taskID,
                     componentIdx: this.#componentIdx,
                 });
@@ -637,7 +640,7 @@ export function initializeComponentAsyncStateClass(
             if (this.#lockHolderTaskID === taskID) {
                 throw new Error(`task [${taskID}] already holds the lock for component [${this.#componentIdx}]`);
             }
-            debugLog('[ComponentAsyncState#acquireExclusiveLock()] waiting', {
+            DEBUG: debugLog('[ComponentAsyncState#acquireExclusiveLock()] waiting', {
                 holder: this.#lockHolderTaskID,
                 requester: taskID,
                 componentIdx: this.#componentIdx,
@@ -708,7 +711,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         exclusiveRelease(taskID: bigint) {
-            debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
+            DEBUG: debugLog('[ComponentAsyncState#exclusiveRelease()] args', {
                 holder: this.#lockHolderTaskID,
                 releaser: taskID,
                 componentIdx: this.#componentIdx,
@@ -716,7 +719,7 @@ export function initializeComponentAsyncStateClass(
             if (this.#lockHolderTaskID !== taskID) {
                 // Ownerless releases were the historical behavior; a foreign
                 // release now leaves the hold intact
-                debugLog('[ComponentAsyncState#exclusiveRelease()] ignoring foreign release', {
+                DEBUG: debugLog('[ComponentAsyncState#exclusiveRelease()] ignoring foreign release', {
                     holder: this.#lockHolderTaskID,
                     releaser: taskID,
                     componentIdx: this.#componentIdx,
@@ -739,7 +742,7 @@ export function initializeComponentAsyncStateClass(
                     this.#onExclusiveReleaseHandlers[idx] = null;
                     f!();
                 } catch (err) {
-                    debugLog('error while executing handler for next exclusive release', err);
+                    DEBUG: debugLog('error while executing handler for next exclusive release', err);
                     throw err;
                 }
             }
@@ -773,7 +776,7 @@ export function initializeComponentAsyncStateClass(
         }
 
         onNextExclusiveRelease(fn: () => void) {
-            debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
+            DEBUG: debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
             this.#onExclusiveReleaseHandlers.push(fn);
         }
 
@@ -826,7 +829,7 @@ export function initializeComponentAsyncStateClass(
 
         suspendThread(args: SuspendThreadOptions) {
             const { thread, readyFn, cancellable, onResume, suspended = false } = args;
-            debugLog('[ComponentAsyncState#suspendThread()]', {
+            DEBUG: debugLog('[ComponentAsyncState#suspendThread()]', {
                 threadID: thread.id(),
                 taskID: thread.taskID(),
                 componentIdx: this.#componentIdx,
@@ -974,7 +977,7 @@ export function initializeComponentAsyncStateClass(
                 }
 
                 if (this.isTrapped() || meta.thread.isRejected()) {
-                    debugLog('[ComponentAsyncState#tick()] detected thread rejection, leaving early', { meta });
+                    DEBUG: debugLog('[ComponentAsyncState#tick()] detected thread rejection, leaving early', { meta });
                     this.resumeThread(thread);
                     return TICK_RESUMED;
                 }
@@ -983,7 +986,7 @@ export function initializeComponentAsyncStateClass(
                     continue;
                 }
 
-                debugLog('[ComponentAsyncState#tick()] resuming thread via tick', {
+                DEBUG: debugLog('[ComponentAsyncState#tick()] resuming thread via tick', {
                     threadID: thread.id(),
                     componentIdx: this.#componentIdx,
                 });

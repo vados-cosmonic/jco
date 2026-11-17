@@ -33,7 +33,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         target: unknown;
 
         constructor(args: FutureEndpointOptions) {
-            debugLog('[FutureWritableEnd#constructor()] args', args);
+            DEBUG: debugLog('[FutureWritableEnd#constructor()] args', args);
             super(args);
 
             if (!args.elemMeta) {
@@ -113,7 +113,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         }
 
         cancel() {
-            debugLog('[FutureEnd#cancel()]');
+            DEBUG: debugLog('[FutureEnd#cancel()]');
             this.resetAndNotifyPending(FutureEnd.CopyResult.CANCELLED);
         }
 
@@ -165,7 +165,7 @@ export function initializeFutureWritableEndClass(_context: FutureEndpointClassCo
         }
 
         guestWrite(args: FutureGuestCopyOptions) {
-            debugLog('[FutureWritableEnd#guestWrite()] args', args);
+            DEBUG: debugLog('[FutureWritableEnd#guestWrite()] args', args);
             const { componentIdx, stringEncoding, memory, realloc, ptr, data } = args;
 
             const elemMeta = {

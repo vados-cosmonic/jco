@@ -104,7 +104,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         }
 
         read(count: number, opts: { transferResources?: boolean } = {}): unknown[] {
-            debugLog('[ManagedBuffer#read()] args', { count });
+            DEBUG: debugLog('[ManagedBuffer#read()] args', { count });
             if (count === undefined || count <= 0) {
                 throw new TypeError(`missing/invalid count [${count}]`);
             }
@@ -159,7 +159,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
         }
 
         write(values: unknown[], opts: { transferResources?: boolean } = {}): void {
-            debugLog('[ManagedBuffer#write()] args', { values });
+            DEBUG: debugLog('[ManagedBuffer#write()] args', { values });
 
             if (!Array.isArray(values)) {
                 throw new TypeError('values input to write() must be an array');
@@ -239,12 +239,12 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
         }
 
         getBuffer(componentIdx: number, bufferID: bigint) {
-            debugLog('[BufferManager#getBuffer()] args', { componentIdx, bufferID });
+            DEBUG: debugLog('[BufferManager#getBuffer()] args', { componentIdx, bufferID });
             return this.#buffers.get(componentIdx)?.get(bufferID);
         }
 
         createBuffer(args: CreateBufferOptions) {
-            debugLog('[BufferManager#createBuffer()] args', args);
+            DEBUG: debugLog('[BufferManager#createBuffer()] args', args);
             if (!args || typeof args !== 'object') {
                 throw new TypeError('missing/invalid argument object');
             }
@@ -291,7 +291,7 @@ export function initializeBufferManagerClass(ManagedBuffer: ManagedBufferConstru
         }
 
         deleteBuffer(componentIdx: number, bufferID: bigint) {
-            debugLog('[BufferManager#deleteBuffer()] args', { componentIdx, bufferID });
+            DEBUG: debugLog('[BufferManager#deleteBuffer()] args', { componentIdx, bufferID });
             return this.#buffers.get(componentIdx)?.delete(bufferID);
         }
     }

@@ -64,7 +64,7 @@ export function contextSet(
         throw new Error('invalid value for context set (not valid i32)');
     }
     const storage = activeSlots(_context, ctx.componentIdx, 'set');
-    debugLog('[contextSet()] args', { slot, value, storage, componentIdx: ctx.componentIdx });
+    DEBUG: debugLog('[contextSet()] args', { slot, value, storage, componentIdx: ctx.componentIdx });
     if (slot < 0 || slot >= storage.length) {
         throw new Error('invalid slot for current thread');
     }
@@ -84,7 +84,7 @@ export function contextGet(
         throw new TypeError('missing slot');
     }
     const storage = activeSlots(_context, ctx.componentIdx, 'get');
-    debugLog('[contextGet()] args', { slot, storage, componentIdx: ctx.componentIdx });
+    DEBUG: debugLog('[contextGet()] args', { slot, storage, componentIdx: ctx.componentIdx });
     if (slot < 0 || slot >= storage.length) {
         throw new Error('invalid slot for current thread');
     }

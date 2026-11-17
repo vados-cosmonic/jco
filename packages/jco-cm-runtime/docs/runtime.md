@@ -73,3 +73,36 @@ intercept its calls. There is no mutable namespace receiver or implicit override
 registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
+
+## Removing diagnostics when bundling
+
+Runtime diagnostic statements carry a `DEBUG` JavaScript label. The default build
+retains them and preserves `JCO_DEBUG` behavior. A bundler can remove the entire
+statement, including object literals, string formatting, and diagnostic getters
+passed as log arguments. Diagnostic arguments must not perform required work.
+
+For example, when bundling bindings together with this external runtime using
+Rolldown:
+
+```js
+const bundle = await rolldown({
+    input: 'component.js',
+    transform: { dropLabels: ['DEBUG'] },
+});
+```
+
+The runtime must be included in the bundle, rather than marked external. Apply
+label removal before optimization passes that discard unused labels. TypeScript's
+normal JavaScript emit preserves these labels. Already minified or embedded
+runtime artifacts may no longer contain them.
+
+`SAFETY` is reserved for assertions about internal implementation invariants. The
+initial labeled assertion verifies the representation table's internal freelist
+head. It can be removed with `dropLabels: ['DEBUG', 'SAFETY']`. Canonical ABI traps,
+resource-handle validation, Unicode validation, ownership, cancellation, and
+lifecycle checks remain unconditional. Adding a `SAFETY` label requires auditing
+both the checked condition and any work performed while evaluating it.
+
+See the [label experiments](../bench/labels/README.md) for correctness checks and
+reproducible Node benchmarks. This package does not change the transpiler's default
+profile or expose a new transpiler option.

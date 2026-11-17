@@ -24,7 +24,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         #stopError: Error | null = null;
 
         constructor(args: StreamEndOptions) {
-            debugLog('[StreamReadableEnd#constructor()] args', args);
+            DEBUG: debugLog('[StreamReadableEnd#constructor()] args', args);
             super(args);
             this.#elemMeta = args.elemMeta;
         }
@@ -47,7 +47,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
         }
 
         async read(opts: number | StreamReadOptions = 1): Promise<StreamReadResult> {
-            debugLog('[StreamReadableEnd#read()]');
+            DEBUG: debugLog('[StreamReadableEnd#read()]');
 
             if (this.#endOfStream) {
                 return { value: undefined, done: true };
@@ -71,7 +71,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     this.#result = newResult;
                     await p;
                 } catch (err) {
-                    debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
+                    DEBUG: debugLog('[StreamReadableEnd#read()] error waiting for previous read', err);
                     // If the previous write we were waiting on errors for any reason,
                     // we can ignore it and attempt to continue with this read
                     // which may also fail for a similar reason
@@ -177,7 +177,7 @@ export function initializeStreamReadableEndClass(_context: StreamEndpointClassCo
                     resolve({ value: undefined, done: true });
                 }
             } catch (err) {
-                debugLog('[StreamReadableEnd#read()] error', err);
+                DEBUG: debugLog('[StreamReadableEnd#read()] error', err);
                 reject(err);
             }
 

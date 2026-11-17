@@ -58,7 +58,7 @@ export function createNewCurrentImplicitThread<T extends AsyncTask = AsyncTask>(
     _context: TaskCreateContext<T>,
     args: CreateTaskOptions,
 ): { task: T; taskID: bigint; thread: ReturnType<T['addThread']>; threadID: number } {
-    debugLog('[createNewCurrentImplicitThread()] args', args);
+    DEBUG: debugLog('[createNewCurrentImplicitThread()] args', args);
     const {
         componentIdx,
         isAsync,
@@ -116,7 +116,7 @@ export function clearCurrentThread<T extends TaskIdentity = AsyncTask>(
     taskID?: bigint,
     options: { preserveTask?: boolean } = {},
 ): T | undefined {
-    debugLog('[clearCurrentThread()] args', { componentIdx, taskID });
+    DEBUG: debugLog('[clearCurrentThread()] args', { componentIdx, taskID });
     if (componentIdx === undefined || componentIdx === null) {
         throw new Error('missing/invalid component instance index while ending current task');
     }
@@ -182,7 +182,7 @@ export function taskReturn(
     if (expectedResultType !== null && ctx.resultTypeIdx !== undefined && ctx.resultTypeIdx !== expectedResultType) {
         throw new _context.RuntimeError('task.return result type does not match the function type');
     }
-    debugLog('[taskReturn()] args', {
+    DEBUG: debugLog('[taskReturn()] args', {
         componentIdx,
         taskID: task.id(),
         subtaskID: task.getParentSubtask()?.id(),
@@ -198,7 +198,7 @@ export function taskReturn(
     // See also documentation on `HostIntrinsic::PrepareCall`
     const subtaskCallMetadata = task.getParentSubtask()?.getCallMetadata();
     if (subtaskCallMetadata?.returnFn && !subtaskCallMetadata.returnFnCalled) {
-        debugLog('[taskReturn()] calling return fn on subtask', {
+        DEBUG: debugLog('[taskReturn()] calling return fn on subtask', {
             componentIdx,
             taskID: task.id(),
             subtaskID: task.getParentSubtask()?.id(),
@@ -221,28 +221,28 @@ export function taskReturn(
     }
     const expectedMemoryIdx = task.getReturnMemoryIdx();
     if (expectedMemoryIdx !== null && memoryIdx !== null && expectedMemoryIdx !== memoryIdx) {
-        debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
+        DEBUG: debugLog('[taskReturn()] mismatched memory indices', { expectedMemoryIdx, memoryIdx });
         throw new Error('task.return memory [' + memoryIdx + '] does not match task [' + expectedMemoryIdx + ']');
     }
     task.callbackFnIdx = callbackFnIdx;
     if (!memory && liftFns.length > 4) {
-        debugLog('[taskReturn()] memory not present for max async flat lifts');
+        DEBUG: debugLog('[taskReturn()] memory not present for max async flat lifts');
         throw new Error('memory must be present if more than max async flat lifts are performed');
     }
     let liftCtx: TaskLiftContext = { memory, useDirectParams, params, componentIdx, stringEncoding };
     if (!useDirectParams) {
         if (!memory) {
-            debugLog('missing memory despite indirect param usage', { useDirectParams, liftCtx, ctx });
+            DEBUG: debugLog('missing memory despite indirect param usage', { useDirectParams, liftCtx, ctx });
             throw new Error('missing memory despite indirect param usage');
         }
         liftCtx.storagePtr = (params[0] as number) >>> 0;
         liftCtx.storageLen = params[1] as number;
     }
     const liftedResults = [];
-    debugLog('[taskReturn()] lifting results out of memory', { liftCtx });
+    DEBUG: debugLog('[taskReturn()] lifting results out of memory', { liftCtx });
     for (const liftFn of liftFns) {
         if (liftCtx.storageLen !== undefined && liftCtx.storageLen <= 0) {
-            debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
+            DEBUG: debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
             throw new Error('ran out of storage while writing');
         }
         const [val, newLiftCtx] = liftFn(liftCtx);
@@ -257,7 +257,7 @@ export function taskCancel(
     _context: TaskCancelContext,
     componentIdx: number,
 ): ReturnType<AsyncTaskModule['taskCancel']> {
-    debugLog('[taskCancel()] args', { componentIdx });
+    DEBUG: debugLog('[taskCancel()] args', { componentIdx });
     const state = getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!state.mayLeave) {
         throw new Error('component instance is not marked as may leave, cannot be cancelled');

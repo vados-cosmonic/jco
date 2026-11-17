@@ -100,7 +100,7 @@ export function initializeWaitableClass(): WaitableConstructor {
         }
 
         setPendingEvent(fn: () => WaitableEvent) {
-            debugLog('[Waitable#setPendingEvent()] args', {
+            DEBUG: debugLog('[Waitable#setPendingEvent()] args', {
                 waitable: this,
                 inSet: this.#waitableSet,
             });
@@ -108,7 +108,7 @@ export function initializeWaitableClass(): WaitableConstructor {
         }
 
         getPendingEvent() {
-            debugLog('[Waitable#getPendingEvent()] args', {
+            DEBUG: debugLog('[Waitable#getPendingEvent()] args', {
                 waitable: this,
                 inSet: this.#waitableSet,
                 hasPendingEvent: this.#pendingEventFn !== null,
@@ -124,7 +124,7 @@ export function initializeWaitableClass(): WaitableConstructor {
         }
 
         join(waitableSet: ComponentWaitableSet | null) {
-            debugLog('[Waitable#join()] args', {
+            DEBUG: debugLog('[Waitable#join()] args', {
                 waitable: this,
                 waitableSet: waitableSet,
                 isRemoval: waitableSet === null,
@@ -146,7 +146,7 @@ export function initializeWaitableClass(): WaitableConstructor {
         }
 
         drop() {
-            debugLog('[Waitable#drop()] args', {
+            DEBUG: debugLog('[Waitable#drop()] args', {
                 componentIdx: this.#componentIdx,
                 waitable: this,
             });
@@ -245,7 +245,7 @@ export function initializeWaitableSetClass(
         }
 
         hasPendingEvent() {
-            debugLog('[WaitableSet#hasPendingEvent()] args', {
+            DEBUG: debugLog('[WaitableSet#hasPendingEvent()] args', {
                 componentIdx: this.#componentIdx,
                 waitableSet: this,
                 waitableSetTargets: this.targets(),
@@ -254,7 +254,7 @@ export function initializeWaitableSetClass(
         }
 
         getPendingEvent() {
-            debugLog('[WaitableSet#getPendingEvent()] args', {
+            DEBUG: debugLog('[WaitableSet#getPendingEvent()] args', {
                 componentIdx: this.#componentIdx,
                 waitableSet: this,
             });
@@ -263,7 +263,7 @@ export function initializeWaitableSetClass(
                     continue;
                 }
                 const event = waitable.getPendingEvent();
-                debugLog('[WaitableSet#getPendingEvent()] found pending event', {
+                DEBUG: debugLog('[WaitableSet#getPendingEvent()] found pending event', {
                     waitable,
                     event,
                 });
@@ -280,7 +280,7 @@ export function initializeWaitableSetClass(
         }
 
         tryWait(opts: WaitableWaitOptions) {
-            debugLog('[WaitableSet#tryWait()] args', { opts });
+            DEBUG: debugLog('[WaitableSet#tryWait()] args', { opts });
             // TODO(threads): this task should be the thread
             const { readyFn, task, cancellable } = opts;
 
@@ -295,7 +295,7 @@ export function initializeWaitableSetClass(
         }
 
         waitUntil(opts: WaitableWaitOptions) {
-            debugLog('[WaitableSet#waitUntil()] args', { opts });
+            DEBUG: debugLog('[WaitableSet#waitUntil()] args', { opts });
             const event = this.tryWait(opts);
             if (event !== null) {
                 return event;
@@ -326,7 +326,7 @@ export function initializeWaitableSetClass(
         }
 
         waitUntilCallback(opts: WaitableWaitOptions, onEvent: (event: WaitableEvent | null) => void) {
-            debugLog('[WaitableSet#waitUntilCallback()] args', { opts });
+            DEBUG: debugLog('[WaitableSet#waitUntilCallback()] args', { opts });
             const event = this.tryWait(opts);
             if (event !== null) {
                 onEvent(event);
@@ -355,7 +355,7 @@ export function initializeWaitableSetClass(
 /** Implements `canon waitable-set.new`. */
 export function waitableSetNew(context: WaitableSetNewContext, componentIdx: number) {
     const { WaitableSet } = context;
-    debugLog('[waitableSetNew()] args', { componentIdx });
+    DEBUG: debugLog('[waitableSetNew()] args', { componentIdx });
 
     const state = getOrCreateAsyncState(context.lookup, componentIdx);
     if (!state) {
@@ -368,7 +368,7 @@ export function waitableSetNew(context: WaitableSetNewContext, componentIdx: num
         throw new Error(`invalid/missing waitable set rep [${rep}]`);
     }
 
-    debugLog('[waitableSetNew()] created waitable set', { componentIdx, rep });
+    DEBUG: debugLog('[waitableSetNew()] created waitable set', { componentIdx, rep });
     return rep;
 }
 
@@ -381,7 +381,7 @@ export function waitableSetWait(
     syncOnly = false,
 ) {
     const { RuntimeError, WaitableSet } = context;
-    debugLog('[waitableSetWait()] args', { ctx, waitableSetRep, resultPtr });
+    DEBUG: debugLog('[waitableSetWait()] args', { ctx, waitableSetRep, resultPtr });
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
 
     const taskMeta = getCurrentTask(context.taskLookup, componentIdx);
@@ -439,7 +439,7 @@ export function waitableSetPoll(
 ) {
     const { RuntimeError, WaitableSet, events: asyncEventCode } = context;
     const { componentIdx, memoryIdx, getMemoryFn } = ctx;
-    debugLog('[waitableSetPoll()] args', {
+    DEBUG: debugLog('[waitableSetPoll()] args', {
         componentIdx,
         memoryIdx,
         waitableSetRep,
@@ -474,13 +474,13 @@ export function waitableSetPoll(
 
     let event;
     if (!wset.hasPendingEvent()) {
-        debugLog('[waitableSetPoll()] no pending event', {
+        DEBUG: debugLog('[waitableSetPoll()] no pending event', {
             componentIdx,
             waitableSetRep,
         });
         event = { code: asyncEventCode.NONE, payload0: 0, payload1: 0 };
     } else {
-        debugLog('[waitableSetPoll()] retrieving waiting pending event', {
+        DEBUG: debugLog('[waitableSetPoll()] retrieving waiting pending event', {
             componentIdx,
             waitableSetRep,
         });
@@ -501,7 +501,7 @@ export function waitableSetPoll(
 
 /** Implements `canon waitable-set.drop`. */
 export function waitableSetDrop(context: WaitableSetDropContext, componentIdx: number, waitableSetRep: number) {
-    debugLog('[waitableSetDrop()] args', { componentIdx, waitableSetRep });
+    DEBUG: debugLog('[waitableSetDrop()] args', { componentIdx, waitableSetRep });
     const task = getCurrentTask(context.taskLookup, componentIdx);
 
     if (!task) {
@@ -524,7 +524,7 @@ export function removeWaitableSet(
     args: { state: Pick<ComponentAsyncState, 'handles'>; waitableSetRep: number },
 ) {
     const { RuntimeError, WaitableSet } = context;
-    debugLog('[_removeWaitableSet()] args', args);
+    DEBUG: debugLog('[_removeWaitableSet()] args', args);
     const { state, waitableSetRep } = args;
     if (!state) {
         throw new TypeError('missing component state');
@@ -556,7 +556,7 @@ export function waitableJoin(
     waitableSetRep: number,
 ) {
     const { RuntimeError, Waitable, WaitableSet } = context;
-    debugLog('[waitableJoin()] args', {
+    DEBUG: debugLog('[waitableJoin()] args', {
         componentIdx,
         waitableSetRep,
         isRemoval: waitableSetRep === 0,

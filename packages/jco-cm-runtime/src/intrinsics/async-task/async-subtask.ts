@@ -215,7 +215,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
         // (see `AsyncTask#onResolve`). The host is notified of the discard by
         // disposing the pending value it returned (see `setHostPendingResult`).
         requestCancellation() {
-            debugLog('[AsyncSubtask#requestCancellation()] args', {
+            DEBUG: debugLog('[AsyncSubtask#requestCancellation()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 state: this.#state,
@@ -263,7 +263,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#onStartHandlers.push(f);
         }
         onStart(args?: { startFnParams?: unknown[] }) {
-            debugLog('[AsyncSubtask#onStart()] args', {
+            DEBUG: debugLog('[AsyncSubtask#onStart()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 parentTaskID: this.parentTaskID(),
@@ -309,7 +309,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#parentTask.reject(subtaskErr);
         }
         onResolve(subtaskValue: unknown) {
-            debugLog('[AsyncSubtask#onResolve()] args', {
+            DEBUG: debugLog('[AsyncSubtask#onResolve()] args', {
                 componentIdx: this.#componentIdx,
                 subtaskID: this.#id,
                 isAsync: this.isAsync,
@@ -387,7 +387,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
                         }
                         this.drop();
                     } catch (err) {
-                        debugLog(
+                        DEBUG: debugLog(
                             '[AsyncSubtask#onResolve()] failed to remove subtask after sync subtask completion',
                             err,
                         );
@@ -409,7 +409,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             return this.#state >= RETURNED;
         }
         addLender(handle: SubtaskLender) {
-            debugLog('[AsyncSubtask#addLender()] args', { handle });
+            DEBUG: debugLog('[AsyncSubtask#addLender()] args', { handle });
             if (!handle || typeof handle.lends !== 'number') {
                 throw new Error('missing/invalid lender handle [' + handle + ']');
             }
@@ -420,7 +420,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#lenders!.push(handle);
         }
         deliverResolve() {
-            debugLog('[AsyncSubtask#deliverResolve()] args', {
+            DEBUG: debugLog('[AsyncSubtask#deliverResolve()] args', {
                 lenders: this.#lenders,
                 parentTaskID: this.parentTaskID(),
                 subtaskID: this.#id,
@@ -438,14 +438,14 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             this.#lenders = null;
         }
         resolveDelivered() {
-            debugLog('[AsyncSubtask#resolveDelivered()] args', {});
+            DEBUG: debugLog('[AsyncSubtask#resolveDelivered()] args', {});
             if (this.#lenders === null && !this.isResolved()) {
                 throw new Error('invalid subtask state, lenders missing and subtask has not been resolved');
             }
             return this.#lenders === null;
         }
         drop() {
-            debugLog('[AsyncSubtask#drop()] args', {
+            DEBUG: debugLog('[AsyncSubtask#drop()] args', {
                 componentIdx: this.#componentIdx,
                 parentTaskID: this.#parentTask?.id(),
                 parentTaskFnName: this.#parentTask?.entryFnName(),
@@ -471,7 +471,7 @@ export function initializeAsyncSubtaskClass(context: AsyncSubtaskClassContext): 
             return state;
         }
         getWaitableHandleIdx() {
-            debugLog('[AsyncSubtask#getWaitableHandleIdx()] args', {});
+            DEBUG: debugLog('[AsyncSubtask#getWaitableHandleIdx()] args', {});
             if (!this.#waitable) {
                 throw new Error('missing/invalid waitable');
             }

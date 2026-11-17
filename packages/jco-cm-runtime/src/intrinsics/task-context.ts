@@ -31,7 +31,7 @@ export const setCurrentTaskMeta: CoreModule['setCurrentTaskMeta'] = (registers, 
 };
 
 export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta & { fn: () => T }): T {
-    debugLog('[_withGlobalCurrentThreadMeta()] args', args);
+    DEBUG: debugLog('[_withGlobalCurrentThreadMeta()] args', args);
     validate(args);
     if (!args.fn) {
         throw new TypeError('missing fn');
@@ -43,7 +43,7 @@ export function withCurrentTaskMeta<T>(registers: TaskRegisters, args: TaskMeta 
         registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
         return fn();
     } catch (error) {
-        debugLog('error while executing sync callee/callback', { ...args, err: error });
+        DEBUG: debugLog('error while executing sync callee/callback', { ...args, err: error });
         throw error;
     } finally {
         registers[componentIdx] = previous;
@@ -55,7 +55,7 @@ export function withCurrentTaskMetaAsync<T>(
     registers: TaskRegisters,
     args: TaskMeta & { fn: () => T },
 ): T | Promise<Awaited<T>> {
-    debugLog('[_withGlobalCurrentThreadMetaAsync()] args', args);
+    DEBUG: debugLog('[_withGlobalCurrentThreadMetaAsync()] args', args);
     validate(args);
     if (!args.fn) {
         throw new TypeError('missing fn');
@@ -68,7 +68,7 @@ export function withCurrentTaskMetaAsync<T>(
         registers.current = registers[componentIdx] = { taskID, threadID, componentIdx };
         result = fn();
     } catch (error) {
-        debugLog('error while executing sync callee/callback', { ...args, err: error });
+        DEBUG: debugLog('error while executing sync callee/callback', { ...args, err: error });
         registers[componentIdx] = previous;
         registers.current = previousCurrent;
         throw error;
@@ -82,7 +82,7 @@ export function withCurrentTaskMetaAsync<T>(
         try {
             return (await result) as Awaited<T>;
         } catch (error) {
-            debugLog('error while executing async callee/callback', { ...args, err: error });
+            DEBUG: debugLog('error while executing async callee/callback', { ...args, err: error });
             throw error;
         } finally {
             // A later thread of the same task may already own either register.
@@ -97,7 +97,7 @@ export function withCurrentTaskMetaAsync<T>(
 }
 
 export const clearCurrentTaskMeta: CoreModule['clearCurrentTaskMeta'] = async (registers, args) => {
-    debugLog('[_clearCurrentTask()] args', args);
+    DEBUG: debugLog('[_clearCurrentTask()] args', args);
     validate(args);
     const { taskID, threadID, componentIdx } = args;
     const meta = registers[componentIdx];

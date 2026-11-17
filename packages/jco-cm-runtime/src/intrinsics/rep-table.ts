@@ -35,30 +35,31 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
                 this.#size += 1;
                 return rep;
             }
-            debugLog('[RepTable#insert()] args', { val, target: this.target });
+            DEBUG: debugLog('[RepTable#insert()] args', { val, target: this.target });
             const freeIdx = this.#data[0] as number;
             if (freeIdx === 0) {
                 this.#data.push(val);
                 this.#data.push(null);
                 const rep = (this.#data.length >> 1) - 1;
-                debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep });
+                DEBUG: debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep });
                 this.#size += 1;
                 return rep;
             }
             const placementIdx = freeIdx << 1;
-            if (this.#data[placementIdx] !== free) {
+            // The freelist is maintained internally; guest handle checks remain unconditional.
+            SAFETY: if (this.#data[placementIdx] !== free) {
                 throw new Error('corrupt rep table freelist: head does not point at a freed slot');
             }
             this.#data[0] = this.#data[placementIdx + 1];
             this.#data[placementIdx] = val;
             this.#data[placementIdx + 1] = null;
-            debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep: freeIdx });
+            DEBUG: debugLog('[RepTable#insert()] inserted', { val, target: this.target, rep: freeIdx });
             this.#size += 1;
             return freeIdx;
         }
 
         get(rep: number): T | undefined {
-            debugLog('[RepTable#get()] args', { rep, target: this.target });
+            DEBUG: debugLog('[RepTable#get()] args', { rep, target: this.target });
             if (rep === 0) {
                 throw new RuntimeError('invalid resource rep during get, (cannot be 0)');
             }
@@ -72,7 +73,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
         }
 
         contains(rep: number): boolean {
-            debugLog('[RepTable#contains()] args', { rep, target: this.target });
+            DEBUG: debugLog('[RepTable#contains()] args', { rep, target: this.target });
             if (rep === 0) {
                 throw new Error('invalid resource rep during contains, (cannot be 0)');
             }
@@ -83,7 +84,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
         }
 
         remove(rep: number): T {
-            debugLog('[RepTable#remove()] args', { rep, target: this.target });
+            DEBUG: debugLog('[RepTable#remove()] args', { rep, target: this.target });
             if (rep === 0) {
                 throw new Error('invalid resource rep during remove, (cannot be 0)');
             }
@@ -125,7 +126,7 @@ export function initializeRepTableClass(context: TrapContext): RepTableConstruct
         }
 
         clear() {
-            debugLog('[RepTable#clear()] args', { target: this.target });
+            DEBUG: debugLog('[RepTable#clear()] args', { target: this.target });
             if (this.#space) {
                 for (let rep = 1; rep < this.#data.length / 2; rep++) {
                     if (this.#data[(rep << 1) + 1] === null && this.#data[rep << 1] !== free) {

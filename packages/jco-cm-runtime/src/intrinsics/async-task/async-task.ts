@@ -415,16 +415,16 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         mayEnter(task: AsyncTaskType) {
             const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
             if (cstate.hasBackpressure()) {
-                debugLog('[AsyncTask#mayEnter()] disallowed due to backpressure', { taskID: this.#id });
+                DEBUG: debugLog('[AsyncTask#mayEnter()] disallowed due to backpressure', { taskID: this.#id });
                 return false;
             }
             if (!cstate.callingSyncImport()) {
-                debugLog('[AsyncTask#mayEnter()] disallowed due to sync import call', { taskID: this.#id });
+                DEBUG: debugLog('[AsyncTask#mayEnter()] disallowed due to sync import call', { taskID: this.#id });
                 return false;
             }
             const callingSyncExportWithSyncPending = Reflect.get(cstate, 'callingSyncExport') && !task.isAsync;
             if (!callingSyncExportWithSyncPending) {
-                debugLog('[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending', {
+                DEBUG: debugLog('[AsyncTask#mayEnter()] disallowed due to sync export w/ sync pending', {
                     taskID: this.#id,
                 });
                 return false;
@@ -444,7 +444,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                     // the holder's bookkeeping stays intact and its
                     // release still pairs
                     this.#lockFreeEntry = true;
-                    debugLog('[AsyncTask#enterSync()] entering without exclusive lock', {
+                    DEBUG: debugLog('[AsyncTask#enterSync()] entering without exclusive lock', {
                         taskID: this.#id,
                         componentIdx: this.#componentIdx,
                     });
@@ -487,7 +487,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             return true;
         }
         async enter(opts?: { isHost?: boolean }) {
-            debugLog('[AsyncTask#enter()] args', {
+            DEBUG: debugLog('[AsyncTask#enter()] args', {
                 taskID: this.#id,
                 componentIdx: this.#componentIdx,
                 subtaskID: this.getParentSubtask()?.id(),
@@ -649,7 +649,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         }
         async waitUntil(opts: TaskSuspendOptions) {
             const { readyFn, cancellable } = opts;
-            debugLog('[AsyncTask#waitUntil()] args', { taskID: this.#id, args: { cancellable } });
+            DEBUG: debugLog('[AsyncTask#waitUntil()] args', { taskID: this.#id, args: { cancellable } });
             // TODO(fix): check for cancel
             // TODO(fix): determinism
             // TODO(threads): add this thread to waiting list
@@ -661,7 +661,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         }
         async yieldUntil(opts: TaskSuspendOptions) {
             const { readyFn, cancellable } = opts;
-            debugLog('[AsyncTask#yieldUntil()]', {
+            DEBUG: debugLog('[AsyncTask#yieldUntil()]', {
                 taskID: this.#id,
                 args: {
                     cancellable,
@@ -680,7 +680,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         }
         async suspendUntil(opts: TaskSuspendOptions) {
             const { cancellable, readyFn } = opts;
-            debugLog('[AsyncTask#suspendUntil()] args', {
+            DEBUG: debugLog('[AsyncTask#suspendUntil()] args', {
                 taskID: this.#id,
                 args: {
                     cancellable,
@@ -721,7 +721,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         // TODO(threads): equivalent to thread.suspend_until()
         async immediateSuspendUntil(opts: TaskSuspendOptions) {
             const { cancellable, readyFn } = opts;
-            debugLog('[AsyncTask#immediateSuspendUntil()] args', {
+            DEBUG: debugLog('[AsyncTask#immediateSuspendUntil()] args', {
                 args: {
                     cancellable,
                     readyFn,
@@ -756,7 +756,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         }
         deliverPendingCancel(opts: { cancellable?: boolean }) {
             const { cancellable } = opts;
-            debugLog('[AsyncTask#deliverPendingCancel()]', {
+            DEBUG: debugLog('[AsyncTask#deliverPendingCancel()]', {
                 args: { cancellable },
                 taskID: this.#id,
                 componentIdx: this.#componentIdx,
@@ -781,7 +781,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
         // expected to acknowledge via `task.cancel` or still resolve via
         // `task.return`.
         requestCancellation() {
-            debugLog('[AsyncTask#requestCancellation()] args', {
+            DEBUG: debugLog('[AsyncTask#requestCancellation()] args', {
                 taskID: this.#id,
                 componentIdx: this.#componentIdx,
                 state: this.#state,
@@ -818,7 +818,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             getOrCreateAsyncState(_lookup, this.#componentIdx).runTickLoop();
         }
         cancel(args?: { error?: unknown }) {
-            debugLog('[AsyncTask#cancel()] args', {});
+            DEBUG: debugLog('[AsyncTask#cancel()] args', {});
             if (this.taskState() !== TASK_CANCEL_DELIVERED) {
                 throw new Error('`task.cancel` called by task which has not been cancelled');
             }
@@ -843,7 +843,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 try {
                     f(taskValue);
                 } catch (err) {
-                    debugLog('[AsyncTask#onResolve] error during task resolve handler', err);
+                    DEBUG: debugLog('[AsyncTask#onResolve] error during task resolve handler', err);
                     throw err;
                 }
             }
@@ -865,7 +865,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 // `task.return`, but some paths do not go through task.return (e.g. async lower of sync fn
                 // which goes through prepare + async-start-call)
                 if (meta.returnFn && !meta.returnFnCalled) {
-                    debugLog('[AsyncTask#onResolve()] running returnFn', {
+                    DEBUG: debugLog('[AsyncTask#onResolve()] running returnFn', {
                         componentIdx: this.#componentIdx,
                         taskID: this.#id,
                         subtaskID: this.#parentSubtask!.id(),
@@ -881,7 +881,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                 }
             }
             if (this.#postReturnFn && taskReturned) {
-                debugLog('[AsyncTask#onResolve()] running post return ', {
+                DEBUG: debugLog('[AsyncTask#onResolve()] running post return ', {
                     componentIdx: this.#componentIdx,
                     taskID: this.#id,
                 });
@@ -926,7 +926,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             this.#settleCompletionPromise();
         }
         reject(taskErr: unknown) {
-            debugLog('[AsyncTask#reject()] args', {
+            DEBUG: debugLog('[AsyncTask#reject()] args', {
                 componentIdx: this.#componentIdx,
                 taskID: this.#id,
                 parentSubtask: this.#parentSubtask,
@@ -963,7 +963,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             this.cancel({ error: taskErr });
         }
         resolve(results: unknown[]) {
-            debugLog('[AsyncTask#resolve()] args', {
+            DEBUG: debugLog('[AsyncTask#resolve()] args', {
                 componentIdx: this.#componentIdx,
                 taskID: this.#id,
                 entryFnName: this.entryFnName(),
@@ -987,7 +987,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
                     this.onResolve(results[0]);
                     break;
                 default:
-                    debugLog('[AsyncTask#resolve()] unexpected number of results', {
+                    DEBUG: debugLog('[AsyncTask#resolve()] unexpected number of results', {
                         componentIdx: this.#componentIdx,
                         results,
                         taskID: this.#id,
@@ -999,7 +999,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             }
         }
         exit(args?: { skipExclusiveLockCheck?: boolean }) {
-            debugLog('[AsyncTask#exit()]', {
+            DEBUG: debugLog('[AsyncTask#exit()]', {
                 componentIdx: this.#componentIdx,
                 taskID: this.#id,
             });
@@ -1079,7 +1079,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             return !this.#isAsync || this.hasCallback() || this.#calleeIsAsync === false;
         }
         createSubtask(args: CreateSubtaskOptions) {
-            debugLog('[AsyncTask#createSubtask()] args', args);
+            DEBUG: debugLog('[AsyncTask#createSubtask()] args', args);
             const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
             const cstate = getOrCreateAsyncState(_lookup, this.#componentIdx);
             if (!cstate) {
@@ -1117,7 +1117,7 @@ export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncT
             return this.#subtasks.find((s) => s.waitableRep() === rep);
         }
         currentSubtask() {
-            debugLog('[AsyncTask#currentSubtask()]');
+            DEBUG: debugLog('[AsyncTask#currentSubtask()]');
             if (this.#subtasks.length === 0) {
                 return undefined;
             }

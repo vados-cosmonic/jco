@@ -163,7 +163,7 @@ export function initializeAsyncThreadClass(context: AsyncThreadClassContext): As
                 .catch((err) => {
                     err = recordTrap(context.traps, this.#componentIdx, err);
                     this.#state = THREAD_COMPLETED;
-                    debugLog('[AsyncThread#start()] spawned thread errored', {
+                    DEBUG: debugLog('[AsyncThread#start()] spawned thread errored', {
                         threadID: this.#id!,
                         taskID: this.#task.id(),
                         componentIdx: this.#componentIdx,
