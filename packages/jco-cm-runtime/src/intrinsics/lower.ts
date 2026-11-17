@@ -1,3 +1,4 @@
+import { consumeParams, readParam, remainingParams } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
     TaskLowerContext,
@@ -458,12 +459,12 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
         DEBUG: debugLog('[_lowerFlatList()] args', { ctx });
 
         if (ctx.useDirectParams) {
-            if (ctx.params!.length < 2) {
+            if (remainingParams(ctx) < 2) {
                 throw new Error('insufficient params left to lower list');
             }
-            const storagePtr = (ctx.params![0] as number) >>> 0;
-            const elemCount = ctx.params![1];
-            ctx.params = ctx.params!.slice(2);
+            const storagePtr = (readParam(ctx, 0) as number) >>> 0;
+            const elemCount = readParam(ctx, 1);
+            consumeParams(ctx, 2);
 
             const list = ctx.vals[0] as unknown[];
             if (!list) {
@@ -573,12 +574,12 @@ export function lowerFlatMap(_context: StrictNumericContext, meta: LowerMapMeta)
         let dataPtr;
         let restorePtr;
         if (ctx.useDirectParams) {
-            if (ctx.params!.length < 2) {
+            if (remainingParams(ctx) < 2) {
                 throw new Error('insufficient params left to lower map');
             }
-            dataPtr = (ctx.params![0] as number) >>> 0;
-            const expectedLen = ctx.params![1];
-            ctx.params = ctx.params!.slice(2);
+            dataPtr = (readParam(ctx, 0) as number) >>> 0;
+            const expectedLen = readParam(ctx, 1);
+            consumeParams(ctx, 2);
             if (expectedLen !== map.size) {
                 throw new Error('map length does not match allocated storage');
             }

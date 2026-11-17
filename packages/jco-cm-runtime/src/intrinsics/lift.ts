@@ -1,3 +1,4 @@
+import { consumeParams, readParam, remainingParams, copyParams } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
     LiftModule,
@@ -98,11 +99,11 @@ export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0] === 1;
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0) === 1;
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -125,11 +126,11 @@ export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -151,11 +152,11 @@ export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -178,11 +179,11 @@ export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -204,11 +205,11 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -236,11 +237,11 @@ export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -262,12 +263,12 @@ export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least a single i34 argument');
         }
         // core i32 values arrive as signed numbers
-        val = (ctx.params[0] as number) >>> 0;
-        ctx.params = ctx.params.slice(1);
+        val = (readParam(ctx, 0) as number) >>> 0;
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -288,14 +289,14 @@ export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single i64 argument');
         }
-        if (typeof ctx.params[0] !== 'bigint') {
+        if (typeof readParam(ctx, 0) !== 'bigint') {
             throw new Error('expected bigint');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -317,15 +318,15 @@ export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single i64 argument');
         }
-        if (typeof ctx.params[0] !== 'bigint') {
+        if (typeof readParam(ctx, 0) !== 'bigint') {
             throw new Error('expected bigint');
         }
         // core i64 values arrive as signed BigInts
-        val = BigInt.asUintN(64, ctx.params[0]);
-        ctx.params = ctx.params.slice(1);
+        val = BigInt.asUintN(64, readParam(ctx, 0) as bigint);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -347,11 +348,11 @@ export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single f32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
 
         return [val, ctx];
     }
@@ -375,11 +376,11 @@ export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single f64 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
 
         return [val, ctx];
     }
@@ -402,11 +403,11 @@ export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single i32 argument');
         }
-        val = i32ToChar(ctx.params[0] as number);
-        ctx.params = ctx.params.slice(1);
+        val = i32ToChar(readParam(ctx, 0) as number);
+        consumeParams(ctx, 1);
         return [val, ctx];
     }
 
@@ -461,10 +462,10 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length < 2) {
+        if (remainingParams(ctx) < 2) {
             throw new Error('expected at least two u32 arguments');
         }
-        let offset = ctx.params[0] as number | bigint;
+        let offset = readParam(ctx, 0) as number | bigint;
         if (typeof offset === 'bigint') {
             offset = Number(offset);
         } else {
@@ -473,13 +474,13 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
         if (!Number.isSafeInteger(offset)) {
             throw new Error('invalid offset');
         }
-        const len = ctx.params[1] as number;
+        const len = readParam(ctx, 1) as number;
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
         requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 1);
         val = decodeUtf8(_context.RuntimeError, _context.utf8, new DataView(ctx.memory!.buffer, offset, len));
-        ctx.params = ctx.params.slice(2);
+        consumeParams(ctx, 2);
         return [val, ctx];
     }
 
@@ -508,10 +509,10 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
     let val;
 
     if (ctx.useDirectParams) {
-        if (ctx.params.length < 2) {
+        if (remainingParams(ctx) < 2) {
             throw new Error('expected at least two u32 arguments');
         }
-        let offset = ctx.params[0] as number | bigint;
+        let offset = readParam(ctx, 0) as number | bigint;
         if (typeof offset === 'bigint') {
             offset = Number(offset);
         } else {
@@ -520,13 +521,13 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
         if (!Number.isSafeInteger(offset)) {
             throw new Error('invalid offset');
         }
-        const len = ctx.params[1] as number;
+        const len = readParam(ctx, 1) as number;
         if (!Number.isSafeInteger(len)) {
             throw new Error('invalid len');
         }
         requireStringInMemory(_context.RuntimeError, ctx.memory!, offset, len, 2);
         val = _context.utf16.decode(new DataView(ctx.memory!.buffer, offset, len * 2));
-        ctx.params = ctx.params.slice(2);
+        consumeParams(ctx, 2);
         return [val, ctx];
     }
 
@@ -676,7 +677,7 @@ export function liftFlatVariant(
                     if (have === want) {
                         continue;
                     }
-                    const val = ctx.params[i];
+                    const val = readParam(ctx, i);
                     if (have === 'i64' && want === 'i32') {
                         ctx.params[i] = Number(BigInt.asIntN(32, val as bigint));
                     } else if (have === 'i64' && want === 'f32') {
@@ -717,12 +718,12 @@ export function liftFlatVariant(
             if (remainingPayloadParams < 0) {
                 throw new Error(`invalid variant flat count metadata`);
             }
-            if (ctx.params.length < remainingPayloadParams) {
+            if (remainingParams(ctx) < remainingPayloadParams) {
                 throw new Error(
-                    `expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${ctx.params.length}]`,
+                    `expected at least [${remainingPayloadParams}] remaining variant payload params, but got [${remainingParams(ctx)}]`,
                 );
             }
-            ctx.params = ctx.params.slice(remainingPayloadParams);
+            consumeParams(ctx, remainingPayloadParams);
         }
 
         if (ctx.storagePtr! !== undefined) {
@@ -802,8 +803,8 @@ export function liftFlatList(
             // list with known length
             if (ctx.useDirectParams) {
                 DEBUG: debugLog('memory unexpectedly missing while lifting unknown length list', { ctx });
-                liftResults = [listValue(ctx.params.slice(0, knownLen)), ctx];
-                ctx.params = ctx.params.slice(knownLen);
+                liftResults = [listValue(copyParams(ctx, knownLen)), ctx];
+                consumeParams(ctx, knownLen);
             } else {
                 // indirect params
                 if (ctx.memory === null) {
@@ -821,9 +822,9 @@ export function liftFlatList(
 
             if (ctx.useDirectParams) {
                 // unknown length list ptr w/ direct params
-                const dataPtr = (ctx.params[0] as number) >>> 0;
-                const len = ctx.params[1] as number;
-                ctx.params = ctx.params.slice(2);
+                const dataPtr = (readParam(ctx, 0) as number) >>> 0;
+                const len = readParam(ctx, 1) as number;
+                consumeParams(ctx, 2);
 
                 ctx.useDirectParams = false;
                 const originalPtr = ctx.storagePtr!;
@@ -896,9 +897,9 @@ export function liftFlatMap(meta: LiftMapMeta): (ctx: TaskLiftContext) => [unkno
         let originalPtr = ctx.storagePtr!;
         const originalLen = ctx.storageLen;
         if (ctx.useDirectParams) {
-            dataPtr = (ctx.params[0] as number) >>> 0;
-            len = ctx.params[1] as number;
-            ctx.params = ctx.params.slice(2);
+            dataPtr = (readParam(ctx, 0) as number) >>> 0;
+            len = readParam(ctx, 1) as number;
+            consumeParams(ctx, 2);
         } else {
             ctx.storageLen = 8;
             let lifted = liftFlatU32(ctx);
@@ -1118,8 +1119,8 @@ export function liftFlatFuture(
 
         let futureEndWaitableIdx;
         if (ctx.useDirectParams) {
-            futureEndWaitableIdx = ctx.params[0];
-            ctx.params = ctx.params.slice(1);
+            futureEndWaitableIdx = readParam(ctx, 0);
+            consumeParams(ctx, 1);
         } else {
             const [waitableIdx, newCtx] = liftFlatU32(ctx);
             ctx = newCtx;
@@ -1185,8 +1186,8 @@ export function liftFlatStream(
 
         let streamEndWaitableIdx;
         if (ctx.useDirectParams) {
-            streamEndWaitableIdx = ctx.params[0];
-            ctx.params = ctx.params.slice(1);
+            streamEndWaitableIdx = readParam(ctx, 0);
+            consumeParams(ctx, 1);
         } else {
             const [waitableIdx, newCtx] = liftFlatU32(ctx);
             ctx = newCtx;
@@ -1260,11 +1261,11 @@ export function liftFlatErrorContext(
     let val;
     let table;
     if (ctx.useDirectParams) {
-        if (ctx.params.length === 0) {
+        if (remainingParams(ctx) === 0) {
             throw new Error('expected at least one single i32 argument');
         }
-        val = ctx.params[0];
-        ctx.params = ctx.params.slice(1);
+        val = readParam(ctx, 0);
+        consumeParams(ctx, 1);
         table = errCtxGetLocalTable(_context.local, ctx.componentIdx, errCtxTableIdx);
     } else {
         throw new Error('indirect flat lift for error-contexts not yet implemented!');
