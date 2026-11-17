@@ -294,3 +294,41 @@ test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.
         expect(asynchronous).toEqual(encoded);
     },
 );
+
+test.concurrent.each(['ascii', 'é', '😀', '\ud800x\udc00', '\ufeff'])(
+    'native UTF-8 agrees with the portable codec: %j',
+    async (unit) => {
+        const value = unit.repeat(1024);
+        const encoder = string.initializeUtf8Encoder();
+        const expected = new TextEncoder().encode(value);
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const realloc = (_ptr: number, _old: number, align: number, size: number) => {
+            expect(align).toBe(1);
+            expect(size).toBe(expected.length);
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf8Encode(encoder, value, realloc, memory);
+        expect(encoded.codepoints).toBe([...value].length);
+        expect(new Uint8Array(memory.buffer, encoded.ptr, encoded.len)).toEqual(expected);
+        let calls = 0;
+        const original = encoder.encodeInto.bind(encoder);
+        const changed = await string.utf8EncodeAsync(
+            encoder,
+            value,
+            async (...args) => {
+                Object.defineProperty(encoder, 'encodeInto', {
+                    value: (input: string, output: Uint8Array) => {
+                        calls++;
+                        return original(input, output);
+                    },
+                });
+                return realloc(...args);
+            },
+            memory,
+        );
+        expect(calls).toBe(1);
+        expect(changed).toEqual(encoded);
+        expect(new Uint8Array(memory.buffer, changed.ptr, changed.len)).toEqual(expected);
+    },
+);
