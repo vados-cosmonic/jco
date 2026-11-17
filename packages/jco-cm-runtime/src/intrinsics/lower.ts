@@ -1,3 +1,4 @@
+import { memoryView } from './memory-view.js';
 import type {
     TaskLowerContext,
     TaskLowerFn,
@@ -80,7 +81,7 @@ export function lowerFlatBool(_context: StrictNumericContext, ctx: TaskLowerCont
     if (_context.strict && typeof ctx.vals[0] !== 'boolean') {
         throw new TypeError(`invalid bool value [${ctx.vals[0]}]`);
     }
-    new DataView(ctx.memory!.buffer).setUint8(ctx.storagePtr!, (ctx.vals[0] as number) ? 1 : 0);
+    memoryView(ctx).setUint8(ctx.storagePtr!, (ctx.vals[0] as number) ? 1 : 0);
 
     ctx.storagePtr! += 1;
 }
@@ -98,7 +99,7 @@ export function lowerFlatS8(_context: StrictNumericContext, ctx: TaskLowerContex
     if (_context.strict && !isInt8(ctx.vals[0])) {
         invalidNumericPrimitive('s8', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt8(ctx.storagePtr!, ctx.vals[0] as number);
+    memoryView(ctx).setInt8(ctx.storagePtr!, ctx.vals[0] as number);
 
     ctx.storagePtr! += 1;
 }
@@ -117,7 +118,7 @@ export function lowerFlatU8(_context: StrictNumericContext, ctx: TaskLowerContex
     if (!ctx.memory) {
         throw new Error('missing memory for lower');
     }
-    new DataView(ctx.memory!.buffer).setUint8(ctx.storagePtr!, ctx.vals[0] as number);
+    memoryView(ctx).setUint8(ctx.storagePtr!, ctx.vals[0] as number);
 
     ctx.storagePtr! += 1;
 }
@@ -140,7 +141,7 @@ export function lowerFlatS16(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt16(ctx.vals[0])) {
         invalidNumericPrimitive('s16', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt16(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setInt16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 2;
 }
@@ -163,7 +164,7 @@ export function lowerFlatU16(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint16(ctx.vals[0])) {
         invalidNumericPrimitive('u16', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setUint16(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setUint16(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 2;
 }
@@ -183,7 +184,7 @@ export function lowerFlatS32(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt32(ctx.vals[0])) {
         invalidNumericPrimitive('s32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setInt32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setInt32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
@@ -203,7 +204,7 @@ export function lowerFlatU32(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint32(ctx.vals[0])) {
         invalidNumericPrimitive('u32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setUint32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setUint32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
@@ -223,7 +224,7 @@ export function lowerFlatS64(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isInt64(ctx.vals[0])) {
         invalidNumericPrimitive('s64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setBigInt64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
+    memoryView(ctx).setBigInt64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
     ctx.storagePtr! += 8;
 }
@@ -243,7 +244,7 @@ export function lowerFlatU64(_context: StrictNumericContext, ctx: TaskLowerConte
     if (_context.strict && !isUint64(ctx.vals[0])) {
         invalidNumericPrimitive('u64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setBigUint64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
+    memoryView(ctx).setBigUint64(ctx.storagePtr!, ctx.vals[0] as bigint, true);
 
     ctx.storagePtr! += 8;
 }
@@ -263,7 +264,7 @@ export function lowerFlatFloat32(_context: StrictNumericContext, ctx: TaskLowerC
     if (_context.strict && typeof ctx.vals[0] !== 'number') {
         invalidNumericPrimitive('f32', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setFloat32(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setFloat32(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 4;
 }
@@ -283,7 +284,7 @@ export function lowerFlatFloat64(_context: StrictNumericContext, ctx: TaskLowerC
     if (_context.strict && typeof ctx.vals[0] !== 'number') {
         invalidNumericPrimitive('f64', ctx.vals[0]);
     }
-    new DataView(ctx.memory!.buffer).setFloat64(ctx.storagePtr!, ctx.vals[0] as number, true);
+    memoryView(ctx).setFloat64(ctx.storagePtr!, ctx.vals[0] as number, true);
 
     ctx.storagePtr! += 8;
 }
@@ -311,7 +312,7 @@ export function lowerFlatChar(ctx: TaskLowerContext) {
     ) {
         throw new TypeError('char must contain one Unicode scalar value');
     }
-    new DataView(ctx.memory!.buffer).setUint32(ctx.storagePtr!, codePoint, true);
+    memoryView(ctx).setUint32(ctx.storagePtr!, codePoint, true);
 
     ctx.storagePtr! += 4;
 }
@@ -327,7 +328,7 @@ export function lowerFlatStringAny(_context: LowerStringContext, ctx: TaskLowerC
                 throw new Error('missing realloc during flat string lower');
             }
             const { ptr, len } = compactUtf16Encode(_context.utf16, ctx.vals[0] as string, ctx.realloc, ctx.memory!);
-            const view = new DataView(ctx.memory!.buffer);
+            const view = memoryView(ctx);
             view.setUint32(ctx.storagePtr!, ptr, true);
             view.setUint32(ctx.storagePtr! + 4, len, true);
             ctx.storagePtr! += 8;
@@ -346,7 +347,7 @@ export function lowerFlatStringUTF16(_context: Utf16EncodingContext, ctx: TaskLo
 
     const { ptr, len } = utf16Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory!);
 
-    const view = new DataView(ctx.memory!.buffer);
+    const view = memoryView(ctx);
     view.setUint32(ctx.storagePtr!, ptr, true);
     view.setUint32(ctx.storagePtr! + 4, len, true);
 
@@ -361,7 +362,7 @@ export function lowerFlatStringUTF8(_context: StringEncodeInto, ctx: TaskLowerCo
 
     const { ptr, len } = utf8Encode(_context, ctx.vals[0], ctx.realloc, ctx.memory!);
 
-    const view = new DataView(ctx.memory!.buffer);
+    const view = memoryView(ctx);
     view.setUint32(ctx.storagePtr!, ptr, true);
     view.setUint32(ctx.storagePtr! + 4, len, true);
 
@@ -653,7 +654,7 @@ export function lowerFlatFlags(_context: LiftFlagsContext, meta: LiftFlagsMeta):
             ctx.storagePtr! += align32 - rem;
         }
 
-        const dv = new DataView(ctx.memory!.buffer);
+        const dv = memoryView(ctx);
         if (intSizeBytes === 1) {
             dv.setUint8(ctx.storagePtr!, flagValue);
         } else if (intSizeBytes === 2) {

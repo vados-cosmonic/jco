@@ -1,3 +1,4 @@
+import { memoryView } from './memory-view.js';
 import type {
     LiftModule,
     StreamReadableEnd,
@@ -109,7 +110,7 @@ export function liftFlatBool(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (bool requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint8(ctx.storagePtr!) === 1;
+    val = memoryView(ctx).getUint8(ctx.storagePtr!) === 1;
 
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
@@ -136,7 +137,7 @@ export function liftFlatS8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s8 requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt8(ctx.storagePtr!);
+    val = memoryView(ctx).getInt8(ctx.storagePtr!);
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 1;
@@ -162,7 +163,7 @@ export function liftFlatU8(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u8 requires 1 byte)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint8(ctx.storagePtr!);
+    val = memoryView(ctx).getUint8(ctx.storagePtr!);
 
     ctx.storagePtr! += 1;
     if (ctx.storageLen !== undefined) {
@@ -189,7 +190,7 @@ export function liftFlatS16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s16 requires 2 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt16(ctx.storagePtr!, true);
+    val = memoryView(ctx).getInt16(ctx.storagePtr!, true);
     ctx.storagePtr! += 2;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 2;
@@ -215,7 +216,7 @@ export function liftFlatU16(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u16 requires 2 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getUint16(ctx.storagePtr!, true);
+    val = memoryView(ctx).getUint16(ctx.storagePtr!, true);
 
     ctx.storagePtr! += 2;
     if (ctx.storageLen !== undefined) {
@@ -247,7 +248,7 @@ export function liftFlatS32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s32 requires 4 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getInt32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getInt32(ctx.storagePtr!, true);
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
@@ -273,7 +274,7 @@ export function liftFlatU32(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u32 requires 4 bytes)`);
     }
-    val = new DataView(ctx.memory!.buffer).getUint32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getUint32(ctx.storagePtr!, true);
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
@@ -302,7 +303,7 @@ export function liftFlatS64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getBigInt64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getBigInt64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
@@ -332,7 +333,7 @@ export function liftFlatU64(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getBigUint64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getBigUint64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
@@ -359,7 +360,7 @@ export function liftFlatFloat32(ctx: TaskLiftContext): [unknown, TaskLiftContext
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f32 requires 4 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getFloat32(ctx.storagePtr!, true);
+    val = memoryView(ctx).getFloat32(ctx.storagePtr!, true);
 
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
@@ -387,7 +388,7 @@ export function liftFlatFloat64(ctx: TaskLiftContext): [unknown, TaskLiftContext
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f64 requires 8 bytes)`);
     }
 
-    val = new DataView(ctx.memory!.buffer).getFloat64(ctx.storagePtr!, true);
+    val = memoryView(ctx).getFloat64(ctx.storagePtr!, true);
     ctx.storagePtr! += 8;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 8;
@@ -413,7 +414,7 @@ export function liftFlatChar(ctx: TaskLiftContext): [unknown, TaskLiftContext] {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (char requires 4 bytes)`);
     }
 
-    val = i32ToChar(new DataView(ctx.memory!.buffer).getUint32(ctx.storagePtr!, true));
+    val = i32ToChar(memoryView(ctx).getUint32(ctx.storagePtr!, true));
     ctx.storagePtr! += 4;
     if (ctx.storageLen !== undefined) {
         ctx.storageLen -= 4;
@@ -487,7 +488,7 @@ export function liftFlatStringUTF8(_context: LiftStringContext, ctx: TaskLiftCon
         ctx.storagePtr! += 4 - rem;
     }
 
-    const dv = new DataView(ctx.memory!.buffer);
+    const dv = memoryView(ctx);
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 
@@ -534,7 +535,7 @@ export function liftFlatStringUTF16(_context: LiftStringContext, ctx: TaskLiftCo
         ctx.storagePtr! += 4 - rem;
     }
 
-    const dv = new DataView(ctx.memory!.buffer);
+    const dv = memoryView(ctx);
     const start = dv.getUint32(ctx.storagePtr!, true);
     const codeUnits = dv.getUint32(ctx.storagePtr! + 4, true);
 

@@ -1212,6 +1212,8 @@ export type TaskCallback = ((...args: number[]) => number | Promise<number>) & {
 export type TaskPostReturn = (value: unknown) => unknown;
 
 export interface TaskLiftContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params: unknown[];
     memory?: RuntimeMemory | null;
@@ -1227,6 +1229,8 @@ export interface TaskLiftContext {
 export type TaskLiftFn = (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
 
 export interface TaskLowerContext {
+    /** Cached view; runtime operations refresh it when the memory buffer changes. */
+    memoryView?: DataView;
     componentIdx: number;
     params?: unknown[];
     useDirectParams?: boolean;
