@@ -259,11 +259,12 @@ export function backpressureDec(context: ComponentStateLookupContext, componentI
 
 export function getOrCreateAsyncState(context: ComponentStateLookupContext, componentIdx: number) {
     const { asyncState, ComponentAsyncState } = context;
-    if (!asyncState.has(componentIdx)) {
-        const newState = new ComponentAsyncState({ componentIdx });
-        asyncState.set(componentIdx, newState);
+    let state = asyncState.get(componentIdx);
+    if (state === undefined) {
+        state = new ComponentAsyncState({ componentIdx });
+        asyncState.set(componentIdx, state);
     }
-    return asyncState.get(componentIdx)!;
+    return state;
 }
 
 export function setAllError(states: Pick<ComponentAsyncStates, 'values'>) {
