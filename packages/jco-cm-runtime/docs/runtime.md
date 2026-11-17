@@ -106,3 +106,43 @@ both the checked condition and any work performed while evaluating it.
 See the [label experiments](../bench/labels/README.md) for correctness checks and
 reproducible Node benchmarks. This package does not change the transpiler's default
 profile or expose a new transpiler option.
+
+### Built runtime profiles
+
+The package can also apply label stripping itself, before bundling its public
+entry points with shared chunks. All profiles retain the same package exports,
+type declarations, and runtime API version:
+
+```sh
+pnpm --filter @bytecodealliance/jco-cm-runtime build          # diagnostic modules
+pnpm --filter @bytecodealliance/jco-cm-runtime build:release  # drop DEBUG, bundle/minify
+pnpm --filter @bytecodealliance/jco-cm-runtime build:lean     # also drop audited SAFETY assertions
+```
+
+Each command replaces this package's `dist`. To keep multiple builds, run
+`node scripts/build.mjs --profile release --out-dir /path/to/runtime` from this
+package and use that directory as `cmRuntimeEsModule`. Bundle chunks share their
+state and private brands across entry points. The ordinary build and `prepack`
+retain diagnostics; a release or lean build omits runtime log calls even when
+`JCO_DEBUG` is set. The explicitly exported `debugLog` utility remains callable.
+Canonical ABI traps, Unicode checks, ownership checks, and cancellation remain
+active in every profile. No inline-runtime implementation is maintained here.
+
+### Allocation and scheduling behavior
+
+Flat-argument cursors expose the remaining arguments through `params`, copying
+only when a caller observes or retains that array. Custom property accessors keep
+the generic path. Scalar memory views refresh after buffer replacement, including
+memory growth. Custom lift functions keep the pair-returning API and may replace
+their context; built-in scalar composition can avoid constructing those pairs.
+
+The default Node UTF-8 codec uses native byte primitives for strings of at least
+256 UTF-16 code units. Browser codecs and custom `encodeInto` implementations keep
+the portable path. Reallocations remain exact and occur once per string.
+
+Buffers may optionally implement bulk `copyTo` and owned `readBytes` capabilities;
+providers without them continue using resource-aware array reads and writes.
+Ready stream sources may expose `readSourceOrPromise`; `readSource` retains its
+promise API. Synchronous sources yield after 64 reads, and host completions share
+scheduler wakeups within a microtask checkpoint. The scheduler still resumes one
+thread per tick to preserve thread-register restoration.
