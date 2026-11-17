@@ -6,12 +6,23 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const comparisons = [
-    ['retained', 'debug-off', 'context-wasm'],
-    ['debug-off', 'direct-slots', 'context-wasm'],
-    ['debug-off', 'single-map-get', 'context-wasm'],
-    ['debug-off', 'param-cursor', 'lift-flat-16'],
-    ['debug-off', 'cached-view', 'lift-memory-16'],
-    ['debug-off', 'utf16-count', 'utf16-1280-units'],
+    ['retained', 'optimized', 'context-wasm'],
+    ...[
+        'record-flat-16-fresh',
+        'record-flat-16-owned',
+        'record-flat-128-owned',
+        'context-js',
+        'context-wasm',
+        'rep-get',
+        'rep-recycle',
+        'lift-flat-16',
+        'lift-memory-16',
+        'utf16-1280-units',
+        'utf8-ascii-4096',
+        'utf8-mixed-4096',
+        'queue-4096-chunks',
+        'bulk-bytes-4096',
+    ].map((name) => ['baseline', 'optimized', name]),
 ];
 
 /** Median of measured durations or ratios. */
@@ -43,7 +54,7 @@ async function worker(output, reverse) {
     for (const [baseline, variant, name] of order) {
         const before = cases.get(baseline).find((item) => item.name === name);
         const after = cases.get(variant).find((item) => item.name === name);
-        let iterations = 1000;
+        let iterations = 1;
         while (iterations < 1_000_000 && measure(before, iterations) * iterations * before.units < 20e6) {
             iterations *= 2;
         }
@@ -99,7 +110,9 @@ async function main() {
         console.log(`Paired round ${round + 1}/5`);
     }
     const summary = comparisons.map(([baseline, variant, name]) => {
-        const rows = rounds.map((round) => round.find((row) => row.variant === variant));
+        const rows = rounds.map((round) =>
+            round.find((row) => row.variant === variant && row.baseline === baseline && row.name === name),
+        );
         return {
             baseline,
             variant,

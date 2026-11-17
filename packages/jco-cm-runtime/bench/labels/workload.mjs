@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
 import { create } from '../../test/async-task-helpers.ts';
+import { createLiftContext } from '../../src/intrinsics/call-context.ts';
+import { create as createStream } from '../../test/stream-helpers.ts';
 import { contextGet, contextSet, guardCannotLeave } from '../../src/intrinsics/async-task/context.ts';
 import { initializeRepTableClass } from '../../src/intrinsics/rep-table.ts';
-import { liftFlatS32 } from '../../src/intrinsics/lift.ts';
-import { utf16Encode, initializeUtf16Encoding } from '../../src/intrinsics/string.ts';
+import { liftFlatS32, liftFlatRecord } from '../../src/intrinsics/lift.ts';
+import {
+    utf16Encode,
+    initializeUtf16Encoding,
+    utf8Encode,
+    initializeUtf8Encoder,
+} from '../../src/intrinsics/string.ts';
 
 /** Encode an unsigned integer in the binary Wasm format. */
 function leb(value) {
@@ -81,7 +88,7 @@ export function workloads() {
     const memory = new WebAssembly.Memory({ initial: 4 });
     const view = new DataView(memory.buffer);
     params.forEach((value, index) => view.setInt32(index * 4, value, true));
-    const flat = { params, useDirectParams: true, paramIndex: 0 };
+    const flat = createLiftContext({ componentIdx: 0, params, useDirectParams: true, paramIndex: 0 }, true);
     const indirect = {
         params: [],
         useDirectParams: false,
@@ -100,7 +107,109 @@ export function workloads() {
         text.toWellFormed(),
     );
 
+    const stream = createStream();
+    const encoder = initializeUtf8Encoder();
+    const byteMeta = { align32: 1, payloadTypeName: 'U8', isNumeric: true };
+    new Uint8Array(memory.buffer, 16384, 4096).fill(42);
+    const recordLift = liftFlatRecord({
+        fieldMetas: params.map((_, i) => ['f' + i, liftFlatS32, 4, 4]),
+        align32: 4,
+        size32: 64,
+    });
+    const largeParams = Array.from({ length: 128 }, (_, i) => i);
+    const largeRecordLift = liftFlatRecord({
+        fieldMetas: largeParams.map((_, i) => ['f' + i, liftFlatS32, 4, 4]),
+        align32: 4,
+        size32: 512,
+    });
     const cases = [
+        {
+            name: 'record-flat-128-owned',
+            units: 128,
+            expected: 127,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    sum += largeRecordLift(
+                        createLiftContext({ componentIdx: 0, useDirectParams: true, params: largeParams }),
+                    )[0].f127;
+                }
+                return sum;
+            },
+        },
+        ...[false, true].map((owned) => ({
+            name: owned ? 'record-flat-16-owned' : 'record-flat-16-fresh',
+            units: 16,
+            expected: 15,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    const options = { componentIdx: 0, useDirectParams: true, params };
+                    sum += recordLift(owned ? createLiftContext(options) : options)[0].f15;
+                }
+                return sum;
+            },
+        })),
+        ...['a'.repeat(4096), 'aé😀'.repeat(1024)].map((value, index) => ({
+            name: index ? 'utf8-mixed-4096' : 'utf8-ascii-4096',
+            units: 1,
+            expected: [...value].length,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    sum += utf8Encode(encoder, value, realloc, memory).codepoints;
+                }
+                return sum;
+            },
+        })),
+        {
+            name: 'queue-4096-chunks',
+            units: 1,
+            expected: 4096,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    const queue = new stream.PendingValueQueue(() => ({ done: true }), byteMeta);
+                    for (let j = 0; j < 4096; j++) {
+                        queue.push([42]);
+                    }
+                    const out = [];
+                    sum += queue.drainInto(out, 4096);
+                    assert.equal(out[0], 42);
+                    assert.equal(out[4095], 42);
+                }
+                return sum;
+            },
+        },
+        {
+            name: 'bulk-bytes-4096',
+            units: 1,
+            expected: 42,
+            run(n) {
+                let sum = 0;
+                for (let i = 0; i < n; i++) {
+                    const source = new stream.core.ManagedBuffer({
+                        componentIdx: 0,
+                        capacity: 4096,
+                        start: 16384,
+                        memory,
+                        elemMeta: byteMeta,
+                    });
+                    const target = new stream.core.ManagedBuffer({
+                        componentIdx: 1,
+                        capacity: 4096,
+                        start: 32768,
+                        memory,
+                        elemMeta: byteMeta,
+                    });
+                    if (!source.copyTo?.(target, 4096)) {
+                        target.write(source.read(4096));
+                    }
+                    sum += new Uint8Array(memory.buffer)[32768 + 4095];
+                }
+                return sum;
+            },
+        },
         {
             name: 'context-js',
             units: 1,

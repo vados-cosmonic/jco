@@ -7,21 +7,12 @@ import { cpus } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { prototype } from './prototypes.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '../..');
 const requireTranspile = createRequire(resolve(root, '../jco-transpile/package.json'));
-const variants = [
-    'retained',
-    'debug-off',
-    'debug-safety-off',
-    'direct-slots',
-    'single-map-get',
-    'param-cursor',
-    'cached-view',
-    'utf16-count',
-];
+const variants = ['baseline', 'optimized', 'retained', 'lean'];
+const baseline = 'd7e296bed';
 
 /** Median of numeric observations. */
 function median(values) {
@@ -35,7 +26,7 @@ async function worker(bundle) {
     const cases = workloads();
     const observations = [];
     for (const item of cases) {
-        let iterations = 1000;
+        let iterations = 1;
         for (;;) {
             const start = performance.now();
             assert.equal(item.run(iterations), item.expected * iterations);
@@ -74,23 +65,28 @@ async function main() {
     await mkdir(output, { recursive: true });
     const builds = [];
     for (const variant of variants) {
-        let patches = 0;
         const bundle = await rolldown({
             input: resolve(here, 'workload.mjs'),
             platform: 'node',
             transform: {
-                dropLabels:
-                    variant === 'retained' ? [] : variant === 'debug-safety-off' ? ['DEBUG', 'SAFETY'] : ['DEBUG'],
+                dropLabels: variant === 'retained' ? [] : variant === 'lean' ? ['DEBUG', 'SAFETY'] : ['DEBUG'],
             },
             plugins: [
                 {
-                    name: 'isolated-runtime-probe',
-                    transform(source, id) {
-                        const code = prototype(source, id, variant);
-                        if (code !== source) {
-                            patches++;
+                    name: 'runtime-at-baseline',
+                    load(id) {
+                        if (variant !== 'baseline' || !id.startsWith(resolve(root, 'src') + '/')) {
+                            return;
                         }
-                        return code;
+                        if (id.endsWith('/intrinsics/call-context.ts')) {
+                            return 'export const createLiftContext = (options) => options;';
+                        }
+                        const path = 'packages/jco-cm-runtime/' + id.slice(root.length + 1);
+                        return execFileSync('git', ['show', `${baseline}:${path}`], {
+                            cwd: root,
+                            encoding: 'utf8',
+                            maxBuffer: 8 * 1024 * 1024,
+                        });
                     },
                 },
             ],
@@ -99,9 +95,6 @@ async function main() {
         const { output: chunks } = await bundle.write({ file: path, format: 'esm', minify: true });
         await bundle.close();
         const code = chunks.find((chunk) => chunk.type === 'chunk').code;
-        if (!['retained', 'debug-off', 'debug-safety-off'].includes(variant)) {
-            assert.equal(patches, 1, `${variant} substitution must apply exactly once`);
-        }
         if (variant !== 'retained') {
             assert.ok(!code.includes('[contextGet()] args'), 'diagnostic arguments must be eliminated');
         }
@@ -145,6 +138,7 @@ async function main() {
         summary.push(row);
     }
     const report = {
+        baseline,
         revision: execFileSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(),
         diff: execFileSync('git', ['diff', '--stat'], { cwd: root, encoding: 'utf8' }),
         node: process.version,
@@ -161,7 +155,7 @@ async function main() {
     };
     await writeFile(resolve(output, 'results.json'), JSON.stringify(report, null, 2) + '\n');
     // Preserve all experimental source alongside the raw measurements.
-    for (const file of ['run.mjs', 'workload.mjs', 'prototypes.mjs']) {
+    for (const file of ['run.mjs', 'workload.mjs', 'confirm.mjs']) {
         await writeFile(resolve(output, file + '.txt'), await readFile(resolve(here, file)));
     }
     console.table(
