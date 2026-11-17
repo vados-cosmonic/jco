@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit c9511328cac904a1e5d3a7f1339b3e215d2d6ce6
+// generated from commit a0b7a10813066352a2dc4cdc9a2ff931c2257176
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -2378,20 +2378,43 @@ const suspendingImport = (context, componentIdx, fn, syncOnly = false, switchesT
 			}
 			return result;
 		}
-		return (async () => {
+		const settled = (async () => fn.apply(null, args))();
+		const resumption = promiseWithResolvers();
+		/** Restore this stack's task, then let the stack resume. */
+		const resume = (deliver) => resumeInTurn(currentTaskMeta, () => {
+			currentTaskMeta[componentIdx] = saved;
+			if (!switchesTask) currentTaskMeta.current = saved;
 			try {
-				const result = await fn.apply(null, args);
-				getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
-				return result;
+				resumption.resolve(deliver());
 			} catch (error) {
-				throw recordTrap(context.traps, componentIdx, error, convertsRangeErrors);
-			} finally {
-				currentTaskMeta[componentIdx] = saved;
-				if (!switchesTask) currentTaskMeta.current = saved;
+				resumption.reject(recordTrap(context.traps, componentIdx, error, convertsRangeErrors));
 			}
-		})();
+			return resumption.promise;
+		});
+		settled.then((result) => resume(() => {
+			getOrCreateAsyncState(context.states, componentIdx).throwIfInterrupted();
+			return result;
+		}), (error) => resume(() => {
+			throw error;
+		}));
+		return resumption.promise;
 	};
 };
+/**
+* Resume a suspended stack once every stack resumed before it has run.
+*
+* A suspended stack continues in a job after the one which settles the promise
+* it waits for. Were two stacks of a store released in the same turn, the
+* second would restore its task before the first had continued, and the first
+* would run as the second's task.
+*
+* @param registers The task registers of the store.
+* @param release Restores the stack's task and settles the promise the stack
+*   waits for, returning that promise.
+*/
+function resumeInTurn(registers, release) {
+	registers.resumed = (registers.resumed ?? Promise.resolve()).then(() => release().then(emptyFunc, emptyFunc));
+}
 function instantiateTrampoline(platform, module, fast, slow) {
 	return new platform.Instance(module, { "": {
 		fast,
