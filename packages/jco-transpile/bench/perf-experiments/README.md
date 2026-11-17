@@ -26,6 +26,9 @@ To try a runtime change, copy `dist` elsewhere, edit the copy, and pass it to `g
 - `compare.mjs` interleaves fresh processes and keeps the fastest observation of each case.
 - `strip.mjs` removes labeled statements, or calls of named functions, from built JavaScript.
 - `profile-summary.mjs` lists self time per function of a `--cpu-prof` profile.
+- `sharing.mjs` times the first instance of a variant as further instances load in the same process.
+- `sharing-instantiate.mjs` does the same for bindings that export `instantiate`.
+- `list-array.mjs` times lowering a plain array as `list<u8>`, which `bench.mjs` does not cover.
 
 Run on an idle machine: timings vary severalfold under load.
 Cases share one process, so runtime functions see every fixture's objects;
