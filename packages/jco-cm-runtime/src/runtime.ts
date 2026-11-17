@@ -352,6 +352,8 @@ export interface TaskRegisters {
         readonly context: ThreadLookupContext;
         readonly components: ContextSlotGlobals[];
     };
+    /** Settles once the most recently resumed suspended stack has run. */
+    resumed?: Promise<void>;
 }
 /** The context slots of one component instance's current thread, kept in WebAssembly globals. */
 export interface ContextSlotGlobals {
