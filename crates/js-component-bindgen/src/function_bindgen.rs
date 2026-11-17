@@ -29,6 +29,27 @@ use crate::names::js_string_literal;
 use crate::{ManagesIntrinsics, get_thrown_type, source};
 use crate::{uwrite, uwriteln};
 
+/// The `getCallbackFn` property of the options a task is created with.
+///
+/// A function without a callback has none to look up, so its tasks are created
+/// without the property rather than with a closure that returns `null`.
+fn callback_fn_property(get_callback_fn_expr: &str) -> String {
+    if get_callback_fn_expr == "() => null" {
+        String::new()
+    } else {
+        format!("getCallbackFn: {get_callback_fn_expr},")
+    }
+}
+
+/// Whether a JavaScript expression is a lone identifier, which costs nothing to repeat.
+fn is_js_identifier(expression: &str) -> bool {
+    let mut chars = expression.chars();
+    chars
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+        && chars.all(|char| char.is_ascii_alphanumeric() || char == '_' || char == '$')
+}
+
 /// Method of error handling
 #[derive(Debug, Clone, PartialEq)]
 pub enum ErrHandling {
@@ -801,6 +822,7 @@ impl FunctionBindgen<'_> {
                 ("1".into(), "() => null".into(), "null".into())
             };
 
+        let get_callback_fn_property = callback_fn_property(&get_callback_fn_expr);
         uwriteln!(
             self.src,
             r#"
@@ -813,7 +835,7 @@ impl FunctionBindgen<'_> {
                   isManualAsync: {is_manual_async},
                   preserveFutureResult: {preserve_future_result},
                   entryFnName: '{fn_name}',
-                  getCallbackFn: {get_callback_fn_expr},
+                  {get_callback_fn_property}
                   callbackFnName: {callback_fn_name},
                   errHandling: '{err_handling}',
                   callingWasmExport: true,
@@ -903,15 +925,15 @@ impl FunctionBindgen<'_> {
         } else {
             ("null".into(), "() => null".into())
         };
-        uwriteln!(
-            self.src,
-            r#"
-              if ({memory_idx_expr} !== null) {{
+        if memory_idx_expr != "null" {
+            uwriteln!(
+                self.src,
+                r#"
                   task.setReturnMemoryIdx({memory_idx_expr});
                   task.setReturnMemory(({get_memory_fn_expr})());
-              }}
-            "#
-        );
+                "#
+            );
+        }
     }
 
     /// Run the full canonical adapter body with the export task installed as
@@ -2332,9 +2354,27 @@ impl Bindgen for FunctionBindgen<'_> {
                 // whatever the component's ambient register names: another task's
                 // async wrapper may have overwritten and then cleared that register
                 // while this call was suspended in argument lowering.
+                //
+                // A sync export never suspends between installing its task for the
+                // body and this call: realloc and post-return may not leave their
+                // component instance, and every nested call restores the registers
+                // it changes. The task is therefore still installed.
                 let call_wrapper =
                     self.task_intrinsic_call_prefix(Intrinsic::WithGlobalCurrentThreadMetaFn);
-                if task_managed {
+                if task_managed && !(self.requires_async_porcelain || self.is_async) {
+                    uwriteln!(
+                        self.src,
+                        r#"
+                      {vars_init}
+                      try {{
+                           {assignment_lhs} {callee_invoke};
+                      }} catch (err) {{
+                          {call_err_cleanup}
+                      }}
+                      task.endFirstSlice();
+                    "#,
+                    );
+                } else if task_managed {
                     uwriteln!(
                         self.src,
                         r#"
@@ -2467,7 +2507,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             componentIdx: -1,
                             isAsync: {is_async},
                             entryFnName: '{fn_name}',
-                            getCallbackFn: {get_callback_fn_expr},
+                            {get_callback_fn_property}
                             callbackFnName: {callback_fn_name_expr},
                             errHandling: '{err_handling}',
                             callingWasmExport: false,
@@ -2499,6 +2539,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         is_async = self.is_async,
                         fn_name = self.callee,
                         err_handling = self.err.to_js_string(),
+                        get_callback_fn_property = callback_fn_property(&get_callback_fn_expr),
                     );
                 }
 
@@ -2907,6 +2948,15 @@ impl Bindgen for FunctionBindgen<'_> {
                             ),
                             1 => operands[0].to_string(),
                             _ => format!("[{}]", operands.join(", ")),
+                        };
+                        // The result goes both to the task and to the caller. Unless it
+                        // is already a variable, evaluate it once: it may convert or copy.
+                        let ret_val = if task_managed && !is_js_identifier(&ret_val) {
+                            let result_var = format!("taskResult{}", self.tmp());
+                            uwriteln!(self.src, "const {result_var} = {ret_val};");
+                            result_var
+                        } else {
+                            ret_val
                         };
                         // The surrounding FutureValue represents the future returned by the WIT
                         // function, so the manual async transport must consume the lifted future
