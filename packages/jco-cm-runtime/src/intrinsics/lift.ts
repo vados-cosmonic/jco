@@ -127,7 +127,7 @@ function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Direct, liftFlatS8Memory);
+export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Direct, liftFlatS8Memory, true);
 
 function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
@@ -151,7 +151,7 @@ function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Direct, liftFlatU8Memory);
+export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Direct, liftFlatU8Memory, true);
 
 function liftFlatU8Value(ctx: TaskLiftContext): unknown {
     return ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx);
@@ -180,7 +180,7 @@ function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Direct, liftFlatS16Memory);
+export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Direct, liftFlatS16Memory, true);
 
 function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
@@ -204,7 +204,7 @@ function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Direct, liftFlatU16Memory);
+export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Direct, liftFlatU16Memory, true);
 
 function liftFlatU16Value(ctx: TaskLiftContext): unknown {
     return ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx);
@@ -238,7 +238,7 @@ function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Direct, liftFlatS32Memory);
+export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Direct, liftFlatS32Memory, true);
 
 function liftFlatS32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
