@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { create } from './stream-helpers.js';
 
 test.concurrent('queued chunks survive partial reads and repeated prepends without copying tails', () => {
@@ -71,6 +71,45 @@ test.concurrent('large synchronous streams yield between bounded batches', async
         expect(observed).toBeLessThan(256);
         const result = await pending;
         expect(Array.from(result.value as ArrayLike<number>)).toEqual(Array.from({ length: 256 }, (_, i) => i + 1));
+    } finally {
+        dropPair(s.pair);
+    }
+});
+
+test.concurrent('cancelling at a batch boundary delivers buffered values in source order', async () => {
+    const { createPair, dropPair } = await import('./stream-helpers.js');
+    const { genStreamHostInjectFn } = await import('../src/intrinsics/stream/injection.js');
+    const s = createPair();
+    let cancel: (() => boolean) | undefined;
+    const original = s.read.setHostCancelFn!.bind(s.read);
+    vi.spyOn(s.read, 'setHostCancelFn').mockImplementation((fn) => {
+        cancel = fn;
+        original(fn);
+    });
+    let calls = 0;
+    const readFn = Object.assign(
+        () => {
+            if (++calls === 64) {
+                queueMicrotask(() => expect(cancel!()).toBe(true));
+            }
+            return { value: calls, done: false };
+        },
+        { sourceIsSync: true },
+    );
+    s.read.setHostInjectFn(
+        genStreamHostInjectFn(s.lower.injection, {
+            readFn,
+            hostWriteEnd: s.write,
+            readEnd: s.read,
+        }),
+    );
+    try {
+        const result = await s.read.read(256);
+        expect(Array.from(result.value as ArrayLike<number>)).toEqual(Array.from({ length: 64 }, (_, i) => i + 1));
+        // Let the interrupted injection finish before starting another read.
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const next = await s.read.read(4);
+        expect(Array.from(next.value as ArrayLike<number>)).toEqual([65, 66, 67, 68]);
     } finally {
         dropPair(s.pair);
     }
