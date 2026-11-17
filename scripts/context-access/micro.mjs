@@ -4,7 +4,7 @@ import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { operations } from './check.mjs';
-import { globalBridge } from './prepare.mjs';
+import { assertVariant } from './candidates.mjs';
 
 /** Build a core Wasm loop that exercises actual generated canonical imports. */
 function loopModule(write) {
@@ -58,12 +58,9 @@ function loopModule(write) {
     );
 }
 
-/** Bind extracted operations to a real generated thread table, or the Wasm lower bound. */
+/** Bind extracted operations to a real generated thread table. */
 async function imports(output, variant) {
-    if (variant === 'wasm-globals') {
-        const bridge = new WebAssembly.Instance(new WebAssembly.Module(globalBridge())).exports;
-        return { get: bridge.get0, set: bridge.set0 };
-    }
+    assertVariant(variant, true);
     const source = await readFile(join(output, 'variants', variant, 'stack-loop.js'), 'utf8');
     const ops = operations(source);
     const threads = new ops.Table();
@@ -116,6 +113,7 @@ if (process.argv[3] === '--child') {
 } else {
     const manifest = JSON.parse(await readFile(join(output, 'manifest.json'), 'utf8'));
     const variants = manifest.variants.filter((variant) => variant !== 'wasip2');
+    variants.forEach((variant) => assertVariant(variant, true));
     const repetitions = Number(process.env.REPETITIONS ?? 7);
     let seed = 2481;
     await writeFile(join(output, 'micro.jsonl'), '');

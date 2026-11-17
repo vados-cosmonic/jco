@@ -1,4 +1,4 @@
-Context access experiments — 2026-11-16
+Context access experiments — measurements 2026-11-16; eligibility revised 2026-11-17
 
 Branch: perf/2481-context-access. Base: PR #2483 at cfc2c84ccc5552602b24573eed6cfe13323a5c55.
 
@@ -8,11 +8,17 @@ PR #2483, with debug:false selected at instantiation. A generation-counted cache
 measures 1.73x in the follow-up, but only 1.02x versus the simpler checked cache
 (95% paired bootstrap interval 0.87–1.11): no additional benefit established.
 
-A native Wasm accessor module backed by two mutable globals improves the same
-workload by 7.37–10.10x and reaches 1.28–1.45x the WASIp2 time. It uses the original
-guest core Wasm bytes: replacing JS imports with native Wasm exports removes the
-Wasm-to-JS transition. This prototype lacks task/thread save and restore and fails
-thread-isolation checks; its result is a single-task lower bound.
+The unchecked cache, single storage array, and unswitched Wasm-global prototype
+are excluded because they fail context isolation. They have been removed from
+runnable variants and the comparison tables. Their original measurements remain
+only in the raw historical records. NATIVE-ACCESSORS.txt describes the conceptual
+Wasm approach and the isolation requirements a different implementation must meet.
+
+Checked caching is the preferred performance candidate for further validation.
+The generation-counter variant is statistically tied with it and has a larger
+invalidation surface. Direct checked lookup with stripped diagnostics is another
+promising candidate. Measurements do not establish a strict ranking between all
+three, and none is ready to ship without integration-level isolation validation.
 
 Protocol: unmodified issue #2481 Rust workload, release builds for wasm32-wasip2
 and wasm32-wasip3, Rust 1.100.0, Node 24.13.0 (V8 13.6.233.17-node.37), JSPI,
@@ -43,9 +49,6 @@ no-runtime-log                425.40   337.51  1281.16    1.26x   [0.66, 1.29]
 direct-checked                320.49   233.14   553.02    1.67x   [1.33, 2.08]
 direct-no-runtime-log         288.35   223.56  1067.40    1.86x   [1.40, 2.07]
 cache-checked                 274.50   187.01   640.13    1.95x   [1.16, 2.68]
-cache-unchecked               194.62   145.70   400.19    2.76x   [1.67, 3.35]
-single-array                  144.52    99.84   517.18    3.71x   [2.22, 4.18]
-wasm-globals                   53.12    35.08   106.44   10.10x   [6.48, 12.27]
 wasip2                         41.58    26.15    95.48   12.90x   [9.13, 16.60]
 wasmtime                       18.04    12.31    38.11   29.73x   [18.81, 44.02]
 
@@ -57,7 +60,6 @@ pr2483                        155.59    1.00x   [1.00, 1.00]
 direct-checked                116.05    1.34x   [1.19, 1.57]
 cache-checked                  91.15    1.71x   [1.59, 1.94]
 cache-epoch                    89.72    1.73x   [1.54, 1.91]
-wasm-globals                   21.10    7.37x   [5.94, 8.13]
 wasip2                         14.60   10.66x   [10.01, 12.43]
 
 Warmed core-Wasm microbenchmarks: seven fresh processes per variant. Each process
@@ -78,9 +80,6 @@ no-runtime-log                 276.55   1.34x           940.33   1.10x
 direct-checked                 156.09   2.38x           600.05   1.73x
 direct-no-runtime-log          155.70   2.38x           580.21   1.79x
 cache-checked                  111.05   3.34x           410.37   2.53x
-cache-unchecked                 84.43   4.40x           381.85   2.72x
-single-array                    74.84   4.96x           167.88   6.19x
-wasm-globals                    10.30  36.04x            25.05  41.47x
 
 Checked caching improves warmed reads by 3.34x [1.27, 4.86] and get/set/get by
 2.53x [1.35, 4.24]. Read/write confidence intervals for every variant are stored
@@ -111,23 +110,20 @@ Interpretation and implementation priorities:
    embedded diagnostics does not establish an additional gain over direct lookup.
    Production integration must retain debug-enabled behavior.
 
-4. Explore a tiny native Wasm getter/setter module as the route toward WASIp2
-   performance. It avoids guest binary rewriting. Schedule-aware save/restore
-   must handle JSPI suspension/resumption, nested component calls, both context
-   slots, realloc, destructors, and fused-adapter/post-return context. Measure
-   the cost at task-switch boundaries before treating the lower bound as an
-   achievable general speedup. A plain global array or unchecked cache fails
-   isolation and should not be adopted as an optimization.
+4. Any future native Wasm accessor design must establish isolation before it
+   becomes an eligible performance candidate. The previous unswitched prototype
+   is rejected, including for optional or production single-task modes.
 
 Validation and scope:
 
 - Nine generated variants (including the baseline) pass focused tests covering
   both slots, nested/restored thread registers, component selection, dead-thread
   fallback, recycled IDs, independent stores, invalid arguments, and table clear.
-- The unchecked cache, single array, and Wasm globals each fail the expected
-  isolation test. They are diagnostic lower bounds.
+- Every runnable context variant must pass isolation checks. The harness rejects
+  retired variants before loading generated code or launching benchmark children.
 - 143 primary Rust processes, 66 follow-up Rust processes, and 77 warmed
-  microbenchmark processes completed with checked results. Internal repeated
+  microbenchmark processes completed with checked results in the historical matrix,
+  including the now-retired experiments. Internal repeated
   microbenchmark samples are not counted as independent processes.
 - The saved native driver builds with its pinned Cargo.lock and reproduces the
   baseline JavaScript and every core Wasm module byte for byte. The baseline JS
@@ -140,5 +136,5 @@ Validation and scope:
 
 README.txt documents each variant and reproduction commands. results/ contains
 raw independent-process samples, environment metadata, paired bootstrap results,
-and artifact hashes. Full generated local artifacts are also preserved under
+and artifact hashes. Generated artifacts for the remaining candidates are preserved under
 /home/agent/workspace/jco/.llm/benchmarks/2481-context.

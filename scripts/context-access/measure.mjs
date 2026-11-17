@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFile, readFile, writeFile } from 'node:fs/promises';
 import { cpus, release } from 'node:os';
 import { resolve, join } from 'node:path';
+import { assertVariant } from './candidates.mjs';
 
 const output = resolve(process.argv[2]);
 const manifest = JSON.parse(await readFile(join(output, 'manifest.json'), 'utf8'));
@@ -9,6 +10,7 @@ const variants = process.env.VARIANTS?.split(',') ?? manifest.variants;
 if (process.env.BENCH_WASMTIME) {
     variants.push('wasmtime');
 }
+variants.forEach((variant) => assertVariant(variant));
 const repetitions = Number(process.env.REPETITIONS ?? 11);
 const counts = (process.env.COUNTS ?? '1000,100000,1000000').split(',').map(Number);
 const resultName = process.env.RESULT_NAME ?? 'samples';

@@ -37,6 +37,7 @@ avoid changing compiler or shim versions. manifest.json records the source hash.
 Check isolation and measure serially, without concurrent builds or benchmarks:
 
   node scripts/context-access/check.mjs /tmp/jco-context-access
+  node --test scripts/context-access/candidates.test.mjs
   COUNTS=1000000 node scripts/context-access/measure.mjs /tmp/jco-context-access
   node scripts/context-access/micro.mjs /tmp/jco-context-access
   node scripts/context-access/summarize.mjs /tmp/jco-context-access
@@ -75,26 +76,27 @@ cache-epoch: Increment a table generation on insert/remove/clear. Cache the thre
   with the table generation and lookup owner; validate generation and thread,
   component, and task IDs on each hit. Avoid both lookups until the table changes.
   This relies on the runtime retaining the component state/table for its lifetime.
-cache-unchecked: Cache without checking liveness. Incorrect for stale registers.
-single-array: Use one per-instantiation array. Incorrect across tasks/threads.
-wasm-globals: Supply native Wasm get/set exports backed by mutable Wasm globals
-  directly as canonical imports. No JS entry for stack-pointer access. Missing
-  task/thread save/restore; this is a single-task lower bound, not a usable fix.
+All listed variants must pass the isolation checks; a failure aborts validation.
+The unchecked cache, single storage array, and unswitched Wasm-global prototype
+are retired and cannot be selected, including through VARIANTS or stale manifests.
+prepare.mjs removes their generated directories and runners when reusing an output
+folder. Raw historical measurements remain in results/ for provenance, but
+summarize.mjs excludes retired variants from comparisons.
 
-The last three variants intentionally fail isolation checks. check.mjs verifies
-those failures as well as the passing cases. Other variants pass focused checks
-for both slots, nested/restored registers, component selection, fallback after
-thread removal, handle recycling, independent stores, and invalid arguments.
+The remaining variants pass focused checks for both slots, nested/restored
+registers, component selection, fallback after thread removal, handle recycling,
+independent stores, and invalid arguments. Passing these checks is a prerequisite,
+not proof of complete sandbox correctness.
 These checks use extracted generated functions and real generated RepTable code.
 They do not establish correctness under real JSPI suspension, resource destructor
 reentry, realloc, or all fused adapter transitions. Those need integration tests
 before adopting a runtime change. All diagnostic removal variants assume debug
 is disabled; production code must preserve debug-enabled behavior.
 
-The recorded generation-counter follow-up was measured separately, with fresh
-controls, after the initial matrix and microbenchmarks:
+To repeat the generation-counter follow-up with the remaining candidates and
+fresh controls:
 
-  COUNTS=1000000 RESULT_NAME=epoch VARIANTS=pr2483,cache-checked,cache-epoch,direct-checked,wasm-globals,wasip2 node scripts/context-access/measure.mjs /tmp/jco-context-access
+  COUNTS=1000000 RESULT_NAME=epoch VARIANTS=pr2483,cache-checked,cache-epoch,direct-checked,wasip2 node scripts/context-access/measure.mjs /tmp/jco-context-access
 
 summarize.mjs includes epoch.jsonl when present. Ratios for that follow-up use its
 own baseline. The broader archived microbenchmark matrix predates cache-epoch.
@@ -102,3 +104,6 @@ Fresh runs of prepare.mjs/micro.mjs also include cache-epoch.
 
 Experiment results and raw samples are in results/. REPORT.txt explains the
 comparison and its limitations. Preliminary/aborted samples are excluded.
+
+NATIVE-ACCESSORS.txt explains the rejected prototype and requirements for a new,
+isolation-preserving design. No native-global variant is runnable in this harness.

@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { assertVariant } from './candidates.mjs';
 
 const require = createRequire(new URL('../../packages/jco-transpile/package.json', import.meta.url));
 const ts = require('typescript-compiler-api');
@@ -25,8 +26,6 @@ export function operations(source) {
             'contextSet',
         ].map((name) => prefix + name),
         '__benchmarkThread',
-        '__benchmarkStorage',
-        '__benchmarkBridge',
     ]);
     const declarations = [];
     for (const statement of instantiate.body.statements) {
@@ -81,7 +80,7 @@ function store(ops) {
 }
 
 /** Check context isolation, restored register identity, and liveness after thread-ID recycling. */
-export function check(ops, validate = true) {
+export function check(ops) {
     const state = store(ops);
     const outer = state.thread(0, 1n);
     const inner = state.thread(0, 1n);
@@ -132,13 +131,11 @@ export function check(ops, validate = true) {
     ops.set(independent.context, ctx, 123);
     assert.equal(get(), 0, 'instances must not share context');
 
-    if (validate) {
-        assert.throws(() => get({ componentIdx: 0 }), /missing slot/);
-        assert.throws(() => get({ slot: 2 }), /invalid slot/);
-        assert.throws(() => set(0, { slot: -1 }), /invalid slot/);
-        assert.throws(() => set(2147483648), /invalid value/);
-        assert.throws(() => set(NaN), /invalid value/);
-    }
+    assert.throws(() => get({ componentIdx: 0 }), /missing slot/);
+    assert.throws(() => get({ slot: 2 }), /invalid slot/);
+    assert.throws(() => set(0, { slot: -1 }), /invalid slot/);
+    assert.throws(() => set(2147483648), /invalid value/);
+    assert.throws(() => set(NaN), /invalid value/);
 
     replacement.threads.clear();
     assert.throws(() => get(), /missing/, 'clearing the thread table must invalidate cached storage');
@@ -147,15 +144,11 @@ export function check(ops, validate = true) {
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
     const output = resolve(process.argv[2]);
     const manifest = JSON.parse(await readFile(join(output, 'manifest.json'), 'utf8'));
+    manifest.variants.forEach((variant) => assertVariant(variant));
     for (const variant of manifest.variants.filter((name) => name !== 'wasip2')) {
         const source = await readFile(join(output, 'variants', variant, 'stack-loop.js'), 'utf8');
         const ops = operations(source);
-        if (manifest.diagnosticOnly.includes(variant)) {
-            assert.throws(() => check(ops), undefined, `${variant} should demonstrate its isolation limitation`);
-            console.log(`${variant}: expected isolation failure (diagnostic only)`);
-        } else {
-            check(ops);
-            console.log(`${variant}: context semantics passed`);
-        }
+        check(ops);
+        console.log(`${variant}: context semantics passed`);
     }
 }

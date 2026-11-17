@@ -1,5 +1,6 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
+import { assertVariant, RETIRED_VARIANTS } from './candidates.mjs';
 
 const output = resolve(process.argv[2]);
 let seed = 2481;
@@ -65,7 +66,12 @@ function summarize(rows, value, baselineName = 'pr2483') {
         ) {
             throw new Error(`Incomplete paired rounds: ${variant}`);
         }
-        result[variant] = comparison(baseline.map(value), candidate.map(value));
+        // Preserve the archived bootstrap sequence while excluding rejected candidates.
+        const estimate = comparison(baseline.map(value), candidate.map(value));
+        if (!RETIRED_VARIANTS.includes(variant)) {
+            assertVariant(variant);
+            result[variant] = estimate;
+        }
     }
     return result;
 }

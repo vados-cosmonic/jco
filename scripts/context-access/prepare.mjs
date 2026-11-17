@@ -1,8 +1,9 @@
-import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { RETIRED_VARIANTS } from './candidates.mjs';
 
 const require = createRequire(new URL('../../packages/jco-transpile/package.json', import.meta.url));
 const ts = require('typescript-compiler-api');
@@ -92,7 +93,7 @@ function inject(source, code) {
 }
 
 /** Implement checked lookup without metadata copies, wrapper objects, or diagnostics. */
-function directLookup(source, cache = false, unchecked = false) {
+function directLookup(source, cache = false) {
     if (cache === 'epoch') {
         source = edit(source, (node, tree) => {
             if (
@@ -121,7 +122,7 @@ function directLookup(source, cache = false, unchecked = false) {
         ${
             cache
                 ? `
-        if (meta.__benchmarkThread ${unchecked ? '' : cacheCheck}) return meta.__benchmarkThread;
+        if (meta.__benchmarkThread ${cacheCheck}) return meta.__benchmarkThread;
         `
                 : ''
         }
@@ -151,57 +152,6 @@ function directLookup(source, cache = false, unchecked = false) {
     );
 }
 
-/** Encode a tiny core module with two mutable i32 globals and typed accessors. */
-export function globalBridge() {
-    /** Prefix a short Wasm vector with its length. All lengths here fit one byte. */
-    const vector = (bytes) => [bytes.length, ...bytes];
-    /** Encode a named function export. */
-    const exported = (name, index) => [...vector([...Buffer.from(name)]), 0, index];
-    const sections = [
-        [1, [2, 0x60, 0, 1, 0x7f, 0x60, 1, 0x7f, 0]],
-        [3, [4, 0, 1, 0, 1]],
-        [6, [2, 0x7f, 1, 0x41, 0, 0x0b, 0x7f, 1, 0x41, 0, 0x0b]],
-        [7, [4, ...exported('get0', 0), ...exported('set0', 1), ...exported('get1', 2), ...exported('set1', 3)]],
-        [
-            10,
-            [
-                4,
-                ...vector([0, 0x23, 0, 0x0b]),
-                ...vector([0, 0x20, 0, 0x24, 0, 0x0b]),
-                ...vector([0, 0x23, 1, 0x0b]),
-                ...vector([0, 0x20, 0, 0x24, 1, 0x0b]),
-            ],
-        ],
-    ];
-    return new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, ...sections.flatMap(([id, bytes]) => [id, ...vector(bytes)])]);
-}
-
-/** Single-task lower bound: canonical imports call Wasm accessors without entering JS. */
-function wasmBridge(source) {
-    source = contextBodies(source, (_body, get) =>
-        get ? '{ return __benchmarkBridge["get" + ctx.slot](); }' : '{ __benchmarkBridge["set" + ctx.slot](value); }',
-    );
-    source = edit(source, (node, tree) => {
-        if (
-            !ts.isCallExpression(node) ||
-            !['contextGet.bind', 'contextSet.bind'].includes(node.expression.getText(tree))
-        ) {
-            return;
-        }
-        const slot = node.arguments[2].properties
-            .find((property) => property.name?.getText(tree) === 'slot')
-            ?.initializer?.getText(tree);
-        if (!['0', '1'].includes(slot)) {
-            throw new Error('Unrecognized context slot');
-        }
-        return `__benchmarkBridge.${node.expression.getText(tree).startsWith('contextGet') ? 'get' : 'set'}${slot}`;
-    });
-    return inject(
-        source,
-        `const __benchmarkBridge = new globalThis.WebAssembly.Instance(new globalThis.WebAssembly.Module(new Uint8Array(${JSON.stringify([...globalBridge()])}))).exports;`,
-    );
-}
-
 /** Construct controlled variants from identical PR #2483 output. */
 export function variants(source) {
     const noLog = noContextLogging(source);
@@ -210,12 +160,6 @@ export function variants(source) {
             return '(void 0)';
         }
     });
-    const singleArray = inject(
-        contextBodies(source, (_body, get) =>
-            get ? '{ return __benchmarkStorage[ctx.slot]; }' : '{ __benchmarkStorage[ctx.slot] = value; }',
-        ),
-        'const __benchmarkStorage = [0, 0];',
-    );
     return {
         pr2483: source,
         'no-context-log': noLog,
@@ -226,15 +170,17 @@ export function variants(source) {
         'direct-no-runtime-log': directLookup(noRuntimeLog),
         'cache-checked': directLookup(source, true),
         'cache-epoch': directLookup(source, 'epoch'),
-        'cache-unchecked': directLookup(source, true, true),
-        'single-array': singleArray,
-        'wasm-globals': wasmBridge(source),
     };
 }
 
 /** Prepare self-contained variant artifacts from the issue's existing Rust reproduction. */
 export async function prepare(fixture, output) {
     await mkdir(output, { recursive: true });
+    // Retire only the known generated artifacts, preserving historical measurements.
+    for (const variant of RETIRED_VARIANTS) {
+        await rm(join(output, 'variants', variant), { recursive: true, force: true });
+        await rm(join(output, `run-${variant}.mjs`), { force: true });
+    }
     const original = await readFile(join(fixture, 'out-option/stack-loop.js'), 'utf8');
     const runner = await readFile(join(fixture, 'run.mjs'), 'utf8');
     const matrix = variants(original);
@@ -264,7 +210,6 @@ export async function prepare(fixture, output) {
                 variants: [...Object.keys(matrix), 'wasip2'],
                 sourceHash: createHash('sha256').update(original).digest('hex'),
                 baselineCommit: 'cfc2c84ccc5552602b24573eed6cfe13323a5c55',
-                diagnosticOnly: ['cache-unchecked', 'single-array', 'wasm-globals'],
             },
             null,
             2,

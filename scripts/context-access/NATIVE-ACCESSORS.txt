@@ -1,0 +1,72 @@
+Native Wasm context accessors: design requirements
+
+Status: the measured unswitched-global implementation fails context isolation and
+is rejected. It is removed from the runnable experiments and candidate rankings.
+The mechanism described here is a possible direction for a new implementation,
+not a validated optimization or a proposed weakening of isolation requirements.
+
+The current path calls a JavaScript function from guest Wasm for context.get/set.
+That function selects the current thread and accesses its two storage slots. The
+prototype instead instantiated a tiny core Wasm helper containing two mutable
+i32 globals and four exports: get0, set0, get1, set1. Jco supplied these native Wasm
+exports directly as the guest's canonical imports. Each accessor only performed
+global.get or global.set. The guest bytes stayed unchanged, and stack-pointer
+access avoided JavaScript entry, metadata allocation, and runtime lookup.
+
+These are Wasm global instances, not JavaScript globalThis properties or machine-
+wide variables. A fresh helper instance can own its own globals. Nevertheless,
+per-instantiation ownership is insufficient: multiple component-model threads
+within an instantiation require separate context slots. Even nested synchronous
+calls can require a different context; concurrency on multiple CPUs is unnecessary
+to trigger the defect.
+
+For example, thread A writes its stack pointer into slot 0 and suspends. Thread B
+then writes a different pointer into the same helper global. If A resumes without
+restoration, its next read returns B's value. The prototype also fails the simpler
+nested-thread test: a newly selected thread observes the previous thread's value
+instead of its own initial zero. Using the wrong pointer can corrupt guest state
+or disclose state across contexts. The tests establish a context-isolation defect;
+they do not demonstrate a host-memory escape. Wasm memory bounds checks do not
+make this semantic isolation failure acceptable.
+
+A potentially correct design would treat the globals as the active thread's
+working slots, with a separate durable record for each thread. Before switching
+contexts, the runtime would save the outgoing slots and load the incoming slots.
+New threads need fresh slots; completed threads must never be revived. Helpers
+must be owned by the appropriate store/component execution domain. Every entry,
+exit, synchronous reentry, suspension, resumption, exception, cancellation,
+destructor, realloc, and fused-adapter/post-return transition must preserve the
+same context selection as the existing runtime, including both slots.
+Invalid or missing execution contexts must retain the existing trap behavior;
+they must not make a stale active value readable.
+
+JSPI suspends and resumes execution; it does not implement Jco's thread-local
+storage protocol for arbitrary helper globals. A finally block around the initial
+export call or a then handler on its final result is insufficient for intermediate
+suspension/resumption. The design needs a demonstrably complete mechanism to
+restore the correct values before resumed guest instructions execute. If existing
+hooks cannot provide that, the optimization cannot be enabled on those paths.
+
+Giving each thread its own helper is not by itself a solution: a core guest
+instance retains its imported functions. Per-thread helpers would also require a
+valid dispatch or instantiation strategy, whose cost and semantics need analysis.
+
+Costs and acceptance criteria:
+
+- Work moves from every context access to execution-context transitions. Frequent
+  switching can reduce or erase the benefit. Benchmark both compute-heavy loops
+  and interleaved asynchronous workloads, including transition overhead.
+- Scheduler integration is substantially more complex than checked lookup/cache
+  optimization. A missed transition is a correctness and isolation bug.
+- The helper adds compilation/instantiation and lifecycle management. Measure
+  startup and teardown as well as steady-state performance across supported engines.
+- The previous single-task measurements omit the required isolation mechanism and
+  cannot predict the speedup of a correct implementation.
+- Require real JSPI interleaving and reentry tests, independent stores/components,
+  both slots, lifecycle/handle reuse, traps/cancellation, realloc, destructors, and
+  fused-adapter/post-return coverage before admitting a new candidate.
+
+Sources:
+https://github.com/WebAssembly/component-model/blob/main/design/mvp/Concurrency.md#thread-local-storage
+https://webassembly.github.io/spec/core/exec/runtime.html#global-instances
+https://webassembly.github.io/js-promise-integration/js-api/
