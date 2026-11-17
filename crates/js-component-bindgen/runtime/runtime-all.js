@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit d76bb11fbb20ad2aacfcff45fa07dd30e9768598
+// generated from commit e9bc714e7b8da045f1853890fd404ebfc598227d
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1825,25 +1825,23 @@ const initializeUtf16Encoding = () => ({ littleEndian: new Uint8Array(new Uint16
 function writeUtf16(context, str, ptr, memory) {
 	const len = str.length;
 	const out = new Uint16Array(memory.buffer, ptr, len);
-	const put = context.littleEndian ? (i, ch) => {
-		out[i] = ch;
-	} : (i, ch) => {
-		out[i] = (ch & 255) << 8 | ch >>> 8;
-	};
+	let codepoints = len;
 	for (let i = 0; i < len; i++) {
 		let ch = str.charCodeAt(i);
 		if ((ch & 63488) === 55296) {
 			if (ch < 56320 && i + 1 < len && (str.charCodeAt(i + 1) & 64512) === 56320) {
-				put(i++, ch);
+				out[i++] = ch;
 				ch = str.charCodeAt(i);
+				codepoints--;
 			} else ch = 65533;
 		}
-		put(i, ch);
+		out[i] = ch;
 	}
+	if (!context.littleEndian) for (let i = 0; i < len; i++) out[i] = (out[i] & 255) << 8 | out[i] >>> 8;
 	return {
 		ptr,
 		len,
-		codepoints: [...str].length
+		codepoints
 	};
 }
 function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
