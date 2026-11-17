@@ -7,11 +7,11 @@ interface ParamCursor {
     offset: number;
     exposed: boolean;
 }
-const cursors = /* @__PURE__ */ new WeakMap<ParamsContext, ParamCursor>();
+let cursorKey: symbol | undefined;
 
 /** Materialize only when a consumer observes the public array. */
 function getParams(this: ParamsContext): unknown[] {
-    const cursor = cursors.get(this)!;
+    const cursor = cursorFor(this)!;
     if (cursor.offset !== 0) {
         cursor.values = cursor.values.slice(cursor.offset);
         cursor.offset = 0;
@@ -22,31 +22,32 @@ function getParams(this: ParamsContext): unknown[] {
 
 /** Replacing params starts a new argument sequence. */
 function setParams(this: ParamsContext, values: unknown[]) {
-    const cursor = cursors.get(this)!;
+    const cursor = cursorFor(this)!;
     cursor.values = values;
     cursor.offset = 0;
     cursor.exposed = true;
 }
 
-/** Use a cursor for ordinary contexts, preserving custom property accessors. */
-function cursorFor(context: ParamsContext): ParamCursor | undefined {
-    let cursor = cursors.get(context);
-    if (cursor !== undefined) {
-        return cursor;
-    }
-    const descriptor = Object.getOwnPropertyDescriptor(context, 'params');
-    if (!descriptor?.configurable || !descriptor.writable || !Object.isExtensible(context)) {
-        return undefined;
-    }
-    cursor = { values: descriptor.value, offset: 0, exposed: true };
-    cursors.set(context, cursor);
+/** Register a runtime-owned context whose params accessor was created with it. */
+export function initializeParams(context: ParamsContext, values: unknown[]): void {
+    // Allocate this capability only when a cursor is requested, never on import.
+    cursorKey ??= Symbol('jco flat parameter cursor');
+    Object.defineProperty(context, cursorKey, {
+        value: { values, offset: 0, exposed: true },
+    });
+    // Adding a new accessor with shared functions keeps V8's context layout stable.
+    // Converting an existing data property would put caller objects in dictionary mode.
     Object.defineProperty(context, 'params', {
         get: getParams,
         set: setParams,
-        enumerable: descriptor.enumerable,
+        enumerable: true,
         configurable: true,
     });
-    return cursor;
+}
+
+/** Caller-created contexts retain ordinary array properties and accessors. */
+function cursorFor(context: ParamsContext): ParamCursor | undefined {
+    return cursorKey ? (context as ParamsContext & { [key: symbol]: ParamCursor | undefined })[cursorKey] : undefined;
 }
 
 /** Count remaining flat arguments without allocating their suffix. */
@@ -105,4 +106,9 @@ export function takeParam(context: ParamsContext, error: string): unknown {
         cursor.offset++;
     }
     return value;
+}
+
+/** Whether a context was prepared for repeated flat-argument consumption. */
+export function hasParamCursor(context: ParamsContext): boolean {
+    return cursorFor(context) !== undefined;
 }

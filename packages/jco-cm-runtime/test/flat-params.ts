@@ -1,10 +1,12 @@
 import { expect, test } from 'vitest';
 import { liftFlatS32, liftFlatRecord } from '../src/intrinsics/lift.js';
+import { createLiftContext } from '../src/intrinsics/call-context.js';
 import type { TaskLiftContext } from '../src/runtime.js';
 
-test.concurrent('flat cursors preserve snapshots, replacement, and custom consumers', () => {
+test.each([false, true])('flat contexts preserve snapshots, replacement, and custom consumers (owned=%s)', (owned) => {
     const input = [1, 2, 3, 4];
-    const ctx: TaskLiftContext = { componentIdx: 0, params: input, useDirectParams: true };
+    const options: TaskLiftContext = { componentIdx: 0, params: input, useDirectParams: true };
+    const ctx = owned ? createLiftContext(options, true) : options;
     expect(liftFlatS32(ctx)[0]).toBe(1);
     input[1] = 99;
     expect(liftFlatS32(ctx)[0]).toBe(2);

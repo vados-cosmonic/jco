@@ -130,9 +130,11 @@ active in every profile. No inline-runtime implementation is maintained here.
 
 ### Allocation and scheduling behavior
 
-Flat-argument cursors expose the remaining arguments through `params`, copying
-only when a caller observes or retains that array. Custom property accessors keep
-the generic path. Scalar memory views refresh after buffer replacement, including
+Long or explicitly reused runtime-owned flat-argument contexts expose remaining
+arguments through `params`, copying only when a caller observes or retains that
+array. Short one-shot contexts, caller-created contexts and custom property
+accessors keep ordinary array consumption. Cursor setup defaults to vectors of
+at least 64 arguments because setup outweighs slicing for short calls. Scalar memory views refresh after buffer replacement, including
 memory growth. Custom lift functions keep the pair-returning API and may replace
 their context; built-in scalar composition can avoid constructing those pairs.
 

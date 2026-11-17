@@ -4,8 +4,8 @@ type ScalarLift = (context: TaskLiftContext) => unknown;
 const scalarLifts = /* @__PURE__ */ new WeakMap<TaskLiftFn, { direct: ScalarLift; memory: ScalarLift }>();
 
 /** Keep the public pair-returning ABI while making internal scalar calls allocation-free. */
-export function defineScalarLift(value: ScalarLift, direct: ScalarLift, memory: ScalarLift): TaskLiftFn {
-    const lift: TaskLiftFn = (context) => [value(context), context];
+export function defineScalarLift(direct: ScalarLift, memory: ScalarLift): TaskLiftFn {
+    const lift: TaskLiftFn = (context) => [context.useDirectParams ? direct(context) : memory(context), context];
     scalarLifts.set(lift, { direct, memory });
     return lift;
 }
