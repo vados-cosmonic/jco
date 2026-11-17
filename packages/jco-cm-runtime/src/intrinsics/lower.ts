@@ -1,3 +1,4 @@
+import { createLowerContext } from './call-context.js';
 import { consumeParams, readParam, remainingParams } from './flat-params.js';
 import { memoryView } from './memory-view.js';
 import type {
@@ -474,7 +475,7 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
                 throw new Error('list length does not match allocated storage');
             }
 
-            const lowerCtx: TaskLowerContext = {
+            const lowerCtx: TaskLowerContext = createLowerContext({
                 storagePtr,
                 memory: ctx.memory,
                 stringEncoding: ctx.stringEncoding,
@@ -482,7 +483,7 @@ export function lowerFlatList(_context: LowerListContext, meta: LowerListMeta): 
                 realloc: ctx.realloc,
                 lowerResource: ctx.lowerResource,
                 vals: [],
-            };
+            });
             for (let idx = 0; idx < list.length; idx++) {
                 const elemPtr = storagePtr + idx * elemSize32;
                 lowerCtx.storagePtr = elemPtr;
@@ -936,7 +937,7 @@ export function lowerFlatErrorContext(_context: LowerErrorContext, errCtxTableId
         errCtxGlobalRefCountAdd(_context.globalTable, errCtxGlobalRep, -1);
     }
 
-    const lowerCtx = { memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx };
+    const lowerCtx = createLowerContext({ memory, realloc, vals: [handle], storagePtr, storageLen, componentIdx });
     lowerFlatU32(_context.numeric, lowerCtx);
     ctx.storagePtr = lowerCtx.storagePtr;
 }

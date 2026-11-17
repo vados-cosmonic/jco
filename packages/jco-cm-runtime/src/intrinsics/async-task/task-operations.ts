@@ -1,3 +1,4 @@
+import { createLiftContext } from '../call-context.js';
 import { scalarLiftValue } from '../scalar-lift.js';
 import type {
     TaskReturnRuntimeContext,
@@ -230,7 +231,7 @@ export function taskReturn(
         DEBUG: debugLog('[taskReturn()] memory not present for max async flat lifts');
         throw new Error('memory must be present if more than max async flat lifts are performed');
     }
-    let liftCtx: TaskLiftContext = { memory, useDirectParams, params, componentIdx, stringEncoding };
+    let liftCtx: TaskLiftContext = createLiftContext({ memory, useDirectParams, params, componentIdx, stringEncoding });
     if (!useDirectParams) {
         if (!memory) {
             DEBUG: debugLog('missing memory despite indirect param usage', { useDirectParams, liftCtx, ctx });
@@ -246,7 +247,7 @@ export function taskReturn(
             DEBUG: debugLog(`[taskReturn()] ran out of range while writing storageLen = [${liftCtx.storageLen}]`);
             throw new Error('ran out of storage while writing');
         }
-        const scalar = scalarLiftValue(liftFn);
+        const scalar = scalarLiftValue(liftFn, liftCtx.useDirectParams);
         if (scalar) {
             liftedResults.push(scalar(liftCtx));
         } else {

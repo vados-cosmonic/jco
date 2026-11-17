@@ -389,6 +389,7 @@ export interface RepTableConstructor {
 }
 /** Context passed to the generated element lift/lower functions. */
 export interface BufferElementContext {
+    memoryView?: DataView;
     storagePtr: number;
     memory: RuntimeMemory;
     componentIdx: number;

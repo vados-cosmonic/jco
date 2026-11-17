@@ -95,20 +95,27 @@ export const initializeLiftVariant: LiftModule['initializeLiftVariant'] = () => 
     scratch: new DataView(new ArrayBuffer(8)),
 });
 
-export const liftFlatBool = /* @__PURE__ */ defineScalarLift(liftFlatBoolValue);
+export const liftFlatBool = /* @__PURE__ */ defineScalarLift(liftFlatBoolValue, liftFlatBoolDirect, liftFlatBoolMemory);
 
 function liftFlatBoolValue(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatBoolDirect(ctx) : liftFlatBoolMemory(ctx);
+}
+
+function liftFlatBoolDirect(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0) === 1;
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0) === 1;
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatBoolMemory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatBool()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (bool requires 1 byte)`);
@@ -124,20 +131,27 @@ function liftFlatBoolValue(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Value);
+export const liftFlatS8 = /* @__PURE__ */ defineScalarLift(liftFlatS8Value, liftFlatS8Direct, liftFlatS8Memory);
 
 function liftFlatS8Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatS8Direct(ctx) : liftFlatS8Memory(ctx);
+}
+
+function liftFlatS8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatS8Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS8()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s8 requires 1 byte)`);
@@ -152,20 +166,27 @@ function liftFlatS8Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Value);
+export const liftFlatU8 = /* @__PURE__ */ defineScalarLift(liftFlatU8Value, liftFlatU8Direct, liftFlatU8Memory);
 
 function liftFlatU8Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU8Direct(ctx) : liftFlatU8Memory(ctx);
+}
+
+function liftFlatU8Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU8Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU8()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 1) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u8 requires 1 byte)`);
@@ -181,20 +202,27 @@ function liftFlatU8Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Value);
+export const liftFlatS16 = /* @__PURE__ */ defineScalarLift(liftFlatS16Value, liftFlatS16Direct, liftFlatS16Memory);
 
 function liftFlatS16Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatS16Direct(ctx) : liftFlatS16Memory(ctx);
+}
+
+function liftFlatS16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatS16Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS16()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s16 requires 2 bytes)`);
@@ -209,20 +237,27 @@ function liftFlatS16Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Value);
+export const liftFlatU16 = /* @__PURE__ */ defineScalarLift(liftFlatU16Value, liftFlatU16Direct, liftFlatU16Memory);
 
 function liftFlatU16Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU16Direct(ctx) : liftFlatU16Memory(ctx);
+}
+
+function liftFlatU16Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU16Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU16()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 2) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u16 requires 2 bytes)`);
@@ -243,20 +278,27 @@ function liftFlatU16Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Value);
+export const liftFlatS32 = /* @__PURE__ */ defineScalarLift(liftFlatS32Value, liftFlatS32Direct, liftFlatS32Memory);
 
 function liftFlatS32Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatS32Direct(ctx) : liftFlatS32Memory(ctx);
+}
+
+function liftFlatS32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatS32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s32 requires 4 bytes)`);
@@ -271,21 +313,28 @@ function liftFlatS32Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Value);
+export const liftFlatU32 = /* @__PURE__ */ defineScalarLift(liftFlatU32Value, liftFlatU32Direct, liftFlatU32Memory);
 
 function liftFlatU32Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU32Direct(ctx) : liftFlatU32Memory(ctx);
+}
+
+function liftFlatU32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU32()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least a single i34 argument');
-        }
-        // core i32 values arrive as signed numbers
-        val = (readParam(ctx, 0) as number) >>> 0;
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least a single i34 argument');
     }
+    // core i32 values arrive as signed numbers
+    val = (readParam(ctx, 0) as number) >>> 0;
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u32 requires 4 bytes)`);
@@ -299,23 +348,30 @@ function liftFlatU32Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Value);
+export const liftFlatS64 = /* @__PURE__ */ defineScalarLift(liftFlatS64Value, liftFlatS64Direct, liftFlatS64Memory);
 
 function liftFlatS64Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatS64Direct(ctx) : liftFlatS64Memory(ctx);
+}
+
+function liftFlatS64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least one single i64 argument');
-        }
-        if (typeof readParam(ctx, 0) !== 'bigint') {
-            throw new Error('expected bigint');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i64 argument');
     }
+    if (typeof readParam(ctx, 0) !== 'bigint') {
+        throw new Error('expected bigint');
+    }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatS64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatS64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (s64 requires 8 bytes)`);
@@ -330,24 +386,31 @@ function liftFlatS64Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Value);
+export const liftFlatU64 = /* @__PURE__ */ defineScalarLift(liftFlatU64Value, liftFlatU64Direct, liftFlatU64Memory);
 
 function liftFlatU64Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatU64Direct(ctx) : liftFlatU64Memory(ctx);
+}
+
+function liftFlatU64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least one single i64 argument');
-        }
-        if (typeof readParam(ctx, 0) !== 'bigint') {
-            throw new Error('expected bigint');
-        }
-        // core i64 values arrive as signed BigInts
-        val = BigInt.asUintN(64, readParam(ctx, 0) as bigint);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i64 argument');
     }
+    if (typeof readParam(ctx, 0) !== 'bigint') {
+        throw new Error('expected bigint');
+    }
+    // core i64 values arrive as signed BigInts
+    val = BigInt.asUintN(64, readParam(ctx, 0) as bigint);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatU64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatU64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (u64 requires 8 bytes)`);
@@ -362,21 +425,32 @@ function liftFlatU64Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(liftFlatFloat32Value);
+export const liftFlatFloat32 = /* @__PURE__ */ defineScalarLift(
+    liftFlatFloat32Value,
+    liftFlatFloat32Direct,
+    liftFlatFloat32Memory,
+);
 
 function liftFlatFloat32Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatFloat32Direct(ctx) : liftFlatFloat32Memory(ctx);
+}
+
+function liftFlatFloat32Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least one single f32 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single f32 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+
+    return val;
+}
+
+function liftFlatFloat32Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat32()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f32 requires 4 bytes)`);
@@ -392,21 +466,32 @@ function liftFlatFloat32Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(liftFlatFloat64Value);
+export const liftFlatFloat64 = /* @__PURE__ */ defineScalarLift(
+    liftFlatFloat64Value,
+    liftFlatFloat64Direct,
+    liftFlatFloat64Memory,
+);
 
 function liftFlatFloat64Value(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatFloat64Direct(ctx) : liftFlatFloat64Memory(ctx);
+}
+
+function liftFlatFloat64Direct(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least one single f64 argument');
-        }
-        val = readParam(ctx, 0);
-        consumeParams(ctx, 1);
-
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single f64 argument');
     }
+    val = readParam(ctx, 0);
+    consumeParams(ctx, 1);
+
+    return val;
+}
+
+function liftFlatFloat64Memory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatFloat64()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 8) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (f64 requires 8 bytes)`);
@@ -421,20 +506,27 @@ function liftFlatFloat64Value(ctx: TaskLiftContext): unknown {
     return val;
 }
 
-export const liftFlatChar = /* @__PURE__ */ defineScalarLift(liftFlatCharValue);
+export const liftFlatChar = /* @__PURE__ */ defineScalarLift(liftFlatCharValue, liftFlatCharDirect, liftFlatCharMemory);
 
 function liftFlatCharValue(ctx: TaskLiftContext): unknown {
+    return ctx.useDirectParams ? liftFlatCharDirect(ctx) : liftFlatCharMemory(ctx);
+}
+
+function liftFlatCharDirect(ctx: TaskLiftContext): unknown {
     DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
     let val;
 
-    if (ctx.useDirectParams) {
-        if (remainingParams(ctx) === 0) {
-            throw new Error('expected at least one single i32 argument');
-        }
-        val = i32ToChar(readParam(ctx, 0) as number);
-        consumeParams(ctx, 1);
-        return val;
+    if (remainingParams(ctx) === 0) {
+        throw new Error('expected at least one single i32 argument');
     }
+    val = i32ToChar(readParam(ctx, 0) as number);
+    consumeParams(ctx, 1);
+    return val;
+}
+
+function liftFlatCharMemory(ctx: TaskLiftContext): unknown {
+    DEBUG: debugLog('[_liftFlatChar()] args', { ctx });
+    let val;
 
     if (ctx.storageLen !== undefined && ctx.storageLen < 4) {
         throw new Error(`insufficient storage ([${ctx.storageLen}] bytes) for lift (char requires 4 bytes)`);
@@ -606,7 +698,7 @@ export function liftFlatRecord(meta: LiftRecordMeta): (ctx: TaskLiftContext) => 
                 fieldLen = ctx.storageLen;
             }
 
-            const scalar = scalarLiftValue(liftFn);
+            const scalar = scalarLiftValue(liftFn, ctx.useDirectParams);
             if (scalar) {
                 res[key] = scalar(ctx);
             } else {
@@ -805,7 +897,7 @@ export function liftFlatList(
             for (let i = 0; i < len; i++) {
                 const elemPtr = dataPtr + i * elemSize32;
                 ctx.storagePtr = elemPtr;
-                const scalar = scalarLiftValue(elemLiftFn);
+                const scalar = scalarLiftValue(elemLiftFn, ctx.useDirectParams);
                 if (scalar) {
                     values.push(scalar(ctx));
                 } else {
@@ -971,7 +1063,7 @@ export function liftFlatTuple(meta: LiftTupleMeta): (ctx: TaskLiftContext) => [u
                 elemLen = ctx.storageLen;
             }
 
-            const scalar = scalarLiftValue(liftFn);
+            const scalar = scalarLiftValue(liftFn, ctx.useDirectParams);
             if (scalar) {
                 val.push(scalar(ctx));
             } else {
@@ -1075,7 +1167,6 @@ export function liftFlatFlags(
             default:
                 throw new Error('invalid flags size');
         }
-
 
         if (_context.asBigInt) {
             val = BigInt(bits >>> 0);

@@ -1,3 +1,4 @@
+import { createBufferContext } from './call-context.js';
 import type {
     RuntimeMemory,
     ManagedBufferOptions,
@@ -130,7 +131,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                     if (this.#elemMeta.stringEncoding === undefined) {
                         throw new Error('string encoding unknown during read');
                     }
-                    let liftCtx: BufferElementContext = {
+                    let liftCtx: BufferElementContext = createBufferContext({
                         storagePtr: startPtr,
                         memory: this.#memory!,
                         componentIdx: this.#componentIdx,
@@ -141,7 +142,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                                   return { rep };
                               }
                             : undefined,
-                    };
+                    });
                     if (currentCount < 0) {
                         throw new Error('unexpectedly invalid count');
                     }
@@ -187,7 +188,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                         throw new Error('string encoding unknown during write');
                     }
 
-                    const lowerCtx: BufferElementContext = {
+                    const lowerCtx: BufferElementContext = createBufferContext({
                         memory: this.#memory!,
                         storagePtr: startPtr,
                         componentIdx: this.#componentIdx,
@@ -205,7 +206,7 @@ export function initializeManagedBufferClass(context: ResourceBufferContext): Ma
                                   return tableCreateOwn(context.indexSpaces, table, value.rep);
                               }
                             : undefined,
-                    };
+                    });
                     for (const v of values) {
                         lowerCtx.vals = [v];
                         this.#elemMeta.lowerFn!(lowerCtx);
