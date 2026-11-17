@@ -1,3 +1,4 @@
+import { onNextMacrotask } from './core/scheduling.js';
 import { isPromiseLike } from './core/promises.js';
 import type {
     ComponentModule,
@@ -39,6 +40,7 @@ export const initializeStoreTrap: ComponentModule['initializeStoreTrap'] = (onTr
 export const initializeStoreAsyncState: ComponentModule['initializeStoreAsyncState'] = () => ({
     deadlockCheck: null,
     pendingHostOperations: 0,
+    hostWakeupScheduled: false,
     idleWaiters: new Set(),
 });
 export const initializeComponentAsyncStates: ComponentModule['initializeComponentAsyncStates'] = () => new Map();
@@ -164,10 +166,19 @@ export function trackHostOperation<T>(
         if (storeAsyncState.pendingHostOperations < 0) {
             throw new Error('negative pending host operation count');
         }
-        for (const state of asyncState.values()) {
-            state.runTickLoop();
+        if (!storeAsyncState.hostWakeupScheduled) {
+            storeAsyncState.hostWakeupScheduled = true;
+            queueMicrotask(() => {
+                storeAsyncState.hostWakeupScheduled = false;
+                if (storeTrap.stopped) {
+                    return;
+                }
+                for (const state of asyncState.values()) {
+                    state.runTickLoop();
+                }
+                checkForDeadlock(context);
+            });
         }
-        checkForDeadlock(context);
     });
 
     // Forward disposal to the host's value, so it is notified if a guest
@@ -279,36 +290,6 @@ const TICK_RESUMED = 'resumed';
 const TICK_IDLE = 'idle';
 
 const IDLE_POLL_MS = 10;
-
-/**
- * Run `callback` on the next macrotask, after the current microtasks have drained, as
- * `setTimeout(callback, 0)` would, but without its minimum delay: Node.js clamps it to 1 ms and
- * browsers to 4 ms once timers nest, which a guest that yields often pays on every yield.
- * Returns a function that cancels the callback.
- */
-function onNextMacrotask(callback: () => void): () => void {
-    if (typeof setImmediate === 'function') {
-        const handle = setImmediate(callback);
-        return () => clearImmediate(handle);
-    }
-    if (typeof MessageChannel === 'function') {
-        const channel = new MessageChannel();
-        let cancelled = false;
-        channel.port1.onmessage = () => {
-            channel.port1.close();
-            if (!cancelled) {
-                callback();
-            }
-        };
-        channel.port2.postMessage(null);
-        return () => {
-            cancelled = true;
-            channel.port1.close();
-        };
-    }
-    const handle = setTimeout(callback, 0);
-    return () => clearTimeout(handle);
-}
 
 function afterDelay(callback: () => void, ms: number): () => void {
     const handle = setTimeout(callback, ms);

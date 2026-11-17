@@ -50,3 +50,28 @@ test.concurrent('ready reads avoid promises while the public API coalesces reads
     await expect(failing.readSource()).rejects.toBe(error);
     expect(() => failing.readSourceOrPromise!()).toThrow(error);
 });
+
+test.concurrent('large synchronous streams yield between bounded batches', async () => {
+    const { createPair, dropPair } = await import('./stream-helpers.js');
+    const { genStreamHostInjectFn } = await import('../src/intrinsics/stream/injection.js');
+    const s = createPair();
+    let calls = 0;
+    const readFn = Object.assign(() => ({ value: ++calls, done: false }), { sourceIsSync: true });
+    s.read.setHostInjectFn(
+        genStreamHostInjectFn(s.lower.injection, {
+            readFn,
+            hostWriteEnd: s.write,
+            readEnd: s.read,
+        }),
+    );
+    try {
+        const pending = s.read.read(256);
+        const observed = await new Promise<number>((resolve) => setImmediate(() => resolve(calls)));
+        expect(observed).toBeGreaterThan(0);
+        expect(observed).toBeLessThan(256);
+        const result = await pending;
+        expect(Array.from(result.value as ArrayLike<number>)).toEqual(Array.from({ length: 256 }, (_, i) => i + 1));
+    } finally {
+        dropPair(s.pair);
+    }
+});

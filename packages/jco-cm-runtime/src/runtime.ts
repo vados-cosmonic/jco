@@ -803,6 +803,8 @@ export interface ComponentAsyncStateConstructor {
     };
 }
 export interface ComponentStoreAsyncState {
+    /** Host completions in one microtask checkpoint share a scheduler wakeup. */
+    hostWakeupScheduled?: boolean;
     readonly idleWaiters: Set<() => void>;
     // Opaque host timer handle, kept portable between Node and browsers.
     deadlockCheck: unknown | null;
