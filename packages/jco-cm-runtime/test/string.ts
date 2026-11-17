@@ -275,3 +275,22 @@ test.concurrent('UTF8 allocation calls the supplied encoder with its own receive
     const memory = { buffer: new ArrayBuffer(8) };
     expect(string.utf8Encode(encoder, 'é', () => 0, memory)).toEqual({ ptr: 0, len: 2, codepoints: 1 });
 });
+
+test.concurrent.each(['', 'ascii', '😀𝄞', '\ud800x\udc00', 'a😀\ud800é'.repeat(256)])(
+    'UTF-16 encoding counts scalars without changing surrogate repair: %j',
+    async (value) => {
+        const memory = new WebAssembly.Memory({ initial: 1, maximum: 3 });
+        const context = string.initializeUtf16Encoding();
+        const realloc = () => {
+            memory.grow(1);
+            return 65536;
+        };
+        const encoded = string.utf16Encode(context, value, realloc, memory);
+        expect(encoded.codepoints).toBe([...value].length);
+        expect(new TextDecoder('utf-16le').decode(new Uint8Array(memory.buffer, encoded.ptr, encoded.len * 2))).toBe(
+            value.toWellFormed(),
+        );
+        const asynchronous = await string.utf16EncodeAsync(context, value, async () => realloc(), memory);
+        expect(asynchronous).toEqual(encoded);
+    },
+);

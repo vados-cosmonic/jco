@@ -45,6 +45,7 @@ export const initializeUtf16Encoding: StringModule['initializeUtf16Encoding'] = 
 function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, memory: StringMemory): StringAllocation {
     const len = str.length;
     const out = new Uint16Array(memory.buffer, ptr, len);
+    let codepoints = 0;
     const put = context.littleEndian
         ? (i: number, ch: number) => {
               out[i] = ch;
@@ -53,6 +54,7 @@ function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, mem
               out[i] = ((ch & 0xff) << 8) | (ch >>> 8);
           };
     for (let i = 0; i < len; i++) {
+        codepoints++;
         let ch = str.charCodeAt(i);
         if ((ch & 0xf800) === 0xd800) {
             if (ch < 0xdc00 && i + 1 < len && (str.charCodeAt(i + 1) & 0xfc00) === 0xdc00) {
@@ -64,7 +66,7 @@ function writeUtf16(context: Utf16EncodingContext, str: string, ptr: number, mem
         }
         put(i, ch);
     }
-    return { ptr, len, codepoints: [...str].length };
+    return { ptr, len, codepoints };
 }
 
 function writeUtf8(
