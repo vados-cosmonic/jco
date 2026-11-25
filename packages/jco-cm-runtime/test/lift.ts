@@ -34,6 +34,11 @@ test.concurrent('short UTF8 byte slices use the same Unicode and trap rules as t
         const padded = encoder.encode('[' + text + ']');
         expect(decode(padded.subarray(1, -1))).toBe(text);
     }
+    for (let offset = 0; offset < 32; offset++) {
+        const prefix = 'a'.repeat(offset);
+        expect(decode(encoder.encode(prefix + 'é'))).toBe(prefix + 'é');
+        expect(() => decode(Uint8Array.of(...encoder.encode(prefix), 0xc2))).toThrow('incomplete utf-8 byte sequence');
+    }
     expect(() => decode(Uint8Array.of(97, 0xff))).toThrow('invalid utf-8');
     expect(() => decode(Uint8Array.of(97, 0xc2))).toThrow('incomplete utf-8 byte sequence');
     const custom = { decode: () => 'provided' };

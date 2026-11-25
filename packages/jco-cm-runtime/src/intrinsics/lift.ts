@@ -37,14 +37,30 @@ import { errCtxGetLocalTable, errCtxGlobalRefCountAdd } from './error-context.js
 export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, input, shortAscii = false) => {
     // Short attribute names and IDs can be lifted without entering TextDecoder.
     // Only the generator using the bundled UTF-8 codec opts into this path.
-    if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
-        let text = '';
-        for (let i = 0; i < input.length; i++) {
-            const byte = input[i];
-            if (byte >= 0x80) break;
-            text += String.fromCharCode(byte);
-            if (i + 1 === input.length) return text;
+    ascii: if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
+        const length = input.length;
+        if (length === 2) {
+            const a = input[0],
+                b = input[1];
+            if ((a | b) >= 0x80) break ascii;
+            return String.fromCharCode(a, b);
         }
+        let text = '';
+        let i = 0;
+        for (; i + 4 <= length; i += 4) {
+            const a = input[i],
+                b = input[i + 1],
+                c = input[i + 2],
+                d = input[i + 3];
+            if ((a | b | c | d) >= 0x80) break ascii;
+            text += String.fromCharCode(a, b, c, d);
+        }
+        for (; i < length; i++) {
+            const byte = input[i];
+            if (byte >= 0x80) break ascii;
+            text += String.fromCharCode(byte);
+        }
+        return text;
     }
     try {
         return decoder.decode(input);
