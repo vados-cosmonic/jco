@@ -168,6 +168,16 @@ test('captured host resources preserve identity across handle reuse, explicit re
         collidingGuest._util.stop();
         expect(next.disposals).toBe(1);
 
+        const trapping = await instantiate(undefined, imports);
+        next = new Thing(9);
+        next.onDispose = () => {
+            throw new RangeError('host disposer');
+        };
+        const doomed = trapping.acquire();
+        expect(() => trapping.release(doomed)).toThrow(/out of bounds memory access/);
+        expect(() => trapping.acquire()).toThrow(WebAssembly.RuntimeError);
+        expect(next.disposals).toBe(1);
+
         // A disposer can stop a store while it still owns another alias.
         const other = await instantiate(undefined, imports);
         next = new Thing(4);
