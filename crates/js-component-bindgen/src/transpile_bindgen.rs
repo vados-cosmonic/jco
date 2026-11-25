@@ -1889,7 +1889,13 @@ impl<'a> Instantiator<'a, '_> {
             } else {
                 "{ value: 1 }"
             };
-            uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
+            if self.direct_sync_imports {
+                // Module-mode trampolines live outside the initialization generator.
+                uwriteln!(self.src.js, "let instanceFlags{i};");
+                uwriteln!(&mut instance_flag_defs, "instanceFlags{i} = {cell};");
+            } else {
+                uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
+            }
             uwriteln!(
                 &mut instance_flag_defs,
                 "{instance_flags_map}.set({i}, instanceFlags{i});",
