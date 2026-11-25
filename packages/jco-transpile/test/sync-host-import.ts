@@ -168,6 +168,16 @@ test('captured host resources preserve identity across handle reuse, explicit re
         collidingGuest._util.stop();
         expect(next.disposals).toBe(1);
 
+        // An out-of-range u32 must not alias a live handle through a wrapping index.
+        const invalidBorrow = await instantiate(undefined, imports);
+        const live = invalidBorrow.acquire();
+        expect(() => invalidBorrow.read(live + 2 ** 31)).toThrow(WebAssembly.RuntimeError);
+
+        const freedBorrow = await instantiate(undefined, imports);
+        const freed = freedBorrow.acquire();
+        freedBorrow.release(freed);
+        expect(() => freedBorrow.read(freed)).toThrow(WebAssembly.RuntimeError);
+
         const trapping = await instantiate(undefined, imports);
         next = new Thing(9);
         next.onDispose = () => {
