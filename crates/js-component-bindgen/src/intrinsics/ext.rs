@@ -119,6 +119,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     InitializeUtf16Decoder,
     /// The UTF-8 encoder returned by `initializeUtf8Encoder`.
     InitializeUtf8Encoder,
+    /// Per-instance UTF-8 staging for synchronous host results.
+    SyncUtf8Encoding,
     /// The UTF-16 encoding state returned by `initializeUtf16Encoding`.
     InitializeUtf16Encoding,
     /// The Web IDL proxy cache returned by `initializeWebIdlProxyCache`.
@@ -158,6 +160,7 @@ impl RuntimeContextIntrinsic {
             "_jcoInitializeUtf8Decoder",
             "_jcoInitializeUtf16Decoder",
             "_jcoInitializeUtf8Encoder",
+            "_jcoSyncUtf8Context",
             "_jcoInitializeUtf16Encoding",
             "_jcoUtf16EncodingContext",
             "_jcoWebIdlProxyCacheContext",
@@ -208,6 +211,7 @@ impl RuntimeContextIntrinsic {
             Self::InitializeUtf8Decoder => "TEXT_DECODER_UTF8",
             Self::InitializeUtf16Decoder => "utf16Decoder",
             Self::InitializeUtf8Encoder => "TEXT_ENCODER_UTF8",
+            Self::SyncUtf8Encoding => "_jcoSyncUtf8Context",
             Self::InitializeUtf16Encoding => "_jcoUtf16EncodingContext",
             Self::InitializeWebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
         }
@@ -312,6 +316,7 @@ impl RuntimeContextIntrinsic {
 
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
+            Self::SyncUtf8Encoding => &[Self::InitializeUtf8Encoder],
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
@@ -364,6 +369,10 @@ impl RuntimeContextIntrinsic {
         let strict = args.transpile_opts.strict;
         let local = self.local_name();
         match self {
+            Self::SyncUtf8Encoding => uwriteln!(
+                output,
+                "const {local} = {{ encoder: TEXT_ENCODER_UTF8, bytes: undefined, busy: false }};"
+            ),
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),

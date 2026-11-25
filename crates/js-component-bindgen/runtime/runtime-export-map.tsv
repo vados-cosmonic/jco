@@ -309,6 +309,7 @@ intrinsics/stream:streamNewFromLift	runtimeExport307
 intrinsics/stream:streamRead	runtimeExport308
 intrinsics/stream:streamTransfer	runtimeExport309
 intrinsics/stream:streamWrite	runtimeExport310
-intrinsics/resource-entry:tableRep	runtimeExport311
-intrinsics/resource-captures:IndexedResourceCaptures	runtimeExport312
-intrinsics/async-task/lower-import-backwards-compat:lowerSyncImport	runtimeExport313
+intrinsics/sync-utf8:encodeSyncUtf8	runtimeExport311
+intrinsics/resource-entry:tableRep	runtimeExport312
+intrinsics/resource-captures:IndexedResourceCaptures	runtimeExport313
+intrinsics/async-task/lower-import-backwards-compat:lowerSyncImport	runtimeExport314

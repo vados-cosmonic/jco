@@ -174,6 +174,7 @@ async function main() {
     }
     // Checked synchronous leaves alone use this layout. External providers only
     // implement the public resource contract.
+    addExport('intrinsics/sync-utf8', 'encodeSyncUtf8', 'runtime/intrinsics/sync-utf8.js');
     addExport('intrinsics/resource-entry', 'tableRep', 'runtime/intrinsics/resource-entry.js');
     addExport('intrinsics/resource-captures', 'IndexedResourceCaptures', 'runtime/intrinsics/resource-captures.js');
     addExport(

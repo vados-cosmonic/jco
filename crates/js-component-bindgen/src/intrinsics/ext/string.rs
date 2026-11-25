@@ -30,6 +30,11 @@ pub(crate) fn import(intrinsic: StringIntrinsic) -> RuntimeImport {
             Some(RuntimeContextIntrinsic::InitializeUtf16Encoding),
             RuntimeImportKind::Call,
         ),
+        StringIntrinsic::EncodeSyncUtf8 => (
+            "encodeSyncUtf8",
+            Some(RuntimeContextIntrinsic::SyncUtf8Encoding),
+            RuntimeImportKind::Call,
+        ),
         StringIntrinsic::Utf8Encode => (
             "utf8Encode",
             Some(RuntimeContextIntrinsic::InitializeUtf8Encoder),
@@ -57,7 +62,11 @@ pub(crate) fn import(intrinsic: StringIntrinsic) -> RuntimeImport {
         StringIntrinsic::ValidateHostChar => ("validateHostChar", None, RuntimeImportKind::Call),
     };
     RuntimeImport {
-        suffix: "intrinsics/string",
+        suffix: if matches!(intrinsic, StringIntrinsic::EncodeSyncUtf8) {
+            "intrinsics/sync-utf8"
+        } else {
+            "intrinsics/string"
+        },
         export,
         context,
         kind,

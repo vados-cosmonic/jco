@@ -1952,6 +1952,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             "await ",
                             Intrinsic::String(StringIntrinsic::Utf8EncodeAsync),
                         ),
+                        (StringEncoding::UTF8, false) if self.direct_sync_import => {
+                            ("", Intrinsic::String(StringIntrinsic::EncodeSyncUtf8))
+                        }
                         (StringEncoding::UTF8, false) => {
                             ("", Intrinsic::String(StringIntrinsic::Utf8Encode))
                         }
@@ -1963,16 +1966,8 @@ impl Bindgen for FunctionBindgen<'_> {
                 let str = String::from("cabi_realloc");
                 let realloc = self.realloc.unwrap_or(&str);
                 let s = &operands[0];
-                let short_ascii =
-                    if self.direct_sync_import && self.encoding == StringEncoding::UTF8 {
-                        ", true"
-                    } else {
-                        ""
-                    };
-                let encode = self.intrinsic_call(
-                    encode_intrinsic,
-                    &format!("{s}, {realloc}, {memory}{short_ascii}"),
-                );
+                let encode =
+                    self.intrinsic_call(encode_intrinsic, &format!("{s}, {realloc}, {memory}"));
                 uwriteln!(
                     self.src,
                     r#"
