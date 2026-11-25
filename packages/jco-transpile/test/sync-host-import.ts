@@ -54,6 +54,41 @@ test('sync imports preserve initialization results, host errors and instance sto
     }
 });
 
+test('a lowered import called outside Wasm gets its own task', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'jco-sync-detached-'));
+    try {
+        const { files } = await transpileBytes(leaf, { name: 'leaf', instantiation: 'async' });
+        await writeFiles(files, { baseDir: dir });
+        const { instantiate } = await import(pathToFileURL(join(dir, 'leaf.js')).href);
+        let lowered!: (value: number) => number;
+        const capture = (module: WebAssembly.Module, imports: WebAssembly.Imports) => {
+            lowered = imports[''].host as typeof lowered;
+            return new WebAssembly.Instance(module, imports);
+        };
+        const hostError = new Error('outside Wasm');
+        const guest = await instantiate(
+            undefined,
+            {
+                host: {
+                    default(n: number) {
+                        if (!n) throw hostError;
+                        return n + 1;
+                    },
+                },
+            },
+            capture,
+        );
+        expect(lowered(2)).toBe(3);
+        expect(() => lowered(0)).toThrow(hostError);
+        await guest._util.whenIdle();
+        expect(guest.run(4)).toBe(13);
+        guest._util.stop();
+        expect(() => lowered(2)).toThrow(/stopped/);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
+
 test('module-mode imports can read instance flags during and after initialization', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'jco-sync-module-'));
     try {
