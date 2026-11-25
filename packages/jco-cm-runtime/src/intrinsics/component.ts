@@ -229,6 +229,17 @@ export function trackHostOperation<T>(
         return result;
     }
 
+    return trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose);
+}
+
+function trackHostPromise<T>(
+    context: ComponentHostOperationContext,
+    result: T,
+    storeTrap: ComponentHostOperationContext['storeTrap'],
+    storeAsyncState: ComponentHostOperationContext['storeAsyncState'],
+    asyncState: ComponentHostOperationContext['asyncState'],
+    symbolDispose: ComponentHostOperationContext['symbolDispose'],
+): Promise<Awaited<T>> {
     storeAsyncState.pendingHostOperations++;
     let rejectStopped!: (error: unknown) => void;
     const stopped = new Promise<never>((_, reject) => {
