@@ -1889,13 +1889,7 @@ impl<'a> Instantiator<'a, '_> {
             } else {
                 "{ value: 1 }"
             };
-            if self.direct_sync_imports {
-                // Module-mode trampolines live outside the initialization generator.
-                uwriteln!(self.src.js, "let instanceFlags{i};");
-                uwriteln!(&mut instance_flag_defs, "instanceFlags{i} = {cell};");
-            } else {
-                uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
-            }
+            uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
             uwriteln!(
                 &mut instance_flag_defs,
                 "{instance_flags_map}.set({i}, instanceFlags{i});",
@@ -3172,7 +3166,9 @@ impl<'a> Instantiator<'a, '_> {
                     let tasks = self.bindgen.intrinsic(Intrinsic::AsyncTask(
                         AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
                     ));
-                    let error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let check = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::CheckMayLeave,
+                    ));
                     let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
                         ComponentIntrinsic::RecordTrap,
                     ));
@@ -3196,8 +3192,7 @@ impl<'a> Instantiator<'a, '_> {
                         const initTrampoline{i} = {lower};
                         function trampoline{i}({params}) {{
                             try {{
-                                if (instanceFlags{component_idx}.value !== 1)
-                                    throw new {error}('cannot leave component instance');
+                                {check}{component_idx});
                                 if ({tasks}.get({component_idx})?.length)
                                     return _trampoline{i}({params});
                                 return initTrampoline{i}({params});
