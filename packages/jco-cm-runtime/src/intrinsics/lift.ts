@@ -34,7 +34,18 @@ import { getOrCreateAsyncState } from './component.js';
 import { errCtxGetLocalTable, errCtxGlobalRefCountAdd } from './error-context.js';
 
 /** Decode UTF-8 while distinguishing malformed bytes from truncated sequences. */
-export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, input) => {
+export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, input, shortAscii = false) => {
+    // Short attribute names and IDs can be lifted without entering TextDecoder.
+    // Only the generator using the bundled UTF-8 codec opts into this path.
+    if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
+        let text = '';
+        for (let i = 0; i < input.length; i++) {
+            const byte = input[i];
+            if (byte >= 0x80) break;
+            text += String.fromCharCode(byte);
+            if (i + 1 === input.length) return text;
+        }
+    }
     try {
         return decoder.decode(input);
     } catch (error) {

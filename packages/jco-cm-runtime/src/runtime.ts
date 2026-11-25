@@ -2054,6 +2054,8 @@ export interface LiftModule {
         RuntimeError: RuntimeErrorConstructor,
         decoder: StringDecoder,
         input: ArrayBufferLike | ArrayBufferView,
+        /** Lift short ASCII byte slices directly when using the standard stateless UTF-8 codec. */
+        shortAscii?: boolean,
     ) => string;
     readonly initializeLiftVariant: () => LiftVariantContext;
     readonly liftFlatBool: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];
