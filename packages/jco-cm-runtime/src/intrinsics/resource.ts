@@ -1,25 +1,19 @@
+import { checkedEntryValue, RESOURCE_TABLE_FLAG } from './resource-entry.js';
 import { readTaskRegister, withCurrentTaskMeta } from './task-context.js';
 import { getCurrentTask, createNewCurrentImplicitThread } from './async-task/task-operations.js';
 import type { ResourceModule, ResourceHandleTables, ResourceTable } from '../runtime.js';
 
 // Bit 30 of a scope marks a freed entry. An owned entry stores its u32 rep plus 2 ** 32.
 // Handle `h` lives at `[h * 2, h * 2 + 1]`: `h << 1` would wrap at 2 ** 31 and alias a live entry.
-const RESOURCE_TABLE_FLAG = 1 << 30;
 const RESOURCE_TABLE_OWN = 2 ** 32;
 // Canonical ABI `Table.MAX_LENGTH`: `Table.add` traps rather than use a higher index.
 const MAX_HANDLE_INDEX = 2 ** 28 - 1;
 
 export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => {
     const scope = table[handle * 2];
-    const value = table[handle * 2 + 1];
+    const value = checkedEntryValue(context, table, handle, scope);
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
-    // A freed or never allocated index has no entry in this table: its index may
-    // belong to another handle kind of the instance, and `value` is undefined
-    // past the end of the table.
-    if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
-        throw new context.RuntimeError(`unknown handle index ${handle >>> 0}`);
-    }
     return { rep, scope, own };
 };
 
@@ -82,12 +76,9 @@ export const tableEnsureBorrowDrop: ResourceModule['tableEnsureBorrowDrop'] = (t
 };
 export const tableRemove: ResourceModule['tableRemove'] = (context, table, handle) => {
     const scope = table[handle * 2];
-    const value = table[handle * 2 + 1];
+    const value = checkedEntryValue(context, table, handle, scope);
     const own = value >= RESOURCE_TABLE_OWN;
     const rep = own ? value - RESOURCE_TABLE_OWN : value;
-    if (value === undefined || (scope & RESOURCE_TABLE_FLAG) !== 0) {
-        throw new context.RuntimeError('unknown handle index ' + (handle >>> 0));
-    }
     if (own && scope !== 0) {
         throw new context.RuntimeError('cannot remove owned resource while borrowed');
     }
