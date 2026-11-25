@@ -294,3 +294,31 @@ test('a synchronous string result survives guest memory growth at its exact UTF-
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('a synchronous realloc cannot call an imported host function', async () => {
+    const component = new TextEncoder().encode(`(component
+        (import "host" (func $host))
+        (core func $host (canon lower (func $host)))
+        (core module $core
+            (import "" "host" (func $host))
+            (memory (export "memory") 1)
+            (func (export "alloc") (param i32 i32 i32 i32) (result i32)
+                (call $host) (i32.const 64))
+            (func (export "consume") (param i32 i32)))
+        (core instance $guest (instantiate $core (with "" (instance (export "host" (func $host))))))
+        (func (export "consume") (param "text" string)
+            (canon lift (core func $guest "consume") (memory (core memory $guest "memory"))
+                        (realloc (core func $guest "alloc")))))`);
+    const dir = await mkdtemp(join(tmpdir(), 'jco-sync-realloc-'));
+    try {
+        const { files } = await transpileBytes(component, { name: 'guard', instantiation: 'async' });
+        await writeFiles(files, { baseDir: dir });
+        const { instantiate } = await import(pathToFileURL(join(dir, 'guard.js')).href);
+        let calls = 0;
+        const guest = await instantiate(undefined, { host: { default: () => calls++ } });
+        expect(() => guest.consume('hello')).toThrow(/cannot leave component instance/);
+        expect(calls).toBe(0);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
