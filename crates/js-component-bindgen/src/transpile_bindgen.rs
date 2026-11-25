@@ -1888,6 +1888,14 @@ impl<'a> Instantiator<'a, '_> {
             .insert(resource_table_idx, true);
     }
 
+    fn instance_flags_name(&mut self, index: u32) -> String {
+        self.bindgen
+            .local_names
+            .get_or_create(("instance flags", index), &format!("instanceFlags{index}"))
+            .0
+            .to_owned()
+    }
+
     fn instance_flags(&mut self) {
         let used_instance_flags = self.used_instance_flags.borrow().clone();
         if used_instance_flags.is_empty() {
@@ -1907,13 +1915,28 @@ impl<'a> Instantiator<'a, '_> {
             } else {
                 "{ value: 1 }"
             };
-            uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
+            let flags = self.instance_flags_name(i);
+            uwriteln!(&mut instance_flag_defs, "const {flags} = {cell};");
             uwriteln!(
                 &mut instance_flag_defs,
-                "{instance_flags_map}.set({i}, instanceFlags{i});",
+                "{instance_flags_map}.set({i}, {flags});",
             );
+            if let Some(tasks) = self.bindgen.local_names.try_get(("sync import tasks", i)) {
+                // The runtime pushes and pops the same stack for this instance.
+                let tasks = tasks.to_owned();
+                let task_map = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+                ));
+                uwriteln!(&mut instance_flag_defs, "const {tasks} = [];");
+                uwriteln!(&mut instance_flag_defs, "{task_map}.set({i}, {tasks});");
+            }
         }
-        self.src.js_init.prepend_str(&instance_flag_defs);
+        if self.direct_sync_imports {
+            // Both module and factory trampolines close over these cells.
+            self.src.js.prepend_str(&instance_flag_defs);
+        } else {
+            self.src.js_init.prepend_str(&instance_flag_defs);
+        }
     }
 
     /// Return the component instance whose canonical ABI `may_leave` flag a
@@ -3181,12 +3204,17 @@ impl<'a> Instantiator<'a, '_> {
                         Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImportBackwardsCompat),
                         &args,
                     );
-                    let tasks = self.bindgen.intrinsic(Intrinsic::AsyncTask(
-                        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
-                    ));
-                    let check = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
-                        ComponentIntrinsic::CheckMayLeave,
-                    ));
+                    let tasks = self
+                        .bindgen
+                        .local_names
+                        .get_or_create(
+                            ("sync import tasks", component_idx),
+                            &format!("syncImportTasks{component_idx}"),
+                        )
+                        .0
+                        .to_owned();
+                    let flags = self.instance_flags_name(component_idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
                     let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
                         ComponentIntrinsic::RecordTrap,
                     ));
@@ -3210,8 +3238,9 @@ impl<'a> Instantiator<'a, '_> {
                         const initTrampoline{i} = {lower};
                         function trampoline{i}({params}) {{
                             try {{
-                                {check}{component_idx});
-                                if ({tasks}.get({component_idx})?.length)
+                                if ({flags}.value !== 1)
+                                    throw new {runtime_error}('cannot leave component instance');
+                                if ({tasks}.length)
                                     return _trampoline{i}({params});
                                 return initTrampoline{i}({params});
                             }} catch (err) {{
@@ -6156,7 +6185,7 @@ impl<'a> Instantiator<'a, '_> {
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
                 self.used_instance_flags.borrow_mut().insert(*i, true);
-                format!("instanceFlags{}", i.as_u32())
+                self.instance_flags_name(i.as_u32())
             }
             CoreDef::UnsafeIntrinsic(ui) => {
                 use wasmtime_environ::component::UnsafeIntrinsic;

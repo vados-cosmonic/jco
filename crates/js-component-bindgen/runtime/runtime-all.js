@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 0803ca29854a362d2185118efbebcf49360547e1
+// generated from commit ff438a5659ea34daeecf16790dd379d85760cdd1
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -7286,14 +7286,26 @@ function removeFutureEndFromTable(_context, args) {
 //#region runtime/intrinsics/lift.js
 /** Decode UTF-8 while distinguishing malformed bytes from truncated sequences. */
 const decodeUtf8 = (RuntimeError, decoder, input, shortAscii = false) => {
-	if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
-		let text = "";
-		for (let i = 0; i < input.length; i++) {
-			const byte = input[i];
-			if (byte >= 128) break;
-			text += String.fromCharCode(byte);
-			if (i + 1 === input.length) return text;
+	ascii: if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
+		const length = input.length;
+		if (length === 2) {
+			const a = input[0], b = input[1];
+			if ((a | b) >= 128) break ascii;
+			return String.fromCharCode(a, b);
 		}
+		let text = "";
+		let i = 0;
+		for (; i + 4 <= length; i += 4) {
+			const a = input[i], b = input[i + 1], c = input[i + 2], d = input[i + 3];
+			if ((a | b | c | d) >= 128) break ascii;
+			text += String.fromCharCode(a, b, c, d);
+		}
+		for (; i < length; i++) {
+			const byte = input[i];
+			if (byte >= 128) break ascii;
+			text += String.fromCharCode(byte);
+		}
+		return text;
 	}
 	try {
 		return decoder.decode(input);

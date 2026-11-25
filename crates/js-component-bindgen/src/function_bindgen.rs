@@ -2820,10 +2820,20 @@ impl Bindgen for FunctionBindgen<'_> {
                 // import returning a WIT result whose catch handler wraps errors.
                 // Do not lower that result or return to guest code afterwards.
                 if task_managed || self.direct_sync_import {
-                    uwriteln!(
-                        self.src,
-                        "{get_component_state}{component_idx_expr}).throwIfInterrupted();"
-                    );
+                    let interrupted =
+                        format!("{get_component_state}{component_idx_expr}).throwIfInterrupted();");
+                    if self.direct_sync_import {
+                        // markTrapped records the trap on the store before calling observers.
+                        // Resolve the interrupted component only on the exceptional path.
+                        let store = self
+                            .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                        uwriteln!(
+                            self.src,
+                            "if ({store}.stopped || {store}.error !== null) {{ {interrupted} }}"
+                        );
+                    } else {
+                        uwriteln!(self.src, "{interrupted}");
+                    }
                 }
 
                 // TODO: if it was an async call, we may not be able to clear the borrows yet.
