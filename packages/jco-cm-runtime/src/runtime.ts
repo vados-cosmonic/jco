@@ -687,8 +687,10 @@ export interface ComponentTask {
     readonly isRejected: () => boolean;
     readonly isCancelled: () => boolean;
     readonly needsExclusiveLock: () => boolean;
-    readonly endFirstSlice: () => void;
-    readonly endFirstSliceOnBlock: () => void;
+    readonly endInitialInvocation: () => void;
+    /** @deprecated Use `endInitialInvocation`; kept for bindings from jco-transpile 0.24.0 and earlier. */
+    readonly endFirstSlice?: () => void;
+    readonly endInitialInvocationOnBlock: () => void;
     readonly notifyProgress: () => void;
     readonly setErrored: (error: unknown) => void;
     readonly reject: (error: unknown) => void;

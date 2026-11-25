@@ -1411,8 +1411,8 @@ impl AsyncStreamIntrinsic {
                                 const transferred = packedResult >> 4;
 
                                 // The copy event is published from inside the guest's current
-                                // callback slice. Do not expose lifted values to host code until
-                                // that slice has returned and released the instance lock: the
+                                // callback turn. Do not expose lifted values to host code until
+                                // that turn has returned and released the instance lock: the
                                 // consumer may immediately make a synchronous call on a lifted
                                 // resource, which cannot itself wait for a contended lock.
                                 const componentIdx = this.getWaitable().componentIdx();
@@ -2320,10 +2320,9 @@ impl AsyncStreamIntrinsic {
                         if (streamEnd.getWaitable().hasSyncWaiter()) {{
                             throw new {runtime_error_class}({CANNOT_CANCEL_SYNC_WAITED_COPY:?});
                         }}
-                        // Canonical ABI `cancel_copy` also traps on a synchronous cancel of an end in
-                        // a waitable set. That check is held back: wit-bindgen releases before 0.59, which
-                        // built most of the prebuilt p3 fixtures, cancel their inter-task wakeup stream read
-                        // synchronously before removing it from the task's waitable set.
+                        if (!isAsync && streamEnd.isInSet()) {{
+                            throw new {runtime_error_class}({WAITABLE_SYNC_IN_SET:?});
+                        }}
 
                         streamEnd.setCopyState({stream_end_class}.CopyState.CANCELLING_COPY);
 
@@ -2628,7 +2627,7 @@ impl AsyncStreamIntrinsic {
                               const writeValues = async (writeValues, dropAfterCopy = false) => {{
                                   // The previous injected write's completion event is consumed lazily,
                                   // and consuming it is what returns the write end to idle. A guest
-                                  // that issues reads back to back within one slice can start the next
+                                  // that issues reads back to back within one turn can start the next
                                   // injected write before that happens, which would fail as a
                                   // concurrent operation and leave the read with no completion.
                                   resetWriteEndToIdleFn();

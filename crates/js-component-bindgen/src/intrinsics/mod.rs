@@ -1497,7 +1497,7 @@ impl Intrinsic {
                               // A host import that returns a promise blocks the calling thread.
                               const state = {get_or_create_async_state_fn}componentIdx);
                               if (callsHost && started !== null && typeof started === 'object' && typeof started.then === 'function') {{
-                                  savedThread?.task.endFirstSliceOnBlock();
+                                  savedThread?.task.endInitialInvocationOnBlock();
                               }}
                               // A result that is not a promise still suspends, as JSPI scheduling expects.
                               const settled = (async () => started)();
@@ -2082,7 +2082,7 @@ mod tests {
     }
 
     #[test]
-    fn subtask_cancel_drives_only_the_target_callback_slice() {
+    fn subtask_cancel_drives_only_the_target_callback_turn() {
         let cancel = render_intrinsic_body(Intrinsic::AsyncTask(AsyncTaskIntrinsic::SubtaskCancel));
         assert!(cancel.contains("childTask?.hasCallback()"));
         assert!(cancel.contains("childState.suspendedTaskCancellable(childTask.id())"));
@@ -2832,8 +2832,8 @@ mod tests {
             Intrinsic::AsyncFuture(AsyncFutureIntrinsic::FutureCancelWrite),
         ] {
             let source = render_intrinsic_body(intrinsic);
-            // (held back: older wit-bindgen guests cancel synchronously while in a set)
-            assert!(!source.contains(in_set_trap), "{intrinsic:?}");
+            assert!(source.contains("if (!isAsync && "), "{intrinsic:?}");
+            assert!(source.contains(in_set_trap), "{intrinsic:?}");
             assert!(source.contains(sync_waiter_trap), "{intrinsic:?}");
             // The synchronous wait is visible to `waitable.join` until it ends.
             assert!(

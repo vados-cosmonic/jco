@@ -543,7 +543,7 @@ impl HostIntrinsic {
                         }};
 
                         const handleCalleeError = (err) => {{
-                            preparedTask.endFirstSlice();
+                            preparedTask.endInitialInvocation();
                             {debug_log_fn}("[{async_start_call_fn}()] initial subtask callee run failed", err);
                             {report_trap_fn}(err);
                             // NOTE: a good place to reject the parent task, if rejection API is enabled
@@ -562,7 +562,7 @@ impl HostIntrinsic {
                                 }}
                             }}
 
-                            // Release the enter()-acquired per-slice hold: the driver
+                            // Release the enter()-acquired per-turn hold: the driver
                             // loop that would normally pair it never starts.
                             if (preparedTask.needsExclusiveLock()) {{
                                 calleeComponentState.exclusiveRelease(preparedTask.id());
@@ -593,7 +593,7 @@ impl HostIntrinsic {
                                 //
                                 // Cancellation can resolve the task while the
                                 // synchronous callee is still unwinding. Its
-                                // eventual return only ends the slice; it must
+                                // eventual return only ends the turn; it must
                                 // not publish a second resolution.
                                 if (!calleeIsAsync && !preparedTask.isResolved()) {{
                                     preparedTask.resolve([callbackResult]);
@@ -639,7 +639,7 @@ impl HostIntrinsic {
                             // suspend mid-way, e.g. on a nested blocking import). Hold the blocking
                             // marker for the whole execution so any async subtask it starts -- even
                             // one dispatched after a suspension -- is recognised as originating from
-                            // a blocking function and enters in-slice rather than being deferred.
+                            // a blocking function and enters in the same turn rather than being deferred.
                             if (!calleeIsAsync) {{ {blocking_call_depth}.value++; }}
                             try {{
                                 let jspiCallee;
@@ -656,7 +656,7 @@ impl HostIntrinsic {
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => jspiCallee.apply(null, startRes),
                                 }});
-                                preparedTask.endFirstSlice();
+                                preparedTask.endInitialInvocation();
                             }} catch(err) {{
                                 handleCalleeError(err);
                                 return;
@@ -682,7 +682,7 @@ impl HostIntrinsic {
                                     componentIdx: preparedTask.componentIdx(),
                                     fn: () => callee.apply(null, startRes),
                                 }});
-                                preparedTask.endFirstSlice();
+                                preparedTask.endInitialInvocation();
                             }} catch (err) {{
                                 handleCalleeError(err);
                                 return;
@@ -695,7 +695,7 @@ impl HostIntrinsic {
                             }});
                         }};
 
-                        // Enter eagerly when backpressure and the per-component slice lock permit
+                        // Enter eagerly when backpressure and the per-component turn lock permit
                         // it. `tryEnter()` returns null for real contention, preserving an
                         // observable STARTING state only when the callee genuinely cannot start.
                         // A successful async entry runs through its first suspension point before
@@ -713,7 +713,15 @@ impl HostIntrinsic {
 
                             // Directly returned STARTED is not also delivered as an event, so
                             // install the progress handler only after the state transition.
-                            startSubtask();
+                            // A trap while lowering the arguments (in the callee's `realloc`, say)
+                            // fails a task that has entered: it releases what entry took, like a
+                            // trap in the callee's initial invocation, and traps the caller.
+                            try {{
+                                startSubtask();
+                            }} catch (err) {{
+                                handleCalleeError(err);
+                                throw err;
+                            }}
                             registerSubtaskProgress();
 
                             if (callee._jcoMaySuspend === false) {{
@@ -734,7 +742,7 @@ impl HostIntrinsic {
                                 return started;
                             }});
 
-                            // Entry is blocked by backpressure or an in-flight component slice,
+                            // Entry is blocked by backpressure or an in-flight component turn,
                             // so resume the call once the task is allowed to enter.
                             // Nothing catches an exception thrown from a timer callback:
                             // it would take down the whole process rather than the call.
@@ -752,7 +760,7 @@ impl HostIntrinsic {
                                         calleeComponentIdx,
                                     }});
 
-                                    // Entry queues FIFO when another slice of the callee
+                                    // Entry queues FIFO when another turn of the callee
                                     // component is already in flight.
                                     const started = await enterPromise;
                                     if (started) {{ calleeComponentState.removePendingTaskStart(); }}
@@ -912,7 +920,7 @@ impl HostIntrinsic {
                         }}
 
                         // The caller's wasm stack stays suspended across the whole blocking
-                        // call; sibling slices of the caller's component may run meanwhile
+                        // call; sibling turns of the caller's component may run meanwhile
                         // and move its current-task register. Capture the entry at call
                         // time and restore it before the caller resumes (the same
                         // discipline as the suspending-import wrapper).
@@ -968,40 +976,11 @@ impl HostIntrinsic {
                             }}
                         }});
 
-                        const started = await preparedTask.enter();
-                        if (!started) {{
-                            if (preparedTask.isCancelled()) {{ return undefined; }}
-                            throw new Error('callee task failed to start during sync start call');
-                        }}
-
-                        // Canonical ABI `canon_lift`: the arguments are lowered once the task
-                        // has entered and its implicit thread has an index. Lowering them may
-                        // run the callee's code, under the callee's register.
-                        const threadID = preparedTask.defaultThread().id();
-                        let startRes = {with_global_current_thread_meta_fn}{{
-                            taskID: preparedTask.id(),
-                            threadID,
-                            componentIdx: preparedTask.componentIdx(),
-                            fn: () => subtask.onStart({{ startFnParams: params }}),
-                        }});
-                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
-                        if (startRes.length !== paramCount) {{
-                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {sync_start_call_fn} invocation expected [${{ paramCount }}]`);
-                        }}
-
-                        let jspiCallee;
-                        if (callee._cachedPromising) {{
-                            jspiCallee = callee._cachedPromising;
-                        }} else {{
-                            callee._cachedPromising = WebAssembly.promising(callee);
-                            jspiCallee = callee._cachedPromising;
-                        }}
-
                         const failCalleeLifecycle = (err) => {{
                             {debug_log_fn}('[{sync_start_call_fn}()] callee lifecycle failed', {{ err }});
-                            preparedTask.endFirstSlice();
+                            preparedTask.endInitialInvocation();
 
-                            // The initial slice owns component entry until it either hands
+                            // The initial invocation owns component entry until it either hands
                             // control to the callback driver or fails. A failure has no driver
                             // exit with which to pair this hold.
                             if (preparedTask.needsExclusiveLock()) {{
@@ -1026,6 +1005,43 @@ impl HostIntrinsic {
                             throw err;
                         }};
 
+                        const started = await preparedTask.enter();
+                        if (!started) {{
+                            if (preparedTask.isCancelled()) {{ return undefined; }}
+                            throw new Error('callee task failed to start during sync start call');
+                        }}
+
+                        // Canonical ABI `canon_lift`: the arguments are lowered once the task
+                        // has entered and its implicit thread has an index. Lowering them may
+                        // run the callee's code, under the callee's register.
+                        const threadID = preparedTask.defaultThread().id();
+                        // A trap while lowering them (in the callee's `realloc`, say) fails a
+                        // task that has entered: it releases what entry took, like a trap in
+                        // the callee's initial invocation.
+                        let startRes;
+                        try {{
+                            startRes = {with_global_current_thread_meta_fn}{{
+                                taskID: preparedTask.id(),
+                                threadID,
+                                componentIdx: preparedTask.componentIdx(),
+                                fn: () => subtask.onStart({{ startFnParams: params }}),
+                            }});
+                        }} catch (err) {{
+                            failCalleeLifecycle(err);
+                        }}
+                        startRes = startRes === undefined ? [] : Array.isArray(startRes) ? startRes : [startRes];
+                        if (startRes.length !== paramCount) {{
+                            throw new Error(`unexpected callee param count [${{ startRes.length }}] after start fn, {sync_start_call_fn} invocation expected [${{ paramCount }}]`);
+                        }}
+
+                        let jspiCallee;
+                        if (callee._cachedPromising) {{
+                            jspiCallee = callee._cachedPromising;
+                        }} else {{
+                            callee._cachedPromising = WebAssembly.promising(callee);
+                            jspiCallee = callee._cachedPromising;
+                        }}
+
                         // Invocation begins immediately and runs through its first JSPI
                         // suspension while the callee owns component entry. Keep driving that
                         // invocation and its callback/exit protocol in the background after
@@ -1041,7 +1057,7 @@ impl HostIntrinsic {
                                         return jspiCallee.apply(null, startRes);
                                     }}
                                 }});
-                                preparedTask.endFirstSlice();
+                                preparedTask.endInitialInvocation();
 
                                 if (!callbackFn) {{
                                     // A sync lift returns its value here. A stackful async lift

@@ -2399,7 +2399,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       }} catch (err) {{
                           {call_err_cleanup}
                       }}
-                      task.endFirstSlice();
+                      task.endInitialInvocation();
                     "#,
                     );
                 } else if task_managed {
@@ -2417,7 +2417,7 @@ impl Bindgen for FunctionBindgen<'_> {
                       }} catch (err) {{
                           {call_err_cleanup}
                       }}
-                      task.endFirstSlice();
+                      task.endInitialInvocation();
                     "#,
                     );
                 } else {
