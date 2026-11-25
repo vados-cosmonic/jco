@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 4b0d193dffae08c43374320a9b40bee23d96d0d8
+// generated from commit 5ac4dfd55c18cd537b00cc5ae214266d8cd2f265
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -2202,8 +2202,16 @@ function writeUtf16(context, str, ptr, memory) {
 		codepoints
 	};
 }
-function writeUtf8(encoder, s, ptr, len, codepoints, memory) {
+function writeUtf8(encoder, s, ptr, len, codepoints, memory, shortAscii = false) {
 	const out = new Uint8Array(memory.buffer, ptr, len);
+	if (shortAscii && len <= 32 && len === s.length) {
+		for (let i = 0; i < len; i++) out[i] = s.charCodeAt(i);
+		return {
+			ptr,
+			len,
+			codepoints
+		};
+	}
 	const { read, written } = encoder.encodeInto(s, out);
 	if (read !== s.length || written !== len) finishUtf8(s, read, out, written);
 	return {
@@ -2282,14 +2290,14 @@ const utf16ValidatingCopy = (from, to) => {
 	if (highSurrogate) throw new Error("invalid utf16 encoding");
 	return allLatin1;
 };
-const utf8Encode = (encoder, value, realloc, memory) => {
+const utf8Encode = (encoder, value, realloc, memory, shortAscii = false) => {
 	const s = requireString(value);
 	if (s.length === 0) return {
 		ptr: 1,
 		len: 0
 	};
 	const { len, codepoints } = utf8Size(s);
-	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory);
+	return writeUtf8(encoder, s, realloc(0, 0, 1, len), len, codepoints, memory, shortAscii);
 };
 const utf8EncodeAsync = async (encoder, value, realloc, memory) => {
 	const s = requireString(value);

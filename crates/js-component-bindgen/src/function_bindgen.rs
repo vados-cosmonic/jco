@@ -1963,8 +1963,16 @@ impl Bindgen for FunctionBindgen<'_> {
                 let str = String::from("cabi_realloc");
                 let realloc = self.realloc.unwrap_or(&str);
                 let s = &operands[0];
-                let encode =
-                    self.intrinsic_call(encode_intrinsic, &format!("{s}, {realloc}, {memory}"));
+                let short_ascii =
+                    if self.direct_sync_import && self.encoding == StringEncoding::UTF8 {
+                        ", true"
+                    } else {
+                        ""
+                    };
+                let encode = self.intrinsic_call(
+                    encode_intrinsic,
+                    &format!("{s}, {realloc}, {memory}{short_ascii}"),
+                );
                 uwriteln!(
                     self.src,
                     r#"
