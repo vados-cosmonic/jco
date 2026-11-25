@@ -750,10 +750,11 @@ mod tests {
                 },
             )
             .unwrap();
-            assert_eq!(
-                generated_javascript(&result).contains("initTrampoline"),
-                direct
-            );
+            let source = generated_javascript(&result);
+            assert_eq!(source.contains("_lowerSyncImport("), direct);
+            if direct {
+                assert!(!source.contains("_lowerImportBackwardsCompat"));
+            }
         }
     }
 
