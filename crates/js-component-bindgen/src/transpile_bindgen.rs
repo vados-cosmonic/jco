@@ -4223,12 +4223,24 @@ impl<'a> Instantiator<'a, '_> {
                 uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
-                let realloc = guard(
-                    self,
-                    &format!(
-                        "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0"
-                    ),
+                let call = format!(
+                    "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize)"
                 );
+                let realloc = if let Some(owner) = owner.filter(|_| self.direct_sync_imports) {
+                    // This leaf cannot access context slots. Every path out of it checks
+                    // the same flag, including adapters that import it as a Wasm global.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(owner)
+                        .or_insert(false);
+                    let flags = self.instance_flags_name(owner.as_u32());
+                    self.bindgen.intrinsic_call(
+                        AsyncTaskIntrinsic::GuardSyncRealloc.into(),
+                        &format!("{flags}, {call}"),
+                    )
+                } else {
+                    guard(self, &format!("{call} >>> 0"))
+                };
                 uwriteln!(self.src.js_init, "realloc{idx} = {realloc};");
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')

@@ -462,6 +462,7 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             )),
             RuntimeImportKind::Call,
         ),
+        GuardSyncRealloc => ("guardSyncRealloc", None, RuntimeImportKind::Call),
         GuardCannotLeave => (
             "guardCannotLeave",
             Some(RuntimeContextIntrinsic::Task(
@@ -653,10 +654,10 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         ),
     };
     Some(RuntimeImport {
-        suffix: if matches!(intrinsic, LowerSyncImport) {
-            "intrinsics/async-task/lower-import-backwards-compat"
-        } else {
-            "intrinsics/async-task"
+        suffix: match intrinsic {
+            LowerSyncImport => "intrinsics/async-task/lower-import-backwards-compat",
+            GuardSyncRealloc => "intrinsics/async-task/sync-realloc",
+            _ => "intrinsics/async-task",
         },
         export,
         context,
