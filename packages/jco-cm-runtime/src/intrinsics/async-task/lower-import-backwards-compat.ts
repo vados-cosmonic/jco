@@ -32,6 +32,12 @@ export function lowerImportBackwardsCompat(
         stringEncoding,
     } = args;
     checkMayLeave(_context.mayLeave, componentIdx);
+    // A sync-only adapter returns its lowered value on the JavaScript stack.
+    // During module initialization there may be no guest task yet; install
+    // one below so that lifecycle observers still see the instance as busy.
+    if (args.directSync && _context.tasks.get(componentIdx)?.length) {
+        return importFn(...params);
+    }
     const meta = readTaskRegister(_context.registers, componentIdx);
     let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
     let createdTask: AsyncTaskType | undefined;
@@ -81,6 +87,19 @@ export function lowerImportBackwardsCompat(
     const task = taskMeta.task;
     if (!task) {
         throw new Error('invalid/missing async task');
+    }
+    if (args.directSync && createdTask) {
+        createdTask.enterSync();
+        try {
+            const result = importFn(...params);
+            createdTask.resolve([result]);
+            return result;
+        } catch (error) {
+            createdTask.reject(error);
+            throw error;
+        } finally {
+            createdTask.exit();
+        }
     }
     getOrCreateAsyncState(_context.lookup, componentIdx);
     if (!task.mayBlock() && funcTypeIsAsync && !isAsync) {

@@ -778,6 +778,68 @@ test.concurrent.each([false, true])('initialization import retires its task (man
     }
 });
 
+test.concurrent.each([false, true])('direct sync initialization retires its task (throws=%s)', (throws) => {
+    const s = setup();
+    const error = new Error('initialization failed');
+    try {
+        s.component.instanceFlags.set(0, { value: 1 });
+        const invoke = () =>
+            s.asyncTask.lowerImportBackwardsCompat(
+                {
+                    componentIdx: 0,
+                    directSync: true,
+                    isAsync: false,
+                    getMemoryFn: () => undefined,
+                    importFn(value) {
+                        const task = s.asyncTask.getCurrentTask(0)!.task;
+                        expect(s.core.getCurrentTaskMeta(0)?.taskID).toBe(task.id());
+                        expect(task.currentSubtask()).toBeUndefined();
+                        if (throws) throw error;
+                        return value;
+                    },
+                },
+                23,
+            );
+        if (throws) expect(invoke).toThrow(error);
+        else expect(invoke()).toBe(23);
+        expect(s.asyncTask.getCurrentTask(0)).toBeUndefined();
+        expect(s.core.getCurrentTaskMeta(0)).toBeUndefined();
+        expect(Array.from(s.resource.state.scopeTasks.keys())).toEqual([]);
+    } finally {
+        s.cleanup();
+    }
+});
+
+test.concurrent('a direct sync import reuses its guest task and checks may-leave', () => {
+    const s = setup();
+    const [parent] = s.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    try {
+        const flags = { value: 1 };
+        s.component.instanceFlags.set(0, flags);
+        const invoke = () =>
+            s.asyncTask.lowerImportBackwardsCompat(
+                {
+                    componentIdx: 0,
+                    directSync: true,
+                    isAsync: false,
+                    getMemoryFn: () => undefined,
+                    importFn(value) {
+                        expect(s.asyncTask.getCurrentTask(0)!.task).toBe(parent);
+                        expect(parent.currentSubtask()).toBeUndefined();
+                        return value;
+                    },
+                },
+                42,
+            );
+        expect(invoke()).toBe(42);
+        flags.value = 0;
+        expect(invoke).toThrow('cannot leave component instance');
+    } finally {
+        finish(parent);
+        s.cleanup();
+    }
+});
+
 test.concurrent('async import lowering resolves through the current task subtask', async () => {
     const s = setup();
     try {

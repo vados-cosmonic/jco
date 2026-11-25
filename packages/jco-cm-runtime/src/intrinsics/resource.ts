@@ -65,9 +65,11 @@ export const tableCreateBorrow: ResourceModule['tableCreateBorrow'] = (spaces, t
     table[handle * 2 + 1] = rep >>> 0;
     return handle;
 };
-export const tableCreateOwn: ResourceModule['tableCreateOwn'] = (spaces, table, rep) => {
+export const tableCreateOwn: ResourceModule['tableCreateOwn'] = (spaces, table, rep, trackRep = true) => {
     rep >>>= 0;
-    table._createdReps.add(rep);
+    if (trackRep) {
+        table._createdReps.add(rep);
+    }
     const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
     table[handle * 2] = 0;
     table[handle * 2 + 1] = rep + RESOURCE_TABLE_OWN;

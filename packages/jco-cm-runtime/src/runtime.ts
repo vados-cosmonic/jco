@@ -47,6 +47,7 @@ export interface ResourceModule {
         spaces: ResourceHandleIndexSpaces,
         table: ResourceTable,
         rep: ResourceRep,
+        trackRep?: boolean,
     ) => ResourceHandle;
     readonly tableGet: (
         context: ResourceTableGetContext,
@@ -1616,6 +1617,8 @@ export interface TaskReturnOptions {
 }
 
 export interface TaskLowerImportOptions {
+    /** The sync adapter lifts arguments and returns the lowered result directly. */
+    directSync?: boolean;
     componentIdx: number;
     functionIdx?: number;
     trampolineIdx?: number;
