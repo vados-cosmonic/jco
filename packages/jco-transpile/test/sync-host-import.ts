@@ -190,3 +190,57 @@ test('captured host resources preserve identity across handle reuse, explicit re
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('an optional resource can grow memory between discriminant and handle stores', async () => {
+    const component = new TextEncoder().encode(`(component
+        (import "api" (instance $api (export "item" (type (sub resource)))))
+        (alias export $api "item" (type $item))
+        (import "get" (func $get (result (option (own $item)))))
+        (core module $storage (memory (export "memory") 1 2))
+        (core instance $storage (instantiate $storage))
+        (alias core export $storage "memory" (core memory $memory))
+        (core func $get (canon lower (func $get) (memory $memory)))
+        (core func $drop (canon resource.drop $item))
+        (core module $guest
+            (import "" "memory" (memory 1))
+            (import "" "get" (func $get (param i32)))
+            (import "" "drop" (func $drop (param i32)))
+            (func (export "run") (result i32)
+                (call $get (i32.const 16))
+                (call $drop (i32.load (i32.const 20)))
+                (memory.size)))
+        (core instance $guest (instantiate $guest (with "" (instance
+            (export "memory" (memory $memory)) (export "get" (func $get)) (export "drop" (func $drop))))))
+        (func (export "run") (result u32) (canon lift (core func $guest "run"))))`);
+    let memory!: WebAssembly.Memory;
+    let disposals = 0;
+    class Item {
+        get [Symbol.for('cabiRep')]() {
+            expect(new DataView(memory.buffer).getUint8(16)).toBe(1);
+            memory.grow(1);
+            return undefined;
+        }
+        [Symbol.dispose]() {
+            disposals++;
+        }
+    }
+    const dir = await mkdtemp(join(tmpdir(), 'jco-sync-memory-'));
+    try {
+        const { files } = await transpileBytes(component, { name: 'growth', instantiation: 'async' });
+        await writeFiles(files, { baseDir: dir });
+        const { instantiate } = await import(pathToFileURL(join(dir, 'growth.js')).href);
+        const guest = await instantiate(
+            undefined,
+            { api: { Item }, get: { default: () => new Item() } },
+            (module: WebAssembly.Module, imports: WebAssembly.Imports) => {
+                const core = new WebAssembly.Instance(module, imports);
+                if (core.exports.memory instanceof WebAssembly.Memory) memory = core.exports.memory;
+                return core;
+            },
+        );
+        expect(guest.run()).toBe(2);
+        expect(disposals).toBe(1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
