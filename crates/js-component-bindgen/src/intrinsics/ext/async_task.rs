@@ -525,6 +525,13 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
             )),
             RuntimeImportKind::Call,
         ),
+        LowerSyncImport => (
+            "lowerSyncImport",
+            Some(RuntimeContextIntrinsic::Task(
+                TaskContextIntrinsic::LowerImportBackwardsCompat,
+            )),
+            RuntimeImportKind::Call,
+        ),
         LowerImportBackwardsCompat => (
             "lowerImportBackwardsCompat",
             Some(RuntimeContextIntrinsic::Task(
@@ -646,7 +653,11 @@ pub(crate) fn import(intrinsic: AsyncTaskIntrinsic) -> Option<RuntimeImport> {
         ),
     };
     Some(RuntimeImport {
-        suffix: "intrinsics/async-task",
+        suffix: if matches!(intrinsic, LowerSyncImport) {
+            "intrinsics/async-task/lower-import-backwards-compat"
+        } else {
+            "intrinsics/async-task"
+        },
         export,
         context,
         kind,

@@ -175,6 +175,11 @@ async function main() {
     // Checked synchronous leaves alone use this layout. External providers only
     // implement the public resource contract.
     addExport('intrinsics/resource-captures', 'IndexedResourceCaptures', 'runtime/intrinsics/resource-captures.js');
+    addExport(
+        'intrinsics/async-task/lower-import-backwards-compat',
+        'lowerSyncImport',
+        'runtime/intrinsics/async-task/lower-import-backwards-compat.js',
+    );
     const { code } = await bundle(reexports.join('\n'), modules);
     const header = `${VERSION_HEADER}${manifest.version}\n${COMMIT_HEADER}${await runtimeCommit()}\n`;
 

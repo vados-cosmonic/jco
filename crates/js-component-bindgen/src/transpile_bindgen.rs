@@ -3197,13 +3197,9 @@ impl<'a> Instantiator<'a, '_> {
 
                 if self.direct_sync_imports {
                     // The generated adapter already produces the core Wasm return value.
-                    let args = format!(
-                        "{{ componentIdx: {component_idx}, directSync: true, isAsync: false, getMemoryFn: () => null, importFn: _trampoline{i} }}"
-                    );
-                    let lower = self.bindgen.intrinsic_bind_callback(
-                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImportBackwardsCompat),
-                        &args,
-                    );
+                    let lower = self.bindgen.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::LowerSyncImport,
+                    ));
                     let tasks = self
                         .bindgen
                         .local_names
@@ -3235,14 +3231,13 @@ impl<'a> Instantiator<'a, '_> {
                     uwriteln!(
                         self.src.js,
                         r#"
-                        const initTrampoline{i} = {lower};
                         function trampoline{i}({params}) {{
                             try {{
                                 if ({flags}.value !== 1)
                                     throw new {runtime_error}('cannot leave component instance');
                                 if ({tasks}.length)
                                     return _trampoline{i}({params});
-                                return initTrampoline{i}({params});
+                                return {lower}{component_idx}, _trampoline{i}, {params});
                             }} catch (err) {{
                                 throw {record}{component_idx}, err, false);
                             }}
@@ -3724,6 +3719,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceDrop {
                 ty: resource_table_ty_idx,
+                instance,
                 ..
             } => {
                 self.ensure_resource_table(*resource_table_ty_idx);
@@ -3814,16 +3810,26 @@ impl<'a> Instantiator<'a, '_> {
                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                     &format!("handleTable{tid}, handle"),
                 );
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove};
-                        if (handleEntry.own) {{
-                            {dtor}
-                        }}
-                    }}
-                    ",
+                let drop = format!(
+                    "const handleEntry = {rsc_table_remove};
+                    if (handleEntry.own) {{ {dtor} }}"
                 );
+                if self.direct_sync_imports {
+                    let idx = instance.as_u32();
+                    let flags = self.instance_flags_name(idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{
+                        try {{
+                            if ({flags}.value !== 1) throw new {runtime_error}('cannot leave component instance');
+                            {drop}
+                        }} catch (err) {{ throw {record}{idx}, err, true); }}
+                    }}");
+                } else {
+                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{ {drop} }}");
+                }
             }
 
             Trampoline::ResourceTransferOwn => {
@@ -6153,10 +6159,7 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|instance| instance.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
                 let guard_trap = |this: &mut Self, expr: String| {
-                    if may_suspend
-                        || (this.direct_sync_imports
-                            && matches!(trampoline, Trampoline::LowerImport { .. }))
-                    {
+                    if may_suspend {
                         expr
                     } else {
                         let guard_trap_fn = this.bindgen.intrinsic_call_prefix(
@@ -6172,6 +6175,14 @@ impl<'a> Instantiator<'a, '_> {
                     .borrow_mut()
                     .entry(instance)
                     .or_insert(false);
+                if self.direct_sync_imports
+                    && matches!(
+                        trampoline,
+                        Trampoline::LowerImport { .. } | Trampoline::ResourceDrop { .. }
+                    )
+                {
+                    return name;
+                }
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
                     guard_trap(self, name)
                 } else {

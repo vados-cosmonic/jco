@@ -377,6 +377,9 @@ pub enum AsyncTaskIntrinsic {
     /// TODO(breaking): remove this when specifying async imports/exports is removed.
     LowerImportBackwardsCompat,
 
+    /// Cold task setup for a bundled synchronous import.
+    LowerSyncImport,
+
     /// Global variable that represents whether the *current* task my block
     /// see `CoreDef::TaskMayBlock`
     CurrentTaskMayBlock,
@@ -437,6 +440,7 @@ impl AsyncTaskIntrinsic {
             Self::DriverLoop.name(),
             Self::LowerImport.name(),
             Self::LowerImportBackwardsCompat.name(),
+            Self::LowerSyncImport.name(),
             Self::EnterSymmetricSyncGuestCall.name(),
             Self::ExitSymmetricSyncGuestCall.name(),
             Self::SymmetricSyncGuestCallStack.name(),
@@ -481,6 +485,7 @@ impl AsyncTaskIntrinsic {
             Self::DriverLoop => "_driverLoop",
             Self::LowerImport => "_lowerImport",
             Self::LowerImportBackwardsCompat => "_lowerImportBackwardsCompat",
+            Self::LowerSyncImport => "_lowerSyncImport",
             Self::EnterSymmetricSyncGuestCall => "_symmetricSyncGuestCallEnter",
             Self::ExitSymmetricSyncGuestCall => "_symmetricSyncGuestCallExit",
             Self::SymmetricSyncGuestCallStack => "SYMMETRIC_SYNC_GUEST_CALL_STACK",
@@ -4031,6 +4036,7 @@ impl AsyncTaskIntrinsic {
             //
             // TODO(breaking): remove when manually specifying async imports/expors is removed.
             //
+            Self::LowerSyncImport => unreachable!("only selected with the bundled runtime"),
             Self::LowerImportBackwardsCompat => {
                 let debug_log_fn = render_args.require_intrinsic(Intrinsic::DebugLog);
                 let lower_import_backwards_compat_fn =
