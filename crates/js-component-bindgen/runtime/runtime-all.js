@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 38a09793f4b1e039aaa4deb318d8a09dee50b138
+// generated from commit 76b0accd2159b3d3792cd9276441e580ee746147
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1692,9 +1692,9 @@ const tableCreateBorrow = (spaces, table, rep, scopeId) => {
 	table[handle * 2 + 1] = rep >>> 0;
 	return handle;
 };
-const tableCreateOwn = (spaces, table, rep) => {
+const tableCreateOwn = (spaces, table, rep, trackRep = true) => {
 	rep >>>= 0;
-	table._createdReps.add(rep);
+	if (trackRep) table._createdReps.add(rep);
 	const handle = getHandleIndexSpace(spaces, table._componentIdx ?? table).alloc();
 	table[handle * 2] = 0;
 	table[handle * 2 + 1] = rep + RESOURCE_TABLE_OWN;
@@ -6652,6 +6652,7 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 	});
 	const { componentIdx, isAsync, isManualAsync, resultLowerFns, hasResultPointer, funcTypeIsAsync, memoryIdx, getMemoryFn, getReallocFn, importFn, stringEncoding } = args;
 	checkMayLeave(_context.mayLeave, componentIdx);
+	if (args.directSync && _context.tasks.get(componentIdx)?.length) return importFn(...params);
 	const meta = readTaskRegister(_context.registers, componentIdx);
 	let taskMeta = meta && getCurrentTask(_context, componentIdx, meta.taskID);
 	let createdTask;
@@ -6681,6 +6682,19 @@ function lowerImportBackwardsCompat(_context, args, ...params) {
 	if (!taskMeta) throw new Error("invalid/missing async task meta");
 	const task = taskMeta.task;
 	if (!task) throw new Error("invalid/missing async task");
+	if (args.directSync && createdTask) {
+		createdTask.enterSync();
+		try {
+			const result = importFn(...params);
+			createdTask.resolve([result]);
+			return result;
+		} catch (error) {
+			createdTask.reject(error);
+			throw error;
+		} finally {
+			createdTask.exit();
+		}
+	}
 	getOrCreateAsyncState(_context.lookup, componentIdx);
 	if (!task.mayBlock() && funcTypeIsAsync && !isAsync) throw new Error("non async exports cannot synchronously call async functions");
 	const memory = getMemoryFn();

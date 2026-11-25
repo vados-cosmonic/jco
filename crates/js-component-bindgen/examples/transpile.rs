@@ -50,6 +50,10 @@ fn main() -> Result<()> {
                 opts.instantiation_mode = Some(InstantiationMode::Sync)
             }
             None if arg == "--valid-lifting-optimization" => opts.valid_lifting_optimization = true,
+            None if arg == "--no-nodejs-compat" => opts.nodejs_compat_disabled = true,
+            None if arg == "--namespaced-exports" => opts.no_namespaced_exports = false,
+            Some(("--name", name)) => opts.name = name.to_owned(),
+            Some(("--base64-cutoff", cutoff)) => opts.base64_cutoff = cutoff.parse()?,
             None if arg == "--tracing" => opts.tracing = true,
             None if arg == "--jspi" => jspi = true,
             Some(("--async-import", name)) => async_imports.push(name.to_string()),

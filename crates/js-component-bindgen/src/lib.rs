@@ -294,6 +294,8 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     // shipped with this crate, which is then bundled into them.
     #[cfg(feature = "embedded-cm-runtime")]
     let bundle_runtime = cm_runtime_es_module.is_none();
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let bundle_runtime = false;
     #[cfg(feature = "embedded-cm-runtime")]
     let cm_runtime_es_module =
         cm_runtime_es_module.or_else(|| Some(embedded_runtime::PACKAGE.to_string()));
@@ -396,6 +398,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         world_id,
         opts.clone(),
         cm_runtime_es_module.as_deref(),
+        bundle_runtime && runtime_profile == RuntimeProfile::Checked,
         call_tracking,
         type_generation.typed_error_classes,
         &mut files,
@@ -710,6 +713,48 @@ mod tests {
                     .then(|| std::str::from_utf8(contents).unwrap())
             })
             .unwrap()
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn direct_sync_import_requires_a_checked_bundled_leaf() {
+        let component = wat::parse_str(
+            r#"(component
+            (import "host" (func $host (param "v" u32) (result u32)))
+            (core func $lower (canon lower (func $host)))
+            (core module $m (import "" "host" (func $host (param i32) (result i32)))
+                (export "run" (func $host)))
+            (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
+            (func (export "run") (param "v" u32) (result u32) (canon lift (core func $i "run"))))"#,
+        )
+        .unwrap();
+        for (profile, tracking, provider, direct) in [
+            (RuntimeProfile::Checked, false, None, true),
+            (RuntimeProfile::Debug, false, None, false),
+            (RuntimeProfile::Checked, true, None, false),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@test/provider"),
+                false,
+            ),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder().name("sync".into()).build(),
+                    call_tracking: tracking,
+                    runtime_profile: profile,
+                    cm_runtime_es_module: provider.map(String::from),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                generated_javascript(&result).contains("initTrampoline"),
+                direct
+            );
+        }
     }
 
     #[cfg(feature = "transpile-bindgen")]

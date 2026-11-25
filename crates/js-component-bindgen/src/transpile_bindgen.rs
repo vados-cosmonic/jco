@@ -328,6 +328,43 @@ pub struct TranspileBindgenResult {
     pub inferred_async_exports: HashSet<String>,
 }
 
+/// A sync-only leaf has no guest-visible subtask handle, task-local intrinsic,
+/// or cross-component borrowing scope. The export task owns its lifetime.
+fn is_sync_import_leaf(component: &ComponentTranslation, types: &ComponentTypes) -> bool {
+    component.component.num_runtime_component_instances == 1
+        && component.component.num_future_tables == 0
+        && component.component.num_stream_tables == 0
+        && component.component.num_error_context_tables == 0
+        && component.component.num_resources as usize
+            == component.component.imported_resources.len()
+        && component
+            .component
+            .unsafe_intrinsics
+            .iter()
+            .all(|ty| ty.is_none())
+        && component
+            .component
+            .export_items
+            .values()
+            .all(|export| match export {
+                Export::LiftedFunction { ty, .. } => !types[*ty].async_,
+                _ => true,
+            })
+        && component
+            .component
+            .options
+            .values()
+            .all(|opts| !opts.async_)
+        && component
+            .trampolines
+            .values()
+            .all(|trampoline| match trampoline {
+                Trampoline::LowerImport { lower_ty, .. } => !types[*lower_ty].async_,
+                Trampoline::ResourceDrop { .. } => true,
+                _ => false,
+            })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -339,6 +376,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     cm_runtime_es_module: Option<&str>,
+    specialize_sync_imports: bool,
     call_tracking: bool,
     typed_error_classes: bool,
     files: &mut Files,
@@ -447,6 +485,12 @@ pub fn transpile_bindgen(
         err_ctx_tables,
         init_current_module: None,
         context_components: Default::default(),
+        direct_sync_imports: specialize_sync_imports
+            && !opts.guest
+            && !call_tracking
+            && matches!(opts.import_bindings, None | Some(BindingsMode::Js))
+            && matches!(opts.async_mode, None | Some(AsyncMode::Sync))
+            && is_sync_import_leaf(component, types),
         async_analysis: Default::default(),
     };
     instantiator
@@ -1120,7 +1164,8 @@ pub(crate) struct Instantiator<'a, 'b> {
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
     /// Instance flags which references have been emitted externally at least once.
-    used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
+    /// Maps each flags cell to whether a core module imports it as a Wasm global.
+    used_instance_flags: RefCell<BTreeMap<RuntimeComponentInstanceIndex, bool>>,
     defined_resource_classes: BTreeSet<String>,
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -1154,6 +1199,7 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// Wasm, including core start functions and resource destructors.
     context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 
+    direct_sync_imports: bool,
     async_analysis: AsyncAnalysis,
 }
 
@@ -1825,12 +1871,7 @@ impl<'a> Instantiator<'a, '_> {
     }
 
     fn instance_flags(&mut self) {
-        let used_instance_flags = self
-            .used_instance_flags
-            .borrow()
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
+        let used_instance_flags = self.used_instance_flags.borrow().clone();
         if used_instance_flags.is_empty() {
             return;
         }
@@ -1839,14 +1880,16 @@ impl<'a> Instantiator<'a, '_> {
             ComponentIntrinsic::GlobalInstanceFlagsMap,
         ));
         let mut instance_flag_defs = String::new();
-        for used in used_instance_flags {
+        for (used, imported_by_wasm) in used_instance_flags {
             let i = used.as_u32();
             // As of wasmtime-environ 47 the per-instance flags global holds a
             // single boolean `may_leave` flag, so initialize it to `1`.
-            uwriteln!(
-                &mut instance_flag_defs,
-                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
-            );
+            let cell = if imported_by_wasm || !self.direct_sync_imports {
+                "new WebAssembly.Global({ value: \"i32\", mutable: true }, 1)"
+            } else {
+                "{ value: 1 }"
+            };
+            uwriteln!(&mut instance_flag_defs, "const instanceFlags{i} = {cell};");
             uwriteln!(
                 &mut instance_flag_defs,
                 "{instance_flags_map}.set({i}, instanceFlags{i});",
@@ -3110,6 +3153,56 @@ impl<'a> Instantiator<'a, '_> {
                 let cancellable = false;
 
                 let func_ty = self.types.index(*lower_ty);
+
+                if self.direct_sync_imports {
+                    // The generated adapter already produces the core Wasm return value.
+                    let args = format!(
+                        "{{ componentIdx: {component_idx}, directSync: true, isAsync: false, getMemoryFn: () => null, importFn: _trampoline{i} }}"
+                    );
+                    let lower = self.bindgen.intrinsic_bind_callback(
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerImportBackwardsCompat),
+                        &args,
+                    );
+                    let tasks = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+                    ));
+                    let error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    let arity = self.types[canon_opts.core_type]
+                        .unwrap_func()
+                        .params()
+                        .len();
+                    let params = (0..arity)
+                        .map(|idx| format!("arg{idx}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    // Give the engine a fixed-arity, monomorphic call site. A core
+                    // start function can call imports before the first export task.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(canon_opts.instance)
+                        .or_insert(false);
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                        const initTrampoline{i} = {lower};
+                        function trampoline{i}({params}) {{
+                            try {{
+                                if (instanceFlags{component_idx}.value !== 1)
+                                    throw new {error}('cannot leave component instance');
+                                if ({tasks}.get({component_idx})?.length)
+                                    return _trampoline{i}({params});
+                                return initTrampoline{i}({params});
+                            }} catch (err) {{
+                                throw {record}{component_idx}, err, false);
+                            }}
+                        }}
+                    "#
+                    );
+                    return;
+                }
 
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
@@ -5732,6 +5825,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
+            direct_sync_import: for_import && self.direct_sync_imports,
             track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
@@ -6002,7 +6096,10 @@ impl<'a> Instantiator<'a, '_> {
                     .map(|instance| instance.as_u32().to_string())
                     .unwrap_or_else(|| "null".into());
                 let guard_trap = |this: &mut Self, expr: String| {
-                    if may_suspend {
+                    if may_suspend
+                        || (this.direct_sync_imports
+                            && matches!(trampoline, Trampoline::LowerImport { .. }))
+                    {
                         expr
                     } else {
                         let guard_trap_fn = this.bindgen.intrinsic_call_prefix(
@@ -6014,7 +6111,10 @@ impl<'a> Instantiator<'a, '_> {
                 let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
                     return guard_trap(self, name);
                 };
-                self.used_instance_flags.borrow_mut().insert(instance);
+                self.used_instance_flags
+                    .borrow_mut()
+                    .entry(instance)
+                    .or_insert(false);
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
                     guard_trap(self, name)
                 } else {
@@ -6027,7 +6127,7 @@ impl<'a> Instantiator<'a, '_> {
             }
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
-                self.used_instance_flags.borrow_mut().insert(*i);
+                self.used_instance_flags.borrow_mut().insert(*i, true);
                 format!("instanceFlags{}", i.as_u32())
             }
             CoreDef::UnsafeIntrinsic(ui) => {
