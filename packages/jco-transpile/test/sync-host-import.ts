@@ -66,3 +66,82 @@ test('module-mode imports can read instance flags during and after initializatio
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('captured host resources preserve identity across handle reuse, explicit reps and stop', async () => {
+    const component = new TextEncoder().encode(`(component
+        (import "api" (instance $api (export "thing" (type (sub resource)))))
+        (alias export $api "thing" (type $thing))
+        (import "make" (func $make (result (own $thing))))
+        (import "value" (func $value (param "thing" (borrow $thing)) (result u32)))
+        (core func $make (canon lower (func $make)))
+        (core func $value (canon lower (func $value)))
+        (core func $drop (canon resource.drop $thing))
+        (core module $m
+            (import "" "make" (func $make (result i32)))
+            (import "" "value" (func $value (param i32) (result i32)))
+            (import "" "drop" (func $drop (param i32)))
+            (func (export "make") (result i32) (call $make))
+            (func (export "read") (param i32) (result i32) (call $value (local.get 0)))
+            (func (export "drop") (param i32) (call $drop (local.get 0))))
+        (core instance $i (instantiate $m (with "" (instance
+            (export "make" (func $make)) (export "value" (func $value)) (export "drop" (func $drop))))))
+        (func (export "acquire") (result u32) (canon lift (core func $i "make")))
+        (func (export "read") (param "h" u32) (result u32) (canon lift (core func $i "read")))
+        (func (export "release") (param "h" u32) (canon lift (core func $i "drop"))))`);
+    class Thing {
+        disposals = 0;
+        onDispose?: () => void;
+        constructor(readonly value: number) {}
+        [Symbol.dispose]() {
+            this.disposals++;
+            this.onDispose?.();
+        }
+    }
+
+    const dir = await mkdtemp(join(tmpdir(), 'jco-captured-resource-'));
+    try {
+        const { files } = await transpileBytes(component, { name: 'capture', instantiation: 'async' });
+        await writeFiles(files, { baseDir: dir });
+        const { instantiate } = await import(pathToFileURL(join(dir, 'capture.js')).href);
+        const first = new Thing(1);
+        const later = new Thing(2);
+        const explicit = Object.assign(new Thing(3), { [Symbol.for('cabiRep')]: -1 });
+        let next = first;
+        const imports = { api: { Thing }, make: { default: () => next }, value: { default: (t: Thing) => t.value } };
+        const guest = await instantiate(undefined, imports);
+        const handle = guest.acquire();
+        const alias = guest.acquire();
+        guest.release(handle);
+        expect(first.disposals).toBe(1);
+        next = later;
+        const reused = guest.acquire();
+        expect(reused).toBe(handle);
+        next = explicit;
+        const custom = guest.acquire();
+        expect([alias, reused, custom].map(h => guest.read(h))).toEqual([1, 2, 3]);
+        guest._util.stop();
+        expect([first.disposals, later.disposals, explicit.disposals]).toEqual([1, 1, 1]);
+
+        // An explicit rep can replace a still-live automatic capture.
+        const collidingGuest = await instantiate(undefined, imports);
+        next = new Thing(5);
+        const original = collidingGuest.acquire();
+        next = Object.assign(new Thing(6), { [Symbol.for('cabiRep')]: 1 });
+        const replacement = collidingGuest.acquire();
+        expect(collidingGuest.read(original)).toBe(6);
+        expect(collidingGuest.read(replacement)).toBe(6);
+        collidingGuest._util.stop();
+        expect(next.disposals).toBe(1);
+
+        // A disposer can stop a store while it still owns another alias.
+        const other = await instantiate(undefined, imports);
+        next = new Thing(4);
+        const dropping = other.acquire();
+        other.acquire();
+        next.onDispose = () => other._util.stop();
+        expect(() => other.release(dropping)).toThrow(/instance has been stopped/);
+        expect(next.disposals).toBe(1);
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
