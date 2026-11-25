@@ -30,6 +30,11 @@ pub(crate) fn resource_import(
             Some(RuntimeContextIntrinsic::InitializeHandleIndexSpaces),
             RuntimeImportKind::Call,
         ),
+        ResourceTableRep => (
+            "tableRep",
+            Some(RuntimeContextIntrinsic::ResourceTableGet),
+            RuntimeImportKind::Call,
+        ),
         ResourceTableGet => (
             "tableGet",
             Some(RuntimeContextIntrinsic::ResourceTableGet),
@@ -89,7 +94,9 @@ pub(crate) fn resource_import(
         ),
     };
     RuntimeImport {
-        suffix: if matches!(intrinsic, IndexedResourceCaptures) {
+        suffix: if matches!(intrinsic, ResourceTableRep) {
+            "intrinsics/resource-entry"
+        } else if matches!(intrinsic, IndexedResourceCaptures) {
             "intrinsics/resource-captures"
         } else {
             "intrinsics/resource"

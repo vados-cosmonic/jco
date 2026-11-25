@@ -70,6 +70,8 @@ pub enum ResourceIntrinsic {
     ResourceTableCreateBorrow,
     ResourceTableCreateOwn,
     ResourceTableGet,
+    /// Checked scalar lookup for an imported borrow in the bundled runtime.
+    ResourceTableRep,
     ResourceTableEnsureBorrowDrop,
     ResourceTableRemove,
     ResourceCallBorrows,
@@ -95,6 +97,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow.name(),
             Self::ResourceTableCreateOwn.name(),
             Self::ResourceTableGet.name(),
+            Self::ResourceTableRep.name(),
             Self::ResourceTableEnsureBorrowDrop.name(),
             Self::ResourceTableRemove.name(),
             Self::ResourceTransferBorrow.name(),
@@ -121,6 +124,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
             Self::ResourceTableGet => "rscTableGet",
+            Self::ResourceTableRep => "rscTableRep",
             Self::ResourceTableEnsureBorrowDrop => "rscTableEnsureBorrowDrop",
             Self::ResourceTableRemove => "rscTableRemove",
             Self::ResourceTransferBorrow => "resourceTransferBorrow",
@@ -134,8 +138,8 @@ impl ResourceIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
-            Self::IndexedResourceCaptures => {
-                unreachable!("indexed captures use the bundled runtime")
+            Self::IndexedResourceCaptures | Self::ResourceTableRep => {
+                unreachable!("only selected with the bundled runtime")
             }
             Self::ResourceDestructorCall => {
                 let create_current_task = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(

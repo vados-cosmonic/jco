@@ -3217,14 +3217,20 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             // Canonical ABI `lift_borrow` / `lift_own`: an index with no live
                             // entry in this table traps before anything is looked up or removed.
-                            let rsc_table_get = self.intrinsic_call(
-                                Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                            let direct_borrow = self.direct_sync_import && !is_own;
+                            let (read_entry, rep_field) = if direct_borrow {
+                                (ResourceIntrinsic::ResourceTableRep, "")
+                            } else {
+                                (ResourceIntrinsic::ResourceTableGet, ".rep")
+                            };
+                            let entry = self.intrinsic_call(
+                                Intrinsic::Resource(read_entry),
                                 &format!("handleTable{tid}, {handle}"),
                             );
 
                             let table = format!("captureTable{rid}");
                             let mut lookup = format!("{table}.get({rep})");
-                            let track_wrapper = if self.direct_sync_import && !is_own {
+                            let track_wrapper = if direct_borrow {
                                 lookup =
                                     format!("{table}.slots ? {table}.slots[{handle}] : {lookup}");
                                 format!(
@@ -3236,7 +3242,7 @@ impl Bindgen for FunctionBindgen<'_> {
                             uwriteln!(
                                 self.src,
                                 r#"
-                                  var {rep} = {rsc_table_get}.rep;
+                                  var {rep} = {entry}{rep_field};
                                   var {rsc} = {lookup};
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
