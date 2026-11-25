@@ -3424,10 +3424,13 @@ impl Bindgen for FunctionBindgen<'_> {
                                 );
 
                                 let capture = if self.direct_sync_import {
+                                    // Only truthy captures are deleted by resource.drop.
+                                    // Keep the rep map for a falsy host value accepted by
+                                    // a custom Symbol.hasInstance or for a host-supplied rep.
                                     format!("
-                                        const explicitRep = {op}[{symbol_resource_rep}];
-                                        const rep = (explicitRep ?? ++captureCnt{rid}) >>> 0;
-                                        if (explicitRep != null || rep === 0) captureTable{rid}.byRep();
+                                        const explicitRep = {op}[{symbol_resource_rep}] ?? null;
+                                        const rep = (explicitRep === null ? ++captureCnt{rid} : explicitRep) >>> 0;
+                                        if (explicitRep !== null || rep === 0 || !{op}) captureTable{rid}.byRep();
                                         const slots = captureTable{rid}.slots;
                                         if (!slots) captureTable{rid}.set(rep, {op});
                                         {handle} = {create_own_fn};

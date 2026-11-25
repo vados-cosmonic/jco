@@ -118,7 +118,7 @@ test('captured host resources preserve identity across handle reuse, explicit re
         expect(reused).toBe(handle);
         next = explicit;
         const custom = guest.acquire();
-        expect([alias, reused, custom].map(h => guest.read(h))).toEqual([1, 2, 3]);
+        expect([alias, reused, custom].map((h) => guest.read(h))).toEqual([1, 2, 3]);
         guest._util.stop();
         expect([first.disposals, later.disposals, explicit.disposals]).toEqual([1, 1, 1]);
 
