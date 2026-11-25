@@ -1829,22 +1829,40 @@ impl<'a> Instantiator<'a, '_> {
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
                 let ridx = resource_idx.as_u32();
+                let captures = if self.direct_sync_imports {
+                    let class = self.bindgen.intrinsic(Intrinsic::Resource(
+                        ResourceIntrinsic::IndexedResourceCaptures,
+                    ));
+                    format!("new {class}(handleTable{rtid})")
+                } else {
+                    "new Map()".into()
+                };
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const captureTable{ridx} = new Map();
+                      const captureTable{ridx} = {captures};
                       let captureCnt{ridx} = 0;
                     "#
                 );
                 self.resources_initialized.insert(resource_idx, true);
+            } else if self.direct_sync_imports {
+                // Two tables can refer to the same resource. Handles only identify
+                // their own table, while a capture by rep is shared between both.
+                let ridx = resource_idx.as_u32();
+                uwriteln!(self.src.js, "captureTable{ridx}.byRep();");
             }
             let store = self
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
             let ridx = resource_idx.as_u32();
+            let captures = if self.direct_sync_imports {
+                format!("get captures() {{ return captureTable{ridx}.byRep(); }}")
+            } else {
+                format!("captures: captureTable{ridx}")
+            };
             uwriteln!(
                 self.src.js,
-                "{store}.resourceTables.push({{ handles: handleTable{rtid}, captures: captureTable{ridx} }});"
+                "{store}.resourceTables.push({{ handles: handleTable{rtid}, {captures} }});"
             );
         } else {
             // non imported
@@ -3734,11 +3752,20 @@ impl<'a> Instantiator<'a, '_> {
                     if let Some(imported_resource_local_name) =
                         self.bindgen.local_names.try_get(resource_ty)
                     {
+                        let table = format!("captureTable{rid}");
+                        let mut lookup = format!("{table}.get(handleEntry.rep)");
+                        let mut release = format!("{table}.delete(handleEntry.rep);");
+                        if self.direct_sync_imports {
+                            lookup = format!("{table}.slots ? {table}.slots[handle] : {lookup}");
+                            release = format!(
+                                "if ({table}.slots) {table}.slots[handle] = undefined; else {release}"
+                            );
+                        }
                         format!(
                                             "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            const rsc = {lookup};
                             if (rsc) {{
-                                captureTable{rid}.delete(handleEntry.rep);
+                                {release}
                                 {store}.disposed.add(rsc);
                                 if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{

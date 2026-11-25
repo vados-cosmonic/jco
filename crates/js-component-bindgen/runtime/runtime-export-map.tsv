@@ -309,3 +309,4 @@ intrinsics/stream:streamNewFromLift	runtimeExport307
 intrinsics/stream:streamRead	runtimeExport308
 intrinsics/stream:streamTransfer	runtimeExport309
 intrinsics/stream:streamWrite	runtimeExport310
+intrinsics/resource-captures:IndexedResourceCaptures	runtimeExport311

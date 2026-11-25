@@ -66,6 +66,7 @@ pub enum ResourceIntrinsic {
 
     /// Get (or create) the handle index space of a component instance
     GetHandleIndexSpace,
+    IndexedResourceCaptures,
     ResourceTableCreateBorrow,
     ResourceTableCreateOwn,
     ResourceTableGet,
@@ -90,6 +91,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableOwnFlag.name(),
             Self::HandleIndexSpaces.name(),
             Self::GetHandleIndexSpace.name(),
+            Self::IndexedResourceCaptures.name(),
             Self::ResourceTableCreateBorrow.name(),
             Self::ResourceTableCreateOwn.name(),
             Self::ResourceTableGet.name(),
@@ -115,6 +117,7 @@ impl ResourceIntrinsic {
             Self::ResourceTableOwnFlag => "T_OWN",
             Self::HandleIndexSpaces => "HANDLE_INDEX_SPACES",
             Self::GetHandleIndexSpace => "getHandleIndexSpace",
+            Self::IndexedResourceCaptures => "_jcoIndexedResourceCaptures",
             Self::ResourceTableCreateBorrow => "rscTableCreateBorrow",
             Self::ResourceTableCreateOwn => "rscTableCreateOwn",
             Self::ResourceTableGet => "rscTableGet",
@@ -131,6 +134,9 @@ impl ResourceIntrinsic {
     /// Render an intrinsic to a string
     pub fn render(&self, output: &mut Source, render_args: &RenderIntrinsicsArgs<'_>) {
         match self {
+            Self::IndexedResourceCaptures => {
+                unreachable!("indexed captures use the bundled runtime")
+            }
             Self::ResourceDestructorCall => {
                 let create_current_task = render_args.intrinsic_call_prefix(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,

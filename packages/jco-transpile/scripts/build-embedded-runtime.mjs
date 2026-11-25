@@ -156,6 +156,11 @@ async function main() {
     // subpaths stay distinct in the single bundled module.
     const exportMap = [];
     const reexports = [];
+    function addExport(subpath, name, id) {
+        const alias = `runtimeExport${exportMap.length}`;
+        exportMap.push(`${subpath}:${name}\t${alias}`);
+        reexports.push(`export { ${name} as ${alias} } from ${JSON.stringify(id)};`);
+    }
     for (const [subpath, conditions] of Object.entries(manifest.exports)) {
         // Subpaths below `debug` select the debug profile of the same modules.
         if (subpath === '.' || /^\.\/debug(\/|$)/.test(subpath)) {
@@ -164,11 +169,12 @@ async function main() {
         const id = `runtime/${conditions.default.slice('./dist/'.length)}`;
         const { exports } = await bundle(`export * from ${JSON.stringify(id)};`, modules);
         for (const name of exports.toSorted()) {
-            const alias = `runtimeExport${exportMap.length}`;
-            exportMap.push(`${subpath.slice(2)}:${name}\t${alias}`);
-            reexports.push(`export { ${name} as ${alias} } from ${JSON.stringify(id)};`);
+            addExport(subpath.slice(2), name, id);
         }
     }
+    // Checked synchronous leaves alone use this layout. External providers only
+    // implement the public resource contract.
+    addExport('intrinsics/resource-captures', 'IndexedResourceCaptures', 'runtime/intrinsics/resource-captures.js');
     const { code } = await bundle(reexports.join('\n'), modules);
     const header = `${VERSION_HEADER}${manifest.version}\n${COMMIT_HEADER}${await runtimeCommit()}\n`;
 

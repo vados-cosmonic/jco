@@ -3212,7 +3212,11 @@ impl Bindgen for FunctionBindgen<'_> {
                                 &format!("handleTable{tid}, {handle}"),
                             );
 
+                            let table = format!("captureTable{rid}");
+                            let mut lookup = format!("{table}.get({rep})");
                             let track_wrapper = if self.direct_sync_import && !is_own {
+                                lookup =
+                                    format!("{table}.slots ? {table}.slots[{handle}] : {lookup}");
                                 format!(
                                     "var _jcoBorrowWrappers; (_jcoBorrowWrappers ??= []).push({rsc});"
                                 )
@@ -3223,7 +3227,7 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.src,
                                 r#"
                                   var {rep} = {rsc_table_get}.rep;
-                                  var {rsc} = captureTable{rid}.get({rep});
+                                  var {rsc} = {lookup};
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
                                       Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
@@ -3419,14 +3423,27 @@ impl Bindgen for FunctionBindgen<'_> {
                                     &format!("handleTable{tid}, rep{track_rep}"),
                                 );
 
+                                let capture = if self.direct_sync_import {
+                                    format!("
+                                        const explicitRep = {op}[{symbol_resource_rep}];
+                                        const rep = (explicitRep ?? ++captureCnt{rid}) >>> 0;
+                                        if (explicitRep != null || rep === 0) captureTable{rid}.byRep();
+                                        const slots = captureTable{rid}.slots;
+                                        if (!slots) captureTable{rid}.set(rep, {op});
+                                        {handle} = {create_own_fn};
+                                        if (slots) slots[{handle}] = {op};")
+                                } else {
+                                    format!("
+                                        const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
+                                        captureTable{rid}.set(rep, {op});
+                                        {handle} = {create_own_fn};")
+                                };
                                 uwriteln!(
                                     self.src,
                                     r#"
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
-                                          const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
-                                          captureTable{rid}.set(rep, {op});
-                                          {handle} = {create_own_fn};
+                                          {capture}
                                       }}
                                     "#
                                 );
