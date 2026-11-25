@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 76b0accd2159b3d3792cd9276441e580ee746147
+// generated from commit 4b0d193dffae08c43374320a9b40bee23d96d0d8
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -7277,7 +7277,16 @@ function removeFutureEndFromTable(_context, args) {
 //#endregion
 //#region runtime/intrinsics/lift.js
 /** Decode UTF-8 while distinguishing malformed bytes from truncated sequences. */
-const decodeUtf8 = (RuntimeError, decoder, input) => {
+const decodeUtf8 = (RuntimeError, decoder, input, shortAscii = false) => {
+	if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
+		let text = "";
+		for (let i = 0; i < input.length; i++) {
+			const byte = input[i];
+			if (byte >= 128) break;
+			text += String.fromCharCode(byte);
+			if (i + 1 === input.length) return text;
+		}
+	}
 	try {
 		return decoder.decode(input);
 	} catch (error) {

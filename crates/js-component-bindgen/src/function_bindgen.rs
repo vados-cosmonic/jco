@@ -2029,6 +2029,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     },
                 );
                 let decode = match decode_utf8 {
+                    Some(decode_utf8) if self.direct_sync_import => {
+                        format!("{decode_utf8}{decoder}, {buffer}, true)")
+                    }
                     Some(decode_utf8) => format!("{decode_utf8}{decoder}, {buffer})"),
                     None => format!("{decoder}.decode({buffer})"),
                 };
