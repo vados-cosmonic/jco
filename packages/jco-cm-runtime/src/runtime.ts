@@ -314,6 +314,8 @@ export interface StringModule {
         value: unknown,
         realloc: StringRealloc,
         memory: StringMemory,
+        /** Write short ASCII strings directly when using the standard UTF-8 encoder. */
+        shortAscii?: boolean,
     ) => StringAllocation;
     readonly utf8EncodeAsync: (
         encoder: StringEncodeInto,
