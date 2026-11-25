@@ -254,3 +254,43 @@ test('an optional resource can grow memory between discriminant and handle store
         await rm(dir, { recursive: true, force: true });
     }
 });
+
+test('a synchronous string result survives guest memory growth at its exact UTF-8 size', async () => {
+    const component = new TextEncoder().encode(`(component
+        (import "text" (func $text (result string)))
+        (core module $storage
+            (memory (export "mem") 1)
+            (global $size (mut i32) (i32.const 0))
+            (func (export "size") (result i32) (global.get $size))
+            (func (export "allocate") (param i32 i32 i32) (param $n i32) (result i32)
+                (global.set $size (local.get $n))
+                (i32.shl (memory.grow (i32.shr_u (i32.add (local.get $n) (i32.const 65535))
+                    (i32.const 16))) (i32.const 16))))
+        (core instance $storage (instantiate $storage))
+        (alias core export $storage "mem" (core memory $mem))
+        (alias core export $storage "allocate" (core func $allocate))
+        (core func $read (canon lower (func $text) (memory $mem) (realloc $allocate)))
+        (core module $guest
+            (import "" "read" (func $read (param i32)))
+            (func (export "run") (result i32) (call $read (i32.const 0)) (i32.const 0)))
+        (core instance $guest (instantiate $guest (with "" (instance (export "read" (func $read))))))
+        (func (export "run") (result string) (canon lift (core func $guest "run") (memory $mem)))
+        (func (export "size") (result u32) (canon lift (core func $storage "size"))))`);
+    const dir = await mkdtemp(join(tmpdir(), 'jco-sync-utf8-'));
+    try {
+        const { files } = await transpileBytes(component, { name: 'strings', instantiation: 'async' });
+        await writeFiles(files, { baseDir: dir });
+        const { instantiate } = await import(pathToFileURL(join(dir, 'strings.js')).href);
+        let value = '';
+        const guest = await instantiate(undefined, { text: { default: () => value } });
+        const encoder = new TextEncoder();
+        const decoder = new TextDecoder('utf-8', { ignoreBOM: true, fatal: true });
+        for (value of ['x'.repeat(16384), '\ufeffaé漢😀\ud800'.repeat(2048), '漢'.repeat(100000), 'short']) {
+            const bytes = encoder.encode(value);
+            expect(guest.run()).toBe(decoder.decode(bytes));
+            expect(guest.size()).toBe(bytes.length);
+        }
+    } finally {
+        await rm(dir, { recursive: true, force: true });
+    }
+});
