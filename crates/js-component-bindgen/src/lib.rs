@@ -177,6 +177,10 @@ pub struct TranspileConfig {
     /// Requires the `external-runtime` Cargo feature.
     #[cfg(feature = "external-runtime")]
     pub cm_runtime_es_module: Option<String>,
+    /// The external provider supports the checked intrinsics/sync contract.
+    /// The standard checked runtime package enables this automatically.
+    #[cfg(feature = "external-runtime")]
+    pub cm_runtime_sync_imports: Option<bool>,
 }
 
 /// Reject accessor functions until JavaScript property bindings are implemented.
@@ -281,10 +285,18 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         runtime_profile,
         #[cfg(feature = "external-runtime")]
         cm_runtime_es_module,
+        #[cfg(feature = "external-runtime")]
+        cm_runtime_sync_imports,
     } = config;
-    // Only the bundled runtime is reduced to a profile.
-    #[cfg(not(feature = "embedded-cm-runtime"))]
-    let _ = runtime_profile;
+    // A custom provider may implement only the original API-v1 operations.
+    // Request the sync entry point only for the standard checked package or
+    // when the caller confirms that its directory or provider supplies it.
+    #[cfg(feature = "external-runtime")]
+    let provider_supports_sync = cm_runtime_es_module.as_deref().is_some_and(|base| {
+        cm_runtime_sync_imports.unwrap_or(base == "@bytecodealliance/jco-cm-runtime")
+    });
+    #[cfg(not(feature = "external-runtime"))]
+    let provider_supports_sync = false;
     #[cfg(not(feature = "external-runtime"))]
     let cm_runtime_es_module: Option<String> = None;
     let external_runtime = cm_runtime_es_module.is_some();
@@ -294,6 +306,8 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     // shipped with this crate, which is then bundled into them.
     #[cfg(feature = "embedded-cm-runtime")]
     let bundle_runtime = cm_runtime_es_module.is_none();
+    #[cfg(not(feature = "embedded-cm-runtime"))]
+    let bundle_runtime = false;
     #[cfg(feature = "embedded-cm-runtime")]
     let cm_runtime_es_module =
         cm_runtime_es_module.or_else(|| Some(embedded_runtime::PACKAGE.to_string()));
@@ -396,6 +410,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
         world_id,
         opts.clone(),
         cm_runtime_es_module.as_deref(),
+        (bundle_runtime || provider_supports_sync) && runtime_profile == RuntimeProfile::Checked,
         call_tracking,
         type_generation.typed_error_classes,
         &mut files,
@@ -712,6 +727,153 @@ mod tests {
             .unwrap()
     }
 
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn direct_sync_import_requires_a_checked_leaf_and_capable_runtime() {
+        let component = wat::parse_str(
+            r#"(component
+            (import "host" (func $host (param "v" u32) (result u32)))
+            (core func $lower (canon lower (func $host)))
+            (core module $m (import "" "host" (func $host (param i32) (result i32)))
+                (export "run" (func $host)))
+            (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
+            (func (export "run") (param "v" u32) (result u32) (canon lift (core func $i "run"))))"#,
+        )
+        .unwrap();
+        for (profile, tracking, provider, provider_sync, direct) in [
+            (RuntimeProfile::Checked, false, None, None, true),
+            (RuntimeProfile::Debug, false, None, None, false),
+            (RuntimeProfile::Checked, true, None, None, false),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@test/provider"),
+                None,
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime"),
+                None,
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime"),
+                Some(false),
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("./custom-runtime"),
+                Some(true),
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                true,
+                Some("./custom-runtime"),
+                Some(true),
+                false,
+            ),
+            (
+                RuntimeProfile::Debug,
+                false,
+                Some("./custom-runtime"),
+                Some(true),
+                false,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
+                Some("@bytecodealliance/jco-cm-runtime/debug"),
+                None,
+                false,
+            ),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder().name("sync".into()).build(),
+                    call_tracking: tracking,
+                    runtime_profile: profile,
+                    cm_runtime_es_module: provider.map(String::from),
+                    cm_runtime_sync_imports: provider_sync,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert_eq!(source.contains("_lowerSyncImport("), direct);
+            assert_eq!(
+                source.contains("/intrinsics/sync"),
+                direct && provider.is_some()
+            );
+            if direct {
+                assert!(!source.contains("_lowerImportBackwardsCompat"));
+            }
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn sync_leaf_initializers_only_install_observable_wrappers() {
+        let component = wat::parse_str(r#"(component
+            (import "length" (func $length (param "n" u32) (result u32)))
+            (core func $lower (canon lower (func $length)))
+            (core module $core
+                (import "" "length" (func $length (param i32) (result i32)))
+                (memory (export "mem") 1)
+                (func (export "alloc") (param i32 i32 i32 i32) (result i32) i32.const 64)
+                (func (export "post") (param i32))
+                (func (export "run") (param i32 i32) (result i32) local.get 1 call $length))
+            (core instance $guest (instantiate $core (with "" (instance (export "length" (func $lower))))))
+            (func (export "run") (param "text" string) (result u32)
+                (canon lift (core func $guest "run") (memory (core memory $guest "mem"))
+                    (realloc (core func $guest "alloc")) (post-return (core func $guest "post")))))"#).unwrap();
+        for (profile, instantiation, wrappers, markers) in [
+            (RuntimeProfile::Checked, None, false, false),
+            (
+                RuntimeProfile::Checked,
+                Some(InstantiationMode::Async),
+                false,
+                true,
+            ),
+            (RuntimeProfile::Debug, None, true, true),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder()
+                        .name("sync".into())
+                        .maybe_instantiation_mode(instantiation)
+                        .build(),
+                    runtime_profile: profile,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.alloc)"),
+                wrappers
+            );
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.post)"),
+                wrappers
+            );
+            assert_eq!(source.contains("_jcoMaySuspend:"), markers);
+            assert_eq!(source.contains("initializeAsyncSubtaskClass"), wrappers);
+            assert_eq!(source.contains("initializeFutureValueClass"), wrappers);
+            assert_eq!(source.contains("initializeFutures"), wrappers);
+            assert_eq!(source.contains("initializeStreams"), wrappers);
+            assert_eq!(source.contains("initializeWaitableClass"), wrappers);
+        }
+    }
+
     #[cfg(feature = "transpile-bindgen")]
     #[test]
     fn debug_logger_is_initialized_once_for_a_module_or_an_instance() {
@@ -959,7 +1121,7 @@ mod tests {
         // the shipped runtime when that feature is enabled, and rendered inline otherwise.
         #[cfg(feature = "embedded-cm-runtime")]
         {
-            assert!(direct_source.contains("__jcoEmbeddedRuntime$tableGet"));
+            assert!(direct_source.contains("$cm$tableGet"));
             assert!(!direct_source.contains(crate::embedded_runtime::PACKAGE));
             assert!(!direct_source.contains("\nimport "));
         }

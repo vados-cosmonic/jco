@@ -3321,6 +3321,9 @@ pub struct RenderIntrinsicsArgs<'a> {
     /// Emit invocation tracking in host binding glue.
     #[builder(default)]
     pub(crate) call_tracking: bool,
+    /// The bundled runtime can omit capabilities for unreachable subtask operations.
+    #[builder(default)]
+    pub(crate) sync_import_leaf: bool,
     /// The kind of determinism to use
     #[builder(default)]
     pub(crate) determinism_profile: AsyncDeterminismProfile,

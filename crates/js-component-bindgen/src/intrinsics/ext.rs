@@ -119,6 +119,8 @@ pub(crate) enum RuntimeContextIntrinsic {
     InitializeUtf16Decoder,
     /// The UTF-8 encoder returned by `initializeUtf8Encoder`.
     InitializeUtf8Encoder,
+    /// Per-instance UTF-8 staging for synchronous host results.
+    SyncUtf8Encoding,
     /// The UTF-16 encoding state returned by `initializeUtf16Encoding`.
     InitializeUtf16Encoding,
     /// The Web IDL proxy cache returned by `initializeWebIdlProxyCache`.
@@ -158,6 +160,7 @@ impl RuntimeContextIntrinsic {
             "_jcoInitializeUtf8Decoder",
             "_jcoInitializeUtf16Decoder",
             "_jcoInitializeUtf8Encoder",
+            "_jcoSyncUtf8Context",
             "_jcoInitializeUtf16Encoding",
             "_jcoUtf16EncodingContext",
             "_jcoWebIdlProxyCacheContext",
@@ -208,6 +211,7 @@ impl RuntimeContextIntrinsic {
             Self::InitializeUtf8Decoder => "TEXT_DECODER_UTF8",
             Self::InitializeUtf16Decoder => "utf16Decoder",
             Self::InitializeUtf8Encoder => "TEXT_ENCODER_UTF8",
+            Self::SyncUtf8Encoding => "_jcoSyncUtf8Context",
             Self::InitializeUtf16Encoding => "_jcoUtf16EncodingContext",
             Self::InitializeWebIdlProxyCache => "_jcoWebIdlProxyCacheContext",
         }
@@ -312,6 +316,7 @@ impl RuntimeContextIntrinsic {
 
     pub(crate) fn dependencies(self) -> &'static [Self] {
         match self {
+            Self::SyncUtf8Encoding => &[Self::InitializeUtf8Encoder],
             Self::Core(context) => context.dependencies(),
             Self::Component(context) => context.dependencies(),
             Self::Waitable(context) => context.dependencies(),
@@ -350,12 +355,36 @@ impl RuntimeContextIntrinsic {
         }
     }
 
-    pub(crate) fn collect(self, contexts: &mut Vec<Self>) {
+    pub(crate) fn collect(self, contexts: &mut Vec<Self>, sync_import_leaf: bool) {
         if contexts.contains(&self) {
             return;
         }
         for dep in self.dependencies() {
-            dep.collect(contexts);
+            // Sync leaves have no subtask handles, futures, or streams. Only
+            // prune these consumer edges; a direct request still works.
+            if sync_import_leaf
+                && matches!(
+                    (self, *dep),
+                    (
+                        Self::Task(TaskContextIntrinsic::InitializeAsyncTaskClass),
+                        Self::Task(TaskContextIntrinsic::InitializeAsyncSubtaskClass)
+                            | Self::Future(FutureContextIntrinsic::InitializeFutureValueClass)
+                            | Self::Waitable(WaitableContextIntrinsic::InitializeWaitableClass)
+                    ) | (
+                        Self::Component(
+                            ComponentContextIntrinsic::InitializeComponentAsyncStateClass
+                        ),
+                        Self::Waitable(WaitableContextIntrinsic::InitializeWaitableClass)
+                    ) | (
+                        Self::Component(ComponentContextIntrinsic::StopInstance),
+                        Self::Future(FutureContextIntrinsic::InitializeFutures)
+                            | Self::Stream(StreamContextIntrinsic::InitializeStreams)
+                    )
+                )
+            {
+                continue;
+            }
+            dep.collect(contexts, sync_import_leaf);
         }
         contexts.push(self);
     }
@@ -364,6 +393,10 @@ impl RuntimeContextIntrinsic {
         let strict = args.transpile_opts.strict;
         let local = self.local_name();
         match self {
+            Self::SyncUtf8Encoding => uwriteln!(
+                output,
+                "const {local} = {{ encoder: TEXT_ENCODER_UTF8, bytes: undefined, busy: false }};"
+            ),
             Self::Core(context) => context.render(output, args),
             Self::Component(context) => context.render(output, args),
             Self::Waitable(context) => context.render(output, args),
@@ -501,6 +534,7 @@ impl ExternalRuntime {
         output: &mut Source,
         intrinsics: &BTreeSet<Intrinsic>,
         base: &str,
+        sync_import_leaf: bool,
     ) {
         let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
         for (intrinsic, import) in Self::imports(intrinsics) {
@@ -515,7 +549,7 @@ impl ExternalRuntime {
             }
             let mut contexts = Vec::new();
             if let Some(context) = import.context {
-                context.collect(&mut contexts);
+                context.collect(&mut contexts, sync_import_leaf);
             }
             for initializer in contexts
                 .into_iter()
@@ -822,7 +856,7 @@ pub(crate) fn uses_context(
     for intrinsic in intrinsics {
         if let Some(context) = ExternalRuntime::import(*intrinsic).and_then(|import| import.context)
         {
-            context.collect(&mut contexts);
+            context.collect(&mut contexts, false);
         }
     }
     contexts.contains(&requested)
@@ -862,7 +896,7 @@ impl IntrinsicRuntime for ExternalRuntime {
         let mut contexts = Vec::new();
         for (_, import) in imports {
             if let Some(context) = import.context {
-                context.collect(&mut contexts);
+                context.collect(&mut contexts, args.sync_import_leaf);
             }
         }
         for context in contexts {
@@ -980,7 +1014,7 @@ mod tests {
         assert!(!source.contains("function rscTableGet("));
         assert!(!source.contains("_jcoRuntimeProvider"));
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert_eq!(
             imports
                 .matches("transferBorrow as resourceTransferBorrow")

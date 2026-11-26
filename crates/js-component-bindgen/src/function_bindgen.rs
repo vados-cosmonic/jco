@@ -169,6 +169,10 @@ pub struct FunctionBindgen<'a> {
     #[builder(default)]
     pub skip_fn_call_task_management: bool,
 
+    /// The checked synchronous adapter keeps the caller active across this synchronous host import.
+    #[builder(default)]
+    pub(crate) direct_sync_import: bool,
+
     /// Associate a generated host invocation with its private runtime task.
     #[builder(default)]
     pub track_call: bool,
@@ -1117,7 +1121,7 @@ impl Bindgen for FunctionBindgen<'_> {
         results: &mut Vec<String>,
     ) {
         self.validate_task_management();
-        let task_managed = !self.skip_fn_call_task_management;
+        let task_managed = !self.skip_fn_call_task_management && !self.direct_sync_import;
         if !task_managed {
             assert!(
                 !instruction_requires_task_runtime(inst),
@@ -1955,6 +1959,9 @@ impl Bindgen for FunctionBindgen<'_> {
                             "await ",
                             Intrinsic::String(StringIntrinsic::Utf8EncodeAsync),
                         ),
+                        (StringEncoding::UTF8, false) if self.direct_sync_import => {
+                            ("", Intrinsic::String(StringIntrinsic::EncodeSyncUtf8))
+                        }
                         (StringEncoding::UTF8, false) => {
                             ("", Intrinsic::String(StringIntrinsic::Utf8Encode))
                         }
@@ -2016,14 +2023,15 @@ impl Bindgen for FunctionBindgen<'_> {
                 uwriteln!(
                     self.src,
                     r#"
-                    if (ptr{tmp} > {memory}.buffer.byteLength || len{tmp} > Math.floor(({memory}.buffer.byteLength - ptr{tmp}) / {unit_size})) {{
+                    var buffer{tmp} = {memory}.buffer;
+                    if (ptr{tmp} + len{tmp} * {unit_size} > buffer{tmp}.byteLength) {{
                         throw new {runtime_error}('string pointer/length out of bounds of memory');
                     }}
                 "#
                 );
 
                 let buffer = format!(
-                    "new Uint{}Array({memory}.buffer, ptr{tmp}, len{tmp})",
+                    "new Uint{}Array(buffer{tmp}, ptr{tmp}, len{tmp})",
                     if self.encoding == StringEncoding::UTF16 {
                         "16"
                     } else {
@@ -2031,6 +2039,9 @@ impl Bindgen for FunctionBindgen<'_> {
                     },
                 );
                 let decode = match decode_utf8 {
+                    Some(decode_utf8) if self.direct_sync_import => {
+                        format!("{decode_utf8}{decoder}, {buffer}, true)")
+                    }
                     Some(decode_utf8) => format!("{decode_utf8}{decoder}, {buffer})"),
                     None => format!("{decoder}.decode({buffer})"),
                 };
@@ -2679,6 +2690,8 @@ impl Bindgen for FunctionBindgen<'_> {
                           }})
                         "#,
                     )
+                } else if self.direct_sync_import {
+                    format!("{track_host_operation}() => {callee_fn_js}({callee_args_js}))")
                 } else {
                     format!("{call_prefix}{callee_fn_js}({callee_args_js})")
                 };
@@ -2689,7 +2702,10 @@ impl Bindgen for FunctionBindgen<'_> {
                     self.generate_result_assignment_lhs(fn_wasm_result_count, results, is_async)
                 };
                 uwriteln!(self.src, "{vars_init}");
-                let borrows = if !task_managed && self.clear_resource_borrows {
+                let borrows = if self.direct_sync_import && self.clear_resource_borrows {
+                    uwriteln!(self.src, "try {{");
+                    None
+                } else if !task_managed && self.clear_resource_borrows {
                     let queue =
                         self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows));
                     let borrows = format!("borrows{}", self.tmp());
@@ -2718,6 +2734,19 @@ impl Bindgen for FunctionBindgen<'_> {
                                   {call_err_cleanup}
                               }}
                             "#
+                            );
+                        } else if self.direct_sync_import {
+                            // A host exception rejects the enclosing guest task even
+                            // when guest Wasm catches the exception and keeps running.
+                            uwriteln!(
+                                self.src,
+                                "try {{
+                                {assignment_lhs}{call};
+                            }} catch (err) {{
+                                {get_component_state}{component_idx_expr}).markTrapped(err);
+                                {current_task_get_fn}{component_idx_expr})?.task.reject(err);
+                                throw err;
+                            }}"
                             );
                         } else {
                             uwriteln!(self.src, "{assignment_lhs}{call};");
@@ -2753,7 +2782,7 @@ impl Bindgen for FunctionBindgen<'_> {
                         } else {
                             self.intrinsic_call_prefix(Intrinsic::GetErrorPayload)
                         };
-                        let trap_check = task_managed.then(|| format!(
+                        let trap_check = (task_managed || self.direct_sync_import).then(|| format!(
                             "if ({get_component_state}{component_idx_expr}).markTrapped(e)) {{ throw e; }}"
                         ));
                         uwriteln!(
@@ -2792,11 +2821,21 @@ impl Bindgen for FunctionBindgen<'_> {
                 // A host can stop the instance during an import, including an
                 // import returning a WIT result whose catch handler wraps errors.
                 // Do not lower that result or return to guest code afterwards.
-                if task_managed {
-                    uwriteln!(
-                        self.src,
-                        "{get_component_state}{component_idx_expr}).throwIfInterrupted();"
-                    );
+                if task_managed || self.direct_sync_import {
+                    let interrupted =
+                        format!("{get_component_state}{component_idx_expr}).throwIfInterrupted();");
+                    if self.direct_sync_import {
+                        // markTrapped records the trap on the store before calling observers.
+                        // Resolve the interrupted component only on the exceptional path.
+                        let store = self
+                            .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+                        uwriteln!(
+                            self.src,
+                            "if ({store}.stopped || {store}.error !== null) {{ {interrupted} }}"
+                        );
+                    } else {
+                        uwriteln!(self.src, "{interrupted}");
+                    }
                 }
 
                 // TODO: if it was an async call, we may not be able to clear the borrows yet.
@@ -2808,15 +2847,22 @@ impl Bindgen for FunctionBindgen<'_> {
                 // After a high level call, we need to deactivate the component resource borrows.
                 if self.clear_resource_borrows {
                     let symbol_resource_handle = self.intrinsic(Intrinsic::SymbolResourceHandle);
-                    let cur_resource_borrows = if let Some(borrows) = borrows {
-                        uwriteln!(self.src, "}} finally {{");
-                        borrows
+                    if self.direct_sync_import {
+                        uwriteln!(self.src, "}} finally {{
+                            if (_jcoBorrowWrappers) for (const rsc of _jcoBorrowWrappers) rsc[{symbol_resource_handle}] = undefined;
+                        }}");
                     } else {
-                        self.intrinsic(Intrinsic::Resource(ResourceIntrinsic::CurResourceBorrows))
-                    };
-                    uwriteln!(
-                        self.src,
-                        "for (const entry of {cur_resource_borrows}) {{
+                        let cur_resource_borrows = if let Some(borrows) = borrows {
+                            uwriteln!(self.src, "}} finally {{");
+                            borrows
+                        } else {
+                            self.intrinsic(Intrinsic::Resource(
+                                ResourceIntrinsic::CurResourceBorrows,
+                            ))
+                        };
+                        uwriteln!(
+                            self.src,
+                            "for (const entry of {cur_resource_borrows}) {{
                             const rsc = entry.rsc ?? entry;
                             if (entry.drop) {{
                                 if (rsc[{symbol_resource_handle}]) {{
@@ -2825,11 +2871,12 @@ impl Bindgen for FunctionBindgen<'_> {
                             }}
                             rsc[{symbol_resource_handle}] = undefined;
                         }}"
-                    );
-                    if task_managed {
-                        uwriteln!(self.src, "{cur_resource_borrows} = [];");
-                    } else {
-                        uwriteln!(self.src, "}}");
+                        );
+                        if task_managed {
+                            uwriteln!(self.src, "{cur_resource_borrows} = [];");
+                        } else {
+                            uwriteln!(self.src, "}}");
+                        }
                     }
                     self.clear_resource_borrows = false;
                 }
@@ -3172,20 +3219,38 @@ impl Bindgen for FunctionBindgen<'_> {
                                 self.intrinsic(Intrinsic::SymbolResourceHandle);
                             // Canonical ABI `lift_borrow` / `lift_own`: an index with no live
                             // entry in this table traps before anything is looked up or removed.
-                            let rsc_table_get = self.intrinsic_call(
-                                Intrinsic::Resource(ResourceIntrinsic::ResourceTableGet),
+                            let direct_borrow = self.direct_sync_import && !is_own;
+                            let (read_entry, rep_field) = if direct_borrow {
+                                (ResourceIntrinsic::ResourceTableRep, "")
+                            } else {
+                                (ResourceIntrinsic::ResourceTableGet, ".rep")
+                            };
+                            let entry = self.intrinsic_call(
+                                Intrinsic::Resource(read_entry),
                                 &format!("handleTable{tid}, {handle}"),
                             );
 
+                            let table = format!("captureTable{rid}");
+                            let mut lookup = format!("{table}.get({rep})");
+                            let track_wrapper = if direct_borrow {
+                                lookup =
+                                    format!("{table}.slots ? {table}.slots[{handle}] : {lookup}");
+                                format!(
+                                    "var _jcoBorrowWrappers; (_jcoBorrowWrappers ??= []).push({rsc});"
+                                )
+                            } else {
+                                String::new()
+                            };
                             uwriteln!(
                                 self.src,
                                 r#"
-                                  var {rep} = {rsc_table_get}.rep;
-                                  var {rsc} = captureTable{rid}.get({rep});
+                                  var {rep} = {entry}{rep_field};
+                                  var {rsc} = {lookup};
                                   if (!{rsc}) {{
                                       {rsc} = Object.create({local_name}.prototype);
                                       Object.defineProperty({rsc}, {symbol_resource_handle}, {{ writable: true, value: {handle} }});
                                       Object.defineProperty({rsc}, {symbol_resource_rep}, {{ writable: true, value: {rep} }});
+                                      {track_wrapper}
                                   }}
                                 "#,
                             );
@@ -3203,7 +3268,11 @@ impl Bindgen for FunctionBindgen<'_> {
                         }
 
                         // Borrow handles are tracked to release after the call by CallInterface.
-                        if !is_own {
+                        if !is_own && self.direct_sync_import {
+                            // A captured host object already is the resource. Only a
+                            // wrapper minted by this lift has a handle to invalidate.
+                            self.clear_resource_borrows = true;
+                        } else if !is_own {
                             let cur_resource_borrows = self.intrinsic(Intrinsic::Resource(
                                 ResourceIntrinsic::CurResourceBorrows,
                             ));
@@ -3360,19 +3429,42 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // resource was constructed externally.
                                 let symbol_resource_rep =
                                     self.intrinsic(Intrinsic::SymbolResourceRep);
+                                // A leaf without resource transfers never consults the
+                                // representation history used by transfer_borrow.
+                                let track_rep = if self.direct_sync_import {
+                                    ", false"
+                                } else {
+                                    ""
+                                };
                                 let create_own_fn = self.intrinsic_call(
                                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
-                                    &format!("handleTable{tid}, rep"),
+                                    &format!("handleTable{tid}, rep{track_rep}"),
                                 );
 
+                                let capture = if self.direct_sync_import {
+                                    // Only truthy captures are deleted by resource.drop.
+                                    // Keep the rep map for a falsy host value accepted by
+                                    // a custom Symbol.hasInstance or for a host-supplied rep.
+                                    format!("
+                                        const explicitRep = {op}[{symbol_resource_rep}] ?? null;
+                                        const rep = (explicitRep === null ? ++captureCnt{rid} : explicitRep) >>> 0;
+                                        if (explicitRep !== null || rep === 0 || !{op}) captureTable{rid}.byRep();
+                                        const slots = captureTable{rid}.slots;
+                                        if (!slots) captureTable{rid}.set(rep, {op});
+                                        {handle} = {create_own_fn};
+                                        if (slots) slots[{handle}] = {op};")
+                                } else {
+                                    format!("
+                                        const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
+                                        captureTable{rid}.set(rep, {op});
+                                        {handle} = {create_own_fn};")
+                                };
                                 uwriteln!(
                                     self.src,
                                     r#"
                                       var {handle} = {op}[{symbol_resource_handle}];
                                       if (!{handle}) {{
-                                          const rep = ({op}[{symbol_resource_rep}] ?? ++captureCnt{rid}) >>> 0;
-                                          captureTable{rid}.set(rep, {op});
-                                          {handle} = {create_own_fn};
+                                          {capture}
                                       }}
                                     "#
                                 );

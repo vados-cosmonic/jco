@@ -328,6 +328,43 @@ pub struct TranspileBindgenResult {
     pub inferred_async_exports: HashSet<String>,
 }
 
+/// A sync-only leaf has no guest-visible subtask handle, task-local intrinsic,
+/// or cross-component borrowing scope. The export task owns its lifetime.
+fn is_sync_import_leaf(component: &ComponentTranslation, types: &ComponentTypes) -> bool {
+    component.component.num_runtime_component_instances == 1
+        && component.component.num_future_tables == 0
+        && component.component.num_stream_tables == 0
+        && component.component.num_error_context_tables == 0
+        && component.component.num_resources as usize
+            == component.component.imported_resources.len()
+        && component
+            .component
+            .unsafe_intrinsics
+            .iter()
+            .all(|ty| ty.is_none())
+        && component
+            .component
+            .export_items
+            .values()
+            .all(|export| match export {
+                Export::LiftedFunction { ty, .. } => !types[*ty].async_,
+                _ => true,
+            })
+        && component
+            .component
+            .options
+            .values()
+            .all(|opts| !opts.async_)
+        && component
+            .trampolines
+            .values()
+            .all(|trampoline| match trampoline {
+                Trampoline::LowerImport { lower_ty, .. } => !types[*lower_ty].async_,
+                Trampoline::ResourceDrop { .. } => true,
+                _ => false,
+            })
+}
+
 #[allow(clippy::too_many_arguments)]
 pub fn transpile_bindgen(
     name: &str,
@@ -339,6 +376,7 @@ pub fn transpile_bindgen(
     id: WorldId,
     opts: TranspileOpts,
     cm_runtime_es_module: Option<&str>,
+    specialize_sync_imports: bool,
     call_tracking: bool,
     typed_error_classes: bool,
     files: &mut Files,
@@ -447,6 +485,12 @@ pub fn transpile_bindgen(
         err_ctx_tables,
         init_current_module: None,
         context_components: Default::default(),
+        direct_sync_imports: specialize_sync_imports
+            && !opts.guest
+            && !call_tracking
+            && matches!(opts.import_bindings, None | Some(BindingsMode::Js))
+            && matches!(opts.async_mode, None | Some(AsyncMode::Sync))
+            && is_sync_import_leaf(component, types),
         async_analysis: Default::default(),
     };
     instantiator
@@ -462,9 +506,13 @@ pub fn transpile_bindgen(
     instantiator.bindgen.src.js(&instantiator.src.js);
     instantiator.bindgen.src.js_init(&instantiator.src.js_init);
 
-    instantiator
-        .bindgen
-        .finish_component(name, files, &opts, source::Source::default());
+    instantiator.bindgen.finish_component(
+        name,
+        files,
+        &opts,
+        source::Source::default(),
+        instantiator.direct_sync_imports,
+    );
 
     let exports = instantiator
         .bindgen
@@ -593,6 +641,7 @@ impl JsBindgen<'_> {
         files: &mut Files,
         opts: &TranspileOpts,
         intrinsic_definitions: source::Source,
+        sync_import_leaf: bool,
     ) {
         // An empty component has no runtime state to stop. Keep its utility a
         // no-op so it does not acquire an otherwise-unused external runtime.
@@ -714,7 +763,8 @@ impl JsBindgen<'_> {
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
             .transpile_opts(opts)
-            .call_tracking(self.call_tracking);
+            .call_tracking(self.call_tracking)
+            .sync_import_leaf(sync_import_leaf);
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
@@ -734,7 +784,12 @@ impl JsBindgen<'_> {
                 .all_intrinsics
                 .contains(&Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         if let Some(base) = self.cm_runtime_es_module {
-            ExternalRuntime.render_imports(&mut output, &self.all_intrinsics, base);
+            ExternalRuntime.render_imports(
+                &mut output,
+                &self.all_intrinsics,
+                base,
+                sync_import_leaf,
+            );
         }
 
         // Write out instantiation
@@ -1120,7 +1175,8 @@ pub(crate) struct Instantiator<'a, 'b> {
     exports: BTreeMap<String, WorldKey>,
     imports: BTreeMap<String, WorldKey>,
     /// Instance flags which references have been emitted externally at least once.
-    used_instance_flags: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
+    /// Maps each flags cell to whether a core module imports it as a Wasm global.
+    used_instance_flags: RefCell<BTreeMap<RuntimeComponentInstanceIndex, bool>>,
     defined_resource_classes: BTreeSet<String>,
     async_imports: HashSet<String>,
     async_exports: HashSet<String>,
@@ -1154,6 +1210,7 @@ pub(crate) struct Instantiator<'a, 'b> {
     /// Wasm, including core start functions and resource destructors.
     context_components: RefCell<BTreeSet<RuntimeComponentInstanceIndex>>,
 
+    direct_sync_imports: bool,
     async_analysis: AsyncAnalysis,
 }
 
@@ -1783,22 +1840,40 @@ impl<'a> Instantiator<'a, '_> {
             );
             if !self.resources_initialized.contains_key(&resource_idx) {
                 let ridx = resource_idx.as_u32();
+                let captures = if self.direct_sync_imports {
+                    let class = self.bindgen.intrinsic(Intrinsic::Resource(
+                        ResourceIntrinsic::IndexedResourceCaptures,
+                    ));
+                    format!("new {class}(handleTable{rtid})")
+                } else {
+                    "new Map()".into()
+                };
                 uwriteln!(
                     self.src.js,
                     r#"
-                      const captureTable{ridx} = new Map();
+                      const captureTable{ridx} = {captures};
                       let captureCnt{ridx} = 0;
                     "#
                 );
                 self.resources_initialized.insert(resource_idx, true);
+            } else if self.direct_sync_imports {
+                // Two tables can refer to the same resource. Handles only identify
+                // their own table, while a capture by rep is shared between both.
+                let ridx = resource_idx.as_u32();
+                uwriteln!(self.src.js, "captureTable{ridx}.byRep();");
             }
             let store = self
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
             let ridx = resource_idx.as_u32();
+            let captures = if self.direct_sync_imports {
+                format!("get captures() {{ return captureTable{ridx}.byRep(); }}")
+            } else {
+                format!("captures: captureTable{ridx}")
+            };
             uwriteln!(
                 self.src.js,
-                "{store}.resourceTables.push({{ handles: handleTable{rtid}, captures: captureTable{ridx} }});"
+                "{store}.resourceTables.push({{ handles: handleTable{rtid}, {captures} }});"
             );
         } else {
             // non imported
@@ -1824,13 +1899,16 @@ impl<'a> Instantiator<'a, '_> {
             .insert(resource_table_idx, true);
     }
 
+    fn instance_flags_name(&mut self, index: u32) -> String {
+        self.bindgen
+            .local_names
+            .get_or_create(("instance flags", index), &format!("instanceFlags{index}"))
+            .0
+            .to_owned()
+    }
+
     fn instance_flags(&mut self) {
-        let used_instance_flags = self
-            .used_instance_flags
-            .borrow()
-            .iter()
-            .copied()
-            .collect::<Vec<_>>();
+        let used_instance_flags = self.used_instance_flags.borrow().clone();
         if used_instance_flags.is_empty() {
             return;
         }
@@ -1839,20 +1917,37 @@ impl<'a> Instantiator<'a, '_> {
             ComponentIntrinsic::GlobalInstanceFlagsMap,
         ));
         let mut instance_flag_defs = String::new();
-        for used in used_instance_flags {
+        for (used, imported_by_wasm) in used_instance_flags {
             let i = used.as_u32();
             // As of wasmtime-environ 47 the per-instance flags global holds a
             // single boolean `may_leave` flag, so initialize it to `1`.
+            let cell = if imported_by_wasm || !self.direct_sync_imports {
+                "new WebAssembly.Global({ value: \"i32\", mutable: true }, 1)"
+            } else {
+                "{ value: 1 }"
+            };
+            let flags = self.instance_flags_name(i);
+            uwriteln!(&mut instance_flag_defs, "const {flags} = {cell};");
             uwriteln!(
                 &mut instance_flag_defs,
-                "const instanceFlags{i} = new WebAssembly.Global({{ value: \"i32\", mutable: true }}, 1);",
+                "{instance_flags_map}.set({i}, {flags});",
             );
-            uwriteln!(
-                &mut instance_flag_defs,
-                "{instance_flags_map}.set({i}, instanceFlags{i});",
-            );
+            if let Some(tasks) = self.bindgen.local_names.try_get(("sync import tasks", i)) {
+                // The runtime pushes and pops the same stack for this instance.
+                let tasks = tasks.to_owned();
+                let task_map = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                    AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+                ));
+                uwriteln!(&mut instance_flag_defs, "const {tasks} = [];");
+                uwriteln!(&mut instance_flag_defs, "{task_map}.set({i}, {tasks});");
+            }
         }
-        self.src.js_init.prepend_str(&instance_flag_defs);
+        if self.direct_sync_imports {
+            // Both module and factory trampolines close over these cells.
+            self.src.js.prepend_str(&instance_flag_defs);
+        } else {
+            self.src.js_init.prepend_str(&instance_flag_defs);
+        }
     }
 
     /// Return the component instance whose canonical ABI `may_leave` flag a
@@ -3111,6 +3206,58 @@ impl<'a> Instantiator<'a, '_> {
 
                 let func_ty = self.types.index(*lower_ty);
 
+                if self.direct_sync_imports {
+                    // The generated adapter already produces the core Wasm return value.
+                    let lower = self.bindgen.intrinsic_call_prefix(Intrinsic::AsyncTask(
+                        AsyncTaskIntrinsic::LowerSyncImport,
+                    ));
+                    let tasks = self
+                        .bindgen
+                        .local_names
+                        .get_or_create(
+                            ("sync import tasks", component_idx),
+                            &format!("syncImportTasks{component_idx}"),
+                        )
+                        .0
+                        .to_owned();
+                    let flags = self.instance_flags_name(component_idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    let arity = self.types[canon_opts.core_type]
+                        .unwrap_func()
+                        .params()
+                        .len();
+                    let params = (0..arity)
+                        .map(|idx| format!("arg{idx}"))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    // Give the engine a fixed-arity, monomorphic call site. A core
+                    // start function can call imports before the first export task.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(canon_opts.instance)
+                        .or_insert(false);
+                    uwriteln!(
+                        self.src.js,
+                        r#"
+                        function trampoline{i}({params}) {{
+                            try {{
+                                if ({flags}.value !== 1)
+                                    throw new {runtime_error}('cannot leave component instance');
+                                if ({tasks}.length)
+                                    return _trampoline{i}({params});
+                                return {lower}{component_idx}, _trampoline{i}, {params});
+                            }} catch (err) {{
+                                throw {record}{component_idx}, err, false);
+                            }}
+                        }}
+                    "#
+                    );
+                    return;
+                }
+
                 // Build list of lift functions for the params of the lowered import
                 let param_types = &self.types.index(func_ty.params).types;
                 let param_lift_fns_js =
@@ -3583,6 +3730,7 @@ impl<'a> Instantiator<'a, '_> {
 
             Trampoline::ResourceDrop {
                 ty: resource_table_ty_idx,
+                instance,
                 ..
             } => {
                 self.ensure_resource_table(*resource_table_ty_idx);
@@ -3640,11 +3788,20 @@ impl<'a> Instantiator<'a, '_> {
                     if let Some(imported_resource_local_name) =
                         self.bindgen.local_names.try_get(resource_ty)
                     {
+                        let table = format!("captureTable{rid}");
+                        let mut lookup = format!("{table}.get(handleEntry.rep)");
+                        let mut release = format!("{table}.delete(handleEntry.rep);");
+                        if self.direct_sync_imports {
+                            lookup = format!("{table}.slots ? {table}.slots[handle] : {lookup}");
+                            release = format!(
+                                "if ({table}.slots) {table}.slots[handle] = undefined; else {release}"
+                            );
+                        }
                         format!(
                                             "
-                            const rsc = captureTable{rid}.get(handleEntry.rep);
+                            const rsc = {lookup};
                             if (rsc) {{
-                                captureTable{rid}.delete(handleEntry.rep);
+                                {release}
                                 {store}.disposed.add(rsc);
                                 if (rsc[{symbol_dispose}]) rsc[{symbol_dispose}]();
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
@@ -3664,16 +3821,26 @@ impl<'a> Instantiator<'a, '_> {
                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                     &format!("handleTable{tid}, handle"),
                 );
-                uwrite!(
-                    self.src.js,
-                    "function trampoline{i}(handle) {{
-                        const handleEntry = {rsc_table_remove};
-                        if (handleEntry.own) {{
-                            {dtor}
-                        }}
-                    }}
-                    ",
+                let drop = format!(
+                    "const handleEntry = {rsc_table_remove};
+                    if (handleEntry.own) {{ {dtor} }}"
                 );
+                if self.direct_sync_imports {
+                    let idx = instance.as_u32();
+                    let flags = self.instance_flags_name(idx);
+                    let runtime_error = self.bindgen.intrinsic(Intrinsic::WebAssemblyRuntimeError);
+                    let record = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                        ComponentIntrinsic::RecordTrap,
+                    ));
+                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{
+                        try {{
+                            if ({flags}.value !== 1) throw new {runtime_error}('cannot leave component instance');
+                            {drop}
+                        }} catch (err) {{ throw {record}{idx}, err, true); }}
+                    }}");
+                } else {
+                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{ {drop} }}");
+                }
             }
 
             Trampoline::ResourceTransferOwn => {
@@ -4064,16 +4231,33 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, true);
                 uwriteln!(self.src.js, "let realloc{idx};");
-                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
-                let realloc = guard(
-                    self,
-                    &format!(
-                        "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize) >>> 0"
-                    ),
+                let call = format!(
+                    "(oldPtr, oldSize, align, newSize) => {def}(oldPtr, oldSize, align, newSize)"
                 );
+                let realloc = if let Some(owner) = owner.filter(|_| self.direct_sync_imports) {
+                    // This leaf cannot access context slots. Every path out of it checks
+                    // the same flag, including adapters that import it as a Wasm global.
+                    self.used_instance_flags
+                        .borrow_mut()
+                        .entry(owner)
+                        .or_insert(false);
+                    let flags = self.instance_flags_name(owner.as_u32());
+                    self.bindgen.intrinsic_call(
+                        AsyncTaskIntrinsic::GuardSyncRealloc.into(),
+                        &format!("{flags}, {call}"),
+                    )
+                } else {
+                    guard(self, &format!("{call} >>> 0"))
+                };
                 uwriteln!(self.src.js_init, "realloc{idx} = {realloc};");
+                // All canonical options and guest functions of this leaf are synchronous.
+                // Only async bindings ever reference the companion allocator.
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
                 let realloc_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -4098,9 +4282,12 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, false);
                 uwriteln!(self.src.js, "let postReturn{idx};");
-                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 let post_return = guard(self, &def);
                 uwriteln!(self.src.js_init, "postReturn{idx} = {post_return};");
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
                 // at all but has instead been converted to JS (see 'flavorful' test in test/runtime.js)
                 let post_return_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -5732,6 +5919,7 @@ impl<'a> Instantiator<'a, '_> {
             resource_map,
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
+            direct_sync_import: for_import && self.direct_sync_imports,
             track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
@@ -5877,10 +6065,16 @@ impl<'a> Instantiator<'a, '_> {
     fn augmented_import_def(&mut self, def: &core::AugmentedImport<'_>) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => {
-                let is_non_suspending_function =
-                    self.core_def_is_function(def) && !self.core_def_may_suspend(def);
                 let value = self.core_def(def);
-                if is_non_suspending_function {
+                // Only callback dispatch and cross-component calls read the marker. Keep it
+                // on imports exposed to custom core instantiators as well.
+                let mark_functions = !self.direct_sync_imports
+                    || self.bindgen.opts.instantiation_mode.is_some()
+                    || self.bindgen.opts.asmjs;
+                if mark_functions
+                    && self.core_def_is_function(def)
+                    && !self.core_def_may_suspend(def)
+                {
                     format!("Object.assign({value}, {{ _jcoMaySuspend: false }})")
                 } else {
                     value
@@ -6014,7 +6208,18 @@ impl<'a> Instantiator<'a, '_> {
                 let Some(instance) = self.trampoline_may_leave_instance(trampoline) else {
                     return guard_trap(self, name);
                 };
-                self.used_instance_flags.borrow_mut().insert(instance);
+                self.used_instance_flags
+                    .borrow_mut()
+                    .entry(instance)
+                    .or_insert(false);
+                if self.direct_sync_imports
+                    && matches!(
+                        trampoline,
+                        Trampoline::LowerImport { .. } | Trampoline::ResourceDrop { .. }
+                    )
+                {
+                    return name;
+                }
                 if Self::trampoline_checks_may_leave_internally(trampoline) {
                     guard_trap(self, name)
                 } else {
@@ -6027,8 +6232,8 @@ impl<'a> Instantiator<'a, '_> {
             }
             CoreDef::InstanceFlags(i) => {
                 // SAFETY: short-lived borrow-mut.
-                self.used_instance_flags.borrow_mut().insert(*i);
-                format!("instanceFlags{}", i.as_u32())
+                self.used_instance_flags.borrow_mut().insert(*i, true);
+                self.instance_flags_name(i.as_u32())
             }
             CoreDef::UnsafeIntrinsic(ui) => {
                 use wasmtime_environ::component::UnsafeIntrinsic;
