@@ -255,6 +255,43 @@ adapter that imports the sync entry point.
 <link rel="modulepreload" href="/runtime/intrinsics/sync.js">
 ```
 
+### Loading explicit instantiation bindings in a browser
+
+With `jco transpile --instantiation async`, the application supplies the host
+imports and can compile the emitted core Wasm files while the browser loads
+the generated JS. This works with the internal Oxc bundle and with the external
+runtime. It can save a network round trip when JS dependencies delay discovery
+of the guest Wasm.
+
+For example, the C table demo emits four core files. Obtain the filenames from
+your build output and serve them as `application/wasm`. Here the generated
+adapter maps its host imports to `../../../host/web-host.js`.
+
+```js
+import * as host from "./host/web-host.js";
+
+const entry = new URL("./c/table-update/explicit/table_update.js", import.meta.url);
+const names = ["table_update.core.wasm", "table_update.core2.wasm",
+    "table_update.core3.wasm", "table_update.core4.wasm"];
+
+// Start both operations now. Waiting for the JS import before fetching the
+// cores would put runtime dependency loading on the critical path again.
+const [bindings, compiled] = await Promise.all([
+    import(entry.href),
+    Promise.all(names.map(async (name) => {
+        const response = await fetch(new URL(name, entry));
+        if (!response.ok) throw new Error(`Failed to load ${name} (HTTP ${response.status})`);
+        return [name, await WebAssembly.compileStreaming(response)];
+    })),
+]);
+const cores = new Map(compiled);
+const guest = await bindings.instantiate((name) => {
+    if (!cores.has(name)) throw new Error(`Missing core module ${name}`);
+    return cores.get(name);
+}, { "../../../host/web-host.js": host });
+guest.run(2000);
+```
+
 ### Building profiles
 
 `pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
