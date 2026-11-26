@@ -292,6 +292,15 @@ const guest = await bindings.instantiate((name) => {
 guest.run(2000);
 ```
 
+When an application bundles several explicit-instantiation entries together,
+copy **every** emitted core beside its entry. The example still uses the
+component's original core filenames. The application bundler can place shared
+runtime code in a separate JS chunk. Use its build manifest to obtain the
+chunk URL for the selected entry and add a `modulepreload` link when starting
+the entry import and core compilation. Otherwise the browser learns the URL
+only after it receives the entry JS. One document can load multiple
+components from the build and reuse that shared module.
+
 ### Building profiles
 
 `pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
