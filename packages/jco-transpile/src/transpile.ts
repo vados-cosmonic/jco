@@ -449,10 +449,18 @@ export async function transpileBytes(
 
     // Perform minification if configured
     if (opts.minify && jsFile) {
+        // The standard checked package exports an empty logger. Drop labeled calls
+        // before Oxc discards their labels, including the work to build log arguments.
+        // A custom provider can log, and asm.js includes code from the guest itself.
+        const stripCheckedDiagnostics =
+            !opts.js &&
+            opts.cmRuntimeEsModule === '@bytecodealliance/jco-cm-runtime' &&
+            opts.runtimeProfile !== 'debug';
         const minified = await minify('component.js', Buffer.from(jsFile[1]).toString('utf8'), {
             module: true,
             compress: {
                 target: 'es2019',
+                dropLabels: stripCheckedDiagnostics ? ['DEBUG'] : [],
             },
             mangle: {
                 keepNames: true,

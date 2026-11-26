@@ -137,7 +137,11 @@ or for bundled runtimes when an instance is created with the `debug` option.
 The `checked` profile omits runtime log calls even when `JCO_DEBUG` is set.
 The exported `debugLog` is an empty function in the checked profile. When a
 bundler includes the checked runtime, it can remove calls to that function
-from the generated bindings as well.
+from the generated bindings as well. With `--minify`, Jco removes labeled
+diagnostic calls and their arguments from generated ES module bindings that name
+`@bytecodealliance/jco-cm-runtime` directly. If an import map selects the
+provider at deployment time and it may log, generate bindings against a custom
+module base or the debug entry point to keep those calls.
 
 ### Bindings that bundle the runtime
 
