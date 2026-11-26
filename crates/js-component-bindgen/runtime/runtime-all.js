@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 5a61b90544288901f77e37a9ee31245df4a1a6a3
+// generated from commit d840e94f73dd3764c27f580d131b6431d7b993f8
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -921,7 +921,7 @@ function defineComponentAsyncState() {
 		};
 		#componentIdx;
 		#callingAsyncImport = false;
-		#syncImportWait = promiseWithResolvers();
+		#syncImportWait;
 		#lockHolderTaskID = null;
 		#lockWaiters = [];
 		#numWaitingToEnter = 0;
@@ -1015,11 +1015,11 @@ function defineComponentAsyncState() {
 		}
 		#notifySyncImportEnd() {
 			const existing = this.#syncImportWait;
-			this.#syncImportWait = promiseWithResolvers();
-			existing.resolve();
+			this.#syncImportWait = void 0;
+			existing?.resolve();
 		}
 		async waitForSyncImportCallEnd() {
-			await this.#syncImportWait.promise;
+			await (this.#syncImportWait ??= promiseWithResolvers()).promise;
 		}
 		setBackpressure(v) {
 			this.#backpressure = v;
@@ -11752,7 +11752,7 @@ function guardSyncRealloc(flags, realloc) {
 var IndexedResourceCaptures = class {
 	slots = [];
 	#handles;
-	#reps = /* @__PURE__ */ new Map();
+	#reps;
 	constructor(handles) {
 		this.#handles = handles;
 	}
@@ -11763,14 +11763,15 @@ var IndexedResourceCaptures = class {
 	* subsequent borrow or drop observes the same capture.
 	*/
 	byRep() {
+		const reps = this.#reps ??= /* @__PURE__ */ new Map();
 		if (this.slots) {
 			for (let handle = 1; handle < this.slots.length; handle++) {
 				const value = this.slots[handle];
-				if (value !== void 0) this.#reps.set(this.#handles[handle * 2 + 1] - tableOwn, value);
+				if (value !== void 0) reps.set(this.#handles[handle * 2 + 1] - tableOwn, value);
 			}
 			this.slots = void 0;
 		}
-		return this.#reps;
+		return reps;
 	}
 	get(rep) {
 		return this.byRep().get(rep);
