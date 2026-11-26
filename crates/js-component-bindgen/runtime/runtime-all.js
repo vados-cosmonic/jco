@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 4eaf47f7616996954c13c4348ee1ba603b12925f
+// generated from commit 46ef0a7db8f2242cbea4e08af20e9c334182d814
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1402,7 +1402,9 @@ function defineComponentAsyncState() {
 			return this.#suspendedThreadsByRef.size > 0 ? TICK_IDLE : TICK_DONE;
 		}
 		createWaitable(args) {
-			return new this.#context.Waitable({ target: args?.target });
+			const Waitable = this.#context.Waitable;
+			if (!Waitable) throw new TypeError("this component state does not support waitables");
+			return new Waitable({ target: args?.target });
 		}
 	};
 }
@@ -5311,7 +5313,7 @@ function defineAsyncTask() {
 			const reject = this.#rejectCompletionPromise;
 			if (this.#errored !== null) reject(this.#errored);
 			else if (this.#rejected) reject(this.#completionValue);
-			else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) this.#completionValue.resolveAsValue(resolve);
+			else if (this.#preserveFutureResult && this.#context.FutureValue && this.#completionValue instanceof this.#context.FutureValue) this.#completionValue.resolveAsValue(resolve);
 			else resolve(this.#completionValue);
 		}
 		completionPromise() {
@@ -5964,9 +5966,9 @@ function defineAsyncTask() {
 			DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
 			const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
 			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
-			const AsyncSubtask = this.#context.AsyncSubtask;
-			if (!AsyncSubtask) throw new TypeError("this task context does not support subtasks");
-			const waitable = new this.#context.Waitable({
+			const { AsyncSubtask, Waitable } = this.#context;
+			if (!AsyncSubtask || !Waitable) throw new TypeError("this task context does not support subtasks");
+			const waitable = new Waitable({
 				componentIdx: this.#componentIdx,
 				target: `subtask (internal ID [${this.#id}])`
 			});

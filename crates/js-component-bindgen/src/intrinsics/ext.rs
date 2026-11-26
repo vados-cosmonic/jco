@@ -360,11 +360,27 @@ impl RuntimeContextIntrinsic {
             return;
         }
         for dep in self.dependencies() {
-            // Only omit this edge. An operation which requests the subtask
-            // class itself still gets its constructor and all its dependencies.
+            // Sync leaves have no subtask handles, futures, or streams. Only
+            // prune these consumer edges; a direct request still works.
             if sync_import_leaf
-                && self == Self::Task(TaskContextIntrinsic::InitializeAsyncTaskClass)
-                && *dep == Self::Task(TaskContextIntrinsic::InitializeAsyncSubtaskClass)
+                && matches!(
+                    (self, *dep),
+                    (
+                        Self::Task(TaskContextIntrinsic::InitializeAsyncTaskClass),
+                        Self::Task(TaskContextIntrinsic::InitializeAsyncSubtaskClass)
+                            | Self::Future(FutureContextIntrinsic::InitializeFutureValueClass)
+                            | Self::Waitable(WaitableContextIntrinsic::InitializeWaitableClass)
+                    ) | (
+                        Self::Component(
+                            ComponentContextIntrinsic::InitializeComponentAsyncStateClass
+                        ),
+                        Self::Waitable(WaitableContextIntrinsic::InitializeWaitableClass)
+                    ) | (
+                        Self::Component(ComponentContextIntrinsic::StopInstance),
+                        Self::Future(FutureContextIntrinsic::InitializeFutures)
+                            | Self::Stream(StreamContextIntrinsic::InitializeStreams)
+                    )
+                )
             {
                 continue;
             }

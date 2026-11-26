@@ -343,13 +343,13 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::InitializeAsyncTaskClass => {
-                let subtask = if args.sync_import_leaf {
-                    ""
+                let (subtask_and_waitable, future) = if args.sync_import_leaf {
+                    ("", "")
                 } else {
-                    "AsyncSubtask, "
+                    ("AsyncSubtask, Waitable, ", ", FutureValue")
                 };
                 task_context = format!(
-                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask}Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }}"
+                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask_and_waitable}lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META{future} }}"
                 );
                 &task_context
             }

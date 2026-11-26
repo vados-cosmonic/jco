@@ -807,6 +807,10 @@ mod tests {
             );
             assert_eq!(source.contains("_jcoMaySuspend:"), markers);
             assert_eq!(source.contains("initializeAsyncSubtaskClass"), wrappers);
+            assert_eq!(source.contains("initializeFutureValueClass"), wrappers);
+            assert_eq!(source.contains("initializeFutures"), wrappers);
+            assert_eq!(source.contains("initializeStreams"), wrappers);
+            assert_eq!(source.contains("initializeWaitableClass"), wrappers);
         }
     }
 
