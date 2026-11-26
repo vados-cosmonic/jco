@@ -157,6 +157,14 @@ jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-run
 Modules of different profiles do not share state or private brands,
 so one program should import a single profile.
 
+A browser loading the checked package directly fetches each imported entry point
+and its shared dependencies. If the application knows its components at build
+time, pass their generated bindings to the same application bundler build and
+include the runtime in the bundle. The named imports let the bundler remove
+unused operations. With code splitting, components can reuse one copy of the
+shared runtime modules. If the application loads additional components later,
+their bindings must also be able to resolve every runtime export they import.
+
 ### Building profiles
 
 `pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
