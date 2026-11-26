@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 070c350c7606b5badcdaf41e2bd94a5886d8ab21
+// generated from commit 4b02f2fc1acd37233146910a4f4d3cf08648c73f
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -5334,7 +5334,7 @@ function defineAsyncTask() {
 			this.#store = store;
 			this.#id = ++store.id;
 			this.#resourceScopeId = ++this.#context.scopeCounter.value;
-			this.#context.scopeTasks.set(this.#resourceScopeId, this);
+			store.scopeTasks?.set(this.#resourceScopeId, this);
 			if (opts?.componentIdx === void 0) throw new TypeError("missing component id during task creation");
 			this.#componentIdx = opts.componentIdx;
 			this.#state = TASK_INITIAL;
@@ -5393,7 +5393,7 @@ function defineAsyncTask() {
 			if (this.#context.storeTrap.stopped) {
 				this.#resourceLenders = null;
 				this.#resourceScopeExited = true;
-				this.#context.scopeTasks.delete(this.#resourceScopeId);
+				this.#store.scopeTasks?.delete(this.#resourceScopeId);
 				return;
 			}
 			if (this.#resourceBorrowCount !== 0) throw new this.#context.RuntimeError("borrow handles still remain at the end of the call");
@@ -5405,7 +5405,7 @@ function defineAsyncTask() {
 			}
 			this.#resourceLenders = null;
 			this.#resourceScopeExited = true;
-			this.#context.scopeTasks.delete(this.#resourceScopeId);
+			this.#store.scopeTasks?.delete(this.#resourceScopeId);
 		}
 		/**
 		* Create the completion promise if it does not exist yet.
@@ -6185,7 +6185,8 @@ function initializeAsyncTaskClass(context) {
 	const AsyncTask = sharedAsyncTask ??= defineAsyncTask();
 	const store = {
 		id: 0n,
-		hostThreadID: 0
+		hostThreadID: 0,
+		scopeTasks: context.canCreateBorrowHandles === false ? void 0 : context.scopeTasks
 	};
 	/**
 	* Construct a task that uses the context.
