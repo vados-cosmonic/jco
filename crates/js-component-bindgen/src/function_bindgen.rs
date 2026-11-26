@@ -2705,6 +2705,9 @@ impl Bindgen for FunctionBindgen<'_> {
                         "#,
                     )
                 } else if self.direct_sync_import {
+                    // Reusing the caller's task saves a subtask, but host code can
+                    // still stop the instance before returning. Keep the lifecycle
+                    // check around the call, before we lower its result into Wasm.
                     format!("{track_host_operation}() => {callee_fn_js}({callee_args_js}))")
                 } else {
                     format!("{call_prefix}{callee_fn_js}({callee_args_js})")

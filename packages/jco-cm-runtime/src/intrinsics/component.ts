@@ -319,6 +319,8 @@ export function trackHostOperation<T>(
     }
     const result = operation();
     if (!isPromiseLike(result)) {
+        // The host can call stop() before returning, even through a synchronous
+        // binding. Propagate that stop before the caller lowers the result.
         if (storeTrap.stopped) {
             throw storeTrap.error;
         }
@@ -340,7 +342,8 @@ function trackHostPromise<T>(
 ): Promise<Awaited<T>> {
     storeAsyncState.pendingHostOperations++;
     const owner = componentIdx ?? -1;
-    // (allocated on first use, so a store without host work pays nothing for it)
+    // Only unsettled promises can wake a blocked guest later. Allocate the
+    // ownership map here so synchronous host calls need no scheduler bookkeeping.
     const byComponent = (storeAsyncState.hostOperationsByComponent ??= new Map());
     byComponent.set(owner, (byComponent.get(owner) ?? 0) + 1);
     let rejectStopped!: (error: unknown) => void;
