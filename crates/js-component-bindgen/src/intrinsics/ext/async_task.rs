@@ -303,8 +303,9 @@ impl TaskContextIntrinsic {
             _ => &[],
         }
     }
-    pub(crate) fn render(self, output: &mut Source, _args: &RenderIntrinsicsArgs<'_>) {
+    pub(crate) fn render(self, output: &mut Source, args: &RenderIntrinsicsArgs<'_>) {
         let local = self.local_name();
+        let task_context;
         let properties = match self {
             Self::GetCurrentThread => {
                 "lookup: _jcoComponentStateLookupContext, registers: CURRENT_TASK_META"
@@ -342,7 +343,15 @@ impl TaskContextIntrinsic {
                 "{ RuntimeError: WebAssembly.RuntimeError, lookup: _jcoComponentStateLookupContext, memories: GLOBAL_COMPONENT_MEMORY_MAP, disposeSymbol: symbolDispose }"
             }
             Self::InitializeAsyncTaskClass => {
-                "{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, AsyncSubtask, Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }"
+                let subtask = if args.sync_import_leaf {
+                    ""
+                } else {
+                    "AsyncSubtask, "
+                };
+                task_context = format!(
+                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask}Waitable, lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META, FutureValue }}"
+                );
+                &task_context
             }
             Self::CreateNewCurrentImplicitThread => {
                 "AsyncTask, AsyncThread, tasks: ASYNC_TASKS_BY_COMPONENT_IDX, taskIds: ASYNC_CURRENT_TASK_IDS, componentIdxs: ASYNC_CURRENT_COMPONENT_IDXS"
@@ -671,7 +680,7 @@ pub(crate) fn discover_dependencies(intrinsic: Intrinsic, args: &RenderIntrinsic
         && let Some(context) = import.context
     {
         let mut contexts = Vec::new();
-        context.collect(&mut contexts);
+        context.collect(&mut contexts, args.sync_import_leaf);
         if contexts.contains(&RuntimeContextIntrinsic::Task(
             TaskContextIntrinsic::ClearCurrentThread,
         )) {

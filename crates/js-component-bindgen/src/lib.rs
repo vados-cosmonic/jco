@@ -806,6 +806,7 @@ mod tests {
                 wrappers
             );
             assert_eq!(source.contains("_jcoMaySuspend:"), markers);
+            assert_eq!(source.contains("initializeAsyncSubtaskClass"), wrappers);
         }
     }
 

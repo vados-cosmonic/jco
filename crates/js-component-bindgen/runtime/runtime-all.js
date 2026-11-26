@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 0d2e3c21dd8ded58bdc6edd46e2aa15688824a2e
+// generated from commit 11f630ae62820792c9327c599f91ed79a4f21d71
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -5383,7 +5383,7 @@ function defineAsyncTask() {
 			this.#calleeIsAsync = value;
 		}
 		setParentSubtask(subtask) {
-			if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) return;
+			if (!subtask || !this.#context.AsyncSubtask || !(subtask instanceof this.#context.AsyncSubtask)) return;
 			if (this.#parentSubtask) throw new Error("parent subtask can only be set once");
 			this.#parentSubtask = subtask;
 		}
@@ -5955,11 +5955,13 @@ function defineAsyncTask() {
 			DEBUG: debugLog("[AsyncTask#createSubtask()] args", args);
 			const { componentIdx, childTask, callMetadata, fnName, isAsync, isManualAsync } = args;
 			if (!getOrCreateAsyncState(this.#context.lookup, this.#componentIdx)) throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
+			const AsyncSubtask = this.#context.AsyncSubtask;
+			if (!AsyncSubtask) throw new TypeError("this task context does not support subtasks");
 			const waitable = new this.#context.Waitable({
 				componentIdx: this.#componentIdx,
 				target: `subtask (internal ID [${this.#id}])`
 			});
-			const newSubtask = new this.#context.AsyncSubtask({
+			const newSubtask = new AsyncSubtask({
 				componentIdx,
 				childTask,
 				parentTask: this,

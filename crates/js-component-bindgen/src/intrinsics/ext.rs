@@ -355,12 +355,20 @@ impl RuntimeContextIntrinsic {
         }
     }
 
-    pub(crate) fn collect(self, contexts: &mut Vec<Self>) {
+    pub(crate) fn collect(self, contexts: &mut Vec<Self>, sync_import_leaf: bool) {
         if contexts.contains(&self) {
             return;
         }
         for dep in self.dependencies() {
-            dep.collect(contexts);
+            // Only omit this edge. An operation which requests the subtask
+            // class itself still gets its constructor and all its dependencies.
+            if sync_import_leaf
+                && self == Self::Task(TaskContextIntrinsic::InitializeAsyncTaskClass)
+                && *dep == Self::Task(TaskContextIntrinsic::InitializeAsyncSubtaskClass)
+            {
+                continue;
+            }
+            dep.collect(contexts, sync_import_leaf);
         }
         contexts.push(self);
     }
@@ -510,6 +518,7 @@ impl ExternalRuntime {
         output: &mut Source,
         intrinsics: &BTreeSet<Intrinsic>,
         base: &str,
+        sync_import_leaf: bool,
     ) {
         let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
         for (intrinsic, import) in Self::imports(intrinsics) {
@@ -524,7 +533,7 @@ impl ExternalRuntime {
             }
             let mut contexts = Vec::new();
             if let Some(context) = import.context {
-                context.collect(&mut contexts);
+                context.collect(&mut contexts, sync_import_leaf);
             }
             for initializer in contexts
                 .into_iter()
@@ -831,7 +840,7 @@ pub(crate) fn uses_context(
     for intrinsic in intrinsics {
         if let Some(context) = ExternalRuntime::import(*intrinsic).and_then(|import| import.context)
         {
-            context.collect(&mut contexts);
+            context.collect(&mut contexts, false);
         }
     }
     contexts.contains(&requested)
@@ -871,7 +880,7 @@ impl IntrinsicRuntime for ExternalRuntime {
         let mut contexts = Vec::new();
         for (_, import) in imports {
             if let Some(context) = import.context {
-                context.collect(&mut contexts);
+                context.collect(&mut contexts, args.sync_import_leaf);
             }
         }
         for context in contexts {
@@ -989,7 +998,7 @@ mod tests {
         assert!(!source.contains("function rscTableGet("));
         assert!(!source.contains("_jcoRuntimeProvider"));
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert_eq!(
             imports
                 .matches("transferBorrow as resourceTransferBorrow")

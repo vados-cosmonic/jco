@@ -140,7 +140,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert_eq!(
             source
                 .matches("const TEXT_ENCODER_UTF8 = _jcoInitializeUtf8Encoder();")
@@ -190,7 +190,7 @@ mod tests {
                 .build(),
         );
         let mut imports = Source::default();
-        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime");
+        ExternalRuntime.render_imports(&mut imports, &intrinsics, "custom-runtime", false);
         assert!(!source.contains("Initialize"));
         assert!(!source.contains("new Text"));
         assert!(!source.contains("new Uint"));

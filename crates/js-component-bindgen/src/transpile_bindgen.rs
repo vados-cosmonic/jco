@@ -506,9 +506,13 @@ pub fn transpile_bindgen(
     instantiator.bindgen.src.js(&instantiator.src.js);
     instantiator.bindgen.src.js_init(&instantiator.src.js_init);
 
-    instantiator
-        .bindgen
-        .finish_component(name, files, &opts, source::Source::default());
+    instantiator.bindgen.finish_component(
+        name,
+        files,
+        &opts,
+        source::Source::default(),
+        instantiator.direct_sync_imports,
+    );
 
     let exports = instantiator
         .bindgen
@@ -637,6 +641,7 @@ impl JsBindgen<'_> {
         files: &mut Files,
         opts: &TranspileOpts,
         intrinsic_definitions: source::Source,
+        sync_import_leaf: bool,
     ) {
         // An empty component has no runtime state to stop. Keep its utility a
         // no-op so it does not acquire an otherwise-unused external runtime.
@@ -758,7 +763,8 @@ impl JsBindgen<'_> {
             .instantiation_occurred(self.opts.instantiation_mode.is_some())
             .determinism_profile(AsyncDeterminismProfile::default())
             .transpile_opts(opts)
-            .call_tracking(self.call_tracking);
+            .call_tracking(self.call_tracking)
+            .sync_import_leaf(sync_import_leaf);
         #[cfg(feature = "external-runtime")]
         let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
         let js_intrinsics = render_intrinsics(render_args.build());
@@ -778,7 +784,12 @@ impl JsBindgen<'_> {
                 .all_intrinsics
                 .contains(&Intrinsic::WebIdl(WebIdlIntrinsic::GlobalThisIdlProxy));
         if let Some(base) = self.cm_runtime_es_module {
-            ExternalRuntime.render_imports(&mut output, &self.all_intrinsics, base);
+            ExternalRuntime.render_imports(
+                &mut output,
+                &self.all_intrinsics,
+                base,
+                sync_import_leaf,
+            );
         }
 
         // Write out instantiation
