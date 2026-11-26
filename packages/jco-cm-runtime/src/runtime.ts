@@ -163,6 +163,7 @@ export interface ResourceDestructorContext {
 
 /** Additional operations supplied by checked providers that opt into synchronous leaf adapters. */
 export interface SyncImportsModule {
+    readonly decodeSyncUtf8: LiftModule['decodeUtf8'];
     readonly lowerSyncImport: (
         context: TaskCompatImportRuntimeContext,
         componentIdx: number,

@@ -9,3 +9,6 @@ export { guardSyncRealloc } from './async-task/sync-realloc.js';
 export { tableRep } from './resource-entry.js';
 export { IndexedResourceCaptures } from './resource-captures.js';
 export { encodeSyncUtf8 } from './sync-utf8.js';
+// A synchronous string lift only needs the decoder. Importing the general lift
+// module in a browser also loads its stream, future and error-context adapters.
+export { decodeUtf8 as decodeSyncUtf8 } from './decode-utf8.js';

@@ -537,15 +537,26 @@ impl ExternalRuntime {
         sync_import_leaf: bool,
     ) {
         let mut modules = BTreeMap::<&str, BTreeSet<(&str, &str)>>::new();
+        let uses_sync_host_adapter = sync_import_leaf
+            && intrinsics.contains(&Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerSyncImport));
         for (intrinsic, import) in Self::imports(intrinsics) {
             if matches!(
                 import.kind,
                 RuntimeImportKind::Call | RuntimeImportKind::Value
             ) {
+                // The checked sync entry already serves the host adapter. Reuse it for UTF-8
+                // so a string parameter alone does not import the asynchronous lifting runtime.
+                let (suffix, export) = if uses_sync_host_adapter
+                    && matches!(intrinsic, Intrinsic::Lift(LiftIntrinsic::DecodeUtf8))
+                {
+                    ("intrinsics/sync", "decodeSyncUtf8")
+                } else {
+                    (import.suffix, import.export)
+                };
                 modules
-                    .entry(import.suffix)
+                    .entry(suffix)
                     .or_default()
-                    .insert((import.export, intrinsic.name()));
+                    .insert((export, intrinsic.name()));
             }
             let mut contexts = Vec::new();
             if let Some(context) = import.context {
@@ -984,6 +995,26 @@ mod tests {
     use super::*;
     use crate::TranspileOpts;
     use crate::intrinsics::{RenderIntrinsicsArgs, render_intrinsics, resource::ResourceIntrinsic};
+
+    #[test]
+    fn synchronous_host_adapter_imports_decoder_without_general_lifts() {
+        let decode = Intrinsic::Lift(LiftIntrinsic::DecodeUtf8);
+        let adapter = Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerSyncImport);
+        for (intrinsics, leaf, use_sync_decoder) in [
+            (BTreeSet::from([decode, adapter]), true, true),
+            (BTreeSet::from([decode, adapter]), false, false),
+            (BTreeSet::from([decode]), true, false),
+        ] {
+            let mut source = Source::default();
+            ExternalRuntime.render_imports(&mut source, &intrinsics, "./provider", leaf);
+            let source = source.to_string();
+            assert_eq!(
+                source.contains("decodeSyncUtf8 as _decodeUtf8"),
+                use_sync_decoder
+            );
+            assert_eq!(source.contains("/intrinsics/lift.js"), !use_sync_decoder);
+        }
+    }
 
     #[test]
     fn transitive_named_calls_share_task_owners_and_deduplicate_imports() {

@@ -84,7 +84,7 @@ guest resources and cross-instance transfers use the general adapter.
 
 A custom checked provider or a directory URL can opt into this extension with
 `cmRuntimeSyncImports: true` or `jco transpile --cm-runtime-sync-imports`.
-Implement the five operations in `SyncImportsModule`, or re-export the standard
+Implement the operations in `SyncImportsModule`, or re-export the standard
 `intrinsics/sync` module. The default custom-provider path uses the original
 API-v1 contract. When using an older standard package, set `cmRuntimeSyncImports: false` or pass `--no-cm-runtime-sync-imports` to retain that contract. On the
 optimized path a provider's task and state factories may receive contexts
