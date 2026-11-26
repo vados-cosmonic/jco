@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
+import { readFile } from 'node:fs/promises';
 
-import { assert, suite, test } from 'vitest';
+import { assert, expect, suite, test } from 'vitest';
 
 import { transpileBytes } from './transpilation.js';
 import { parse } from '../src/wasm-tools.js';
@@ -47,5 +48,33 @@ suite('canonical ABI list bounds', () => {
             assert.throws(() => getList(0xfff0, length), WebAssembly.RuntimeError);
             assert.throws(() => getList(0xfffffff0, length), WebAssembly.RuntimeError);
         }
+    });
+
+    test('checks the allocation against memory after realloc returns', async () => {
+        const fixture = new URL('./fixtures/components/list-return-realloc.wat', import.meta.url);
+        const { files } = await transpileBytes(await readFile(fixture), {
+            name: 'list-return',
+            instantiation: 'async',
+            base64Cutoff: 0,
+        });
+        const { instantiate } = await import(
+            `data:text/javascript;base64,${Buffer.from(files['list-return.js']).toString('base64')}`
+        );
+        const load = (name: string) => WebAssembly.compile(new Uint8Array(files[name]));
+        const check = async (ptr: number, length: number, words: boolean, grow = false) => {
+            const guest = await instantiate(load, {
+                bytes: { default: () => new Uint8Array(length).fill(71) },
+                words: { default: () => new Uint16Array(length).fill(71) },
+            });
+            guest.set(ptr, Number(grow));
+            return guest.check(Number(words));
+        };
+
+        assert.equal(await check(0x1fffc, 2, true, true), 71);
+        assert.equal(await check(0xffff, 1, false), 71);
+        assert.equal(await check(0x10000, 0, false), 0);
+        await expect(check(0x10001, 0, false)).rejects.toThrow(/beyond end of memory/);
+        await expect(check(0xfffe, 2, true)).rejects.toThrow(/beyond end of memory/);
+        await expect(check(3, 1, true)).rejects.toThrow(/not aligned/);
     });
 });
