@@ -222,6 +222,12 @@ export default {
 };
 ```
 
+A page that knows which entry it will load can also preload that entry's shared
+JavaScript chunk. Read the chunk URL from the application build output and emit
+a `<link rel="modulepreload">` with that URL in the page. This starts the shared
+chunk alongside the entry. Otherwise the browser first downloads the entry to
+discover its import, which delays the guest Wasm fetch as well.
+
 If the application serves the runtime as separate browser modules, it can start
 fetching them alongside the component entry using `rel="modulepreload"`.
 Generate the links from the component's static imports and their dependencies
