@@ -580,6 +580,28 @@ impl ExternalRuntime {
             .or_default()
             .insert(("CM_RUNTIME_API_VERSION", VERSION_LOCAL));
         for (suffix, names) in modules {
+            // Native ESM loads the whole async-task entry, including its driver.
+            // Use the smaller re-export only when it covers the entire import.
+            // An opted-in custom provider may only implement the original paths.
+            let suffix = if uses_sync_host_adapter
+                && crate::is_standard_checked_runtime(base)
+                && suffix == "intrinsics/async-task"
+                && names.iter().all(|(name, _)| {
+                    matches!(
+                        *name,
+                        "createNewCurrentImplicitThread"
+                            | "getCurrentTask"
+                            | "initializeAsyncTaskClass"
+                            | "initializeAsyncThreadClass"
+                            | "initializeCurrentComponentIdxs"
+                            | "initializeCurrentTaskIds"
+                            | "initializeTasksByComponent"
+                    )
+                }) {
+                "intrinsics/sync-task"
+            } else {
+                suffix
+            };
             let names = names
                 .into_iter()
                 .map(|(export, local)| format!("{export} as {local}"))
@@ -995,6 +1017,18 @@ mod tests {
     use super::*;
     use crate::TranspileOpts;
     use crate::intrinsics::{RenderIntrinsicsArgs, render_intrinsics, resource::ResourceIntrinsic};
+
+    #[test]
+    fn an_additional_task_operation_preserves_the_general_import() {
+        let ops = BTreeSet::from([
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::LowerSyncImport),
+            Intrinsic::AsyncTask(AsyncTaskIntrinsic::DriverLoop),
+        ]);
+        let mut source = Source::default();
+        ExternalRuntime.render_imports(&mut source, &ops, "@bytecodealliance/jco-cm-runtime", true);
+        assert!(source.contains("/intrinsics/async-task"));
+        assert!(!source.contains("/intrinsics/sync-task"));
+    }
 
     #[test]
     fn synchronous_host_adapter_imports_decoder_without_general_lifts() {

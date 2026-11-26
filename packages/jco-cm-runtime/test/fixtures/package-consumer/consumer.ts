@@ -1,3 +1,4 @@
+import * as syncTask from '@bytecodealliance/jco-cm-runtime/intrinsics/sync-task';
 import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
@@ -65,6 +66,9 @@ const syncProvider: NonNullable<RuntimeModuleContracts['intrinsics/sync']> = syn
 void syncProvider;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
+for (const name of Object.keys(syncTask) as (keyof typeof syncTask)[]) {
+    if (syncTask[name] !== defaultTasks[name]) throw new Error(`task operation identity changed: ${name}`);
+}
 const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;
 const eventMemory = { buffer: new ArrayBuffer(8) };
 if (

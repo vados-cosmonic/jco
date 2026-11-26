@@ -133,6 +133,7 @@ suite('runtime package', () => {
                 './intrinsics/stream',
                 './intrinsics/string',
                 './intrinsics/sync',
+                './intrinsics/sync-task',
                 './intrinsics/waitable',
                 './intrinsics/webidl',
                 './runtime',

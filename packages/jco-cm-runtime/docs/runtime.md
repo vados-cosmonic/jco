@@ -113,6 +113,12 @@ that contract. On the optimized path a provider's task and state factories may r
 without the subtask, waitable and future constructors. Shutdown can also omit
 the empty stream and future tables. The debug package keeps the general adapter for task diagnostics.
 
+For a checked synchronous host adapter, bindgen imports basic task operations
+from `intrinsics/sync-task` when that entry supplies every requested operation.
+The package re-exports the same functions as `intrinsics/async-task`. This lets
+a browser load the adapter without downloading the scheduler's driver. Custom
+runtime providers continue to supply these functions through `intrinsics/async-task`.
+
 The standard checked runtime also supports calling a flat numeric export of an
 isolated, import-free core module without allocating a task. Bindgen emits the
 same canonical numeric conversions on both paths. The guest cannot call the

@@ -271,7 +271,6 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
 }
 
 /// Provider selection follows the same optional trailing slash as emitted module specifiers.
-#[cfg(feature = "transpile-bindgen")]
 fn is_standard_checked_runtime(base: &str) -> bool {
     base.strip_suffix('/').unwrap_or(base) == "@bytecodealliance/jco-cm-runtime"
 }
@@ -842,6 +841,10 @@ mod tests {
             assert_eq!(
                 source.contains("/intrinsics/sync"),
                 direct && provider.is_some()
+            );
+            assert_eq!(
+                source.contains("/intrinsics/sync-task"),
+                direct && provider.is_some_and(is_standard_checked_runtime)
             );
             if direct {
                 assert!(!source.contains("_lowerImportBackwardsCompat"));
