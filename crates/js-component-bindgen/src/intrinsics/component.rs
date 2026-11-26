@@ -879,7 +879,7 @@ impl ComponentIntrinsic {
                             return () => clearTimeout(handle);
                         }}
 
-                        #onExclusiveReleaseHandlers = [];
+                        #onExclusiveReleaseHandlers;
 
                         #mayLeave = true;
 
@@ -1236,14 +1236,20 @@ impl ComponentIntrinsic {
                             // lock-free fallback code.
                             this.#lockHolderTaskID = null;
 
-                            this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter(v => !!v);
-                            for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {{
-                                try {{
-                                    this.#onExclusiveReleaseHandlers[idx] = null;
-                                    f();
-                                }} catch (err) {{
-                                    {debug_log_fn}("error while executing handler for next exclusive release", err);
-                                    throw err;
+                            // Most synchronous exits have no release callbacks. A callback can reenter
+                            // and release the lock again, so consume each registration before invoking it.
+                            // Separate registrations of the same function must each run once.
+                            const handlers = this.#onExclusiveReleaseHandlers;
+                            if (handlers?.size) {{
+                                for (const registration of handlers) {{
+                                    handlers.delete(registration);
+                                    const {{ fn }} = registration;
+                                    try {{
+                                        fn();
+                                    }} catch (err) {{
+                                        {debug_log_fn}("error while executing handler for next exclusive release", err);
+                                        throw err;
+                                    }}
                                 }}
                             }}
                             this.#scheduleLockHandoff();
@@ -1271,7 +1277,7 @@ impl ComponentIntrinsic {
 
                         onNextExclusiveRelease(fn) {{
                             {debug_log_fn}('[{component_async_state_class}#()onNextExclusiveRelease] registering');
-                            this.#onExclusiveReleaseHandlers.push(fn);
+                            (this.#onExclusiveReleaseHandlers ??= new Set()).add({{ fn }});
                         }}
 
                         async waitForExclusiveRelease() {{

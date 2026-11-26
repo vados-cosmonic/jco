@@ -543,7 +543,7 @@ function defineComponentAsyncState() {
         /** Cancels the scheduled tick while the tick loop runs. */
         #tickLoop: (() => void) | null = null;
 
-        #onExclusiveReleaseHandlers: ((() => void) | null)[] = [];
+        #onExclusiveReleaseHandlers?: Set<{ fn: () => void }>;
 
         #mayLeave = true;
 
@@ -980,14 +980,20 @@ function defineComponentAsyncState() {
             // lock-free fallback code.
             this.#lockHolderTaskID = null;
 
-            this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter((v) => !!v);
-            for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) {
-                try {
-                    this.#onExclusiveReleaseHandlers[idx] = null;
-                    f!();
-                } catch (err) {
-                    DEBUG: debugLog('error while executing handler for next exclusive release', err);
-                    throw err;
+            // Most synchronous exits have no release callbacks. A callback can reenter
+            // and release the lock again, so consume each registration before invoking it.
+            // Separate registrations of the same function must each run once.
+            const handlers = this.#onExclusiveReleaseHandlers;
+            if (handlers?.size) {
+                for (const registration of handlers) {
+                    handlers.delete(registration);
+                    const { fn } = registration;
+                    try {
+                        fn();
+                    } catch (err) {
+                        DEBUG: debugLog('error while executing handler for next exclusive release', err);
+                        throw err;
+                    }
                 }
             }
             this.#scheduleLockHandoff();
@@ -1021,7 +1027,7 @@ function defineComponentAsyncState() {
 
         onNextExclusiveRelease(fn: () => void) {
             DEBUG: debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
-            this.#onExclusiveReleaseHandlers.push(fn);
+            (this.#onExclusiveReleaseHandlers ??= new Set()).add({ fn });
         }
 
         async waitForExclusiveRelease() {
