@@ -196,16 +196,16 @@ impl TaskContextIntrinsic {
                 Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
                 Core(CoreContextIntrinsic::InitializeTaskRegisters),
             ],
+            // The class takes the lookup and registers directly. Selecting the
+            // getCurrentThread operation would also emit its separate context.
             Self::InitializeAsyncThreadClass => &[
-                Task(Self::GetCurrentThread),
+                Component(ComponentContextIntrinsic::GetOrCreateAsyncState),
+                Core(CoreContextIntrinsic::InitializeTaskRegisters),
                 Component(ComponentContextIntrinsic::RecordTrap),
             ],
-            Self::ThreadSuspend => &[
-                Task(Self::GetCurrentThread),
-                Task(Self::InitializeAsyncThreadClass),
-            ],
+            Self::ThreadSuspend => &[Task(Self::InitializeAsyncThreadClass)],
             Self::ThreadNewIndirect => &[
-                Task(Self::ThreadSuspend),
+                Task(Self::InitializeAsyncThreadClass),
                 Task(Self::InitializeThreadStartChecks),
             ],
             Self::SubtaskDrop => &[

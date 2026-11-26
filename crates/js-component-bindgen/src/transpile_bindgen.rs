@@ -1831,10 +1831,6 @@ impl<'a> Instantiator<'a, '_> {
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
-        let rsc_table_remove = self.bindgen.intrinsic_call(
-            Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
-            &format!("handleTable{rtid}, handle"),
-        );
         if is_imported {
             // imported
             uwriteln!(
@@ -1883,7 +1879,12 @@ impl<'a> Instantiator<'a, '_> {
                 "{store}.resourceTables.push({{ handles: handleTable{rtid}, {captures} }});"
             );
         } else {
-            // non imported
+            // Only guest-defined resources register a finalizer here. Explicit
+            // resource drops select the removal operation in their own trampoline.
+            let rsc_table_remove = self.bindgen.intrinsic_call(
+                Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
+                &format!("handleTable{rtid}, handle"),
+            );
             let finalization_registry_create = self
                 .bindgen
                 .intrinsic(Intrinsic::FinalizationRegistryCreate);

@@ -2478,17 +2478,9 @@ impl Bindgen for FunctionBindgen<'_> {
                 let track_host_operation = self.task_intrinsic_call_prefix(Intrinsic::Component(
                     ComponentIntrinsic::TrackHostOperation,
                 ));
-                let start_current_task_fn = self.task_intrinsic_call_prefix(Intrinsic::AsyncTask(
-                    AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
-                ));
                 let current_task_get_fn = self.task_intrinsic_call_prefix(Intrinsic::AsyncTask(
                     AsyncTaskIntrinsic::GetCurrentTask,
                 ));
-
-                // At first, use the global current thread metadata, in case we are executing from
-                // inside a with-global-current-thread wrapper
-                let get_global_current_thread_meta_fn =
-                    self.task_intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
 
                 uwriteln!(
                     self.src,
@@ -2540,6 +2532,13 @@ impl Bindgen for FunctionBindgen<'_> {
                 // this, and a subtask has been set up.
                 //
                 if task_managed {
+                    // Selecting an intrinsic also imports its runtime dependencies.
+                    // Only this path reads the enclosing thread and creates a task.
+                    let start_current_task_fn = self.task_intrinsic_call_prefix(
+                        Intrinsic::AsyncTask(AsyncTaskIntrinsic::CreateNewCurrentImplicitThread),
+                    );
+                    let get_global_current_thread_meta_fn =
+                        self.task_intrinsic_call_prefix(Intrinsic::GetGlobalCurrentThreadMetaFn);
                     uwriteln!(
                         self.src,
                         r#"

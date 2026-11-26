@@ -814,7 +814,47 @@ mod tests {
             );
             if direct {
                 assert!(!source.contains("_lowerImportBackwardsCompat"));
+                assert!(!source.contains("_getGlobalCurrentThreadMeta"));
+                assert!(!source.contains("_jcoThreadLookupContext"));
             }
+        }
+    }
+
+    #[cfg(feature = "external-runtime")]
+    #[test]
+    fn retaining_an_imported_handle_does_not_select_a_removal_operation() {
+        let component = wat::parse_str(
+            r#"(component
+              (import "api" (instance $api (export "item" (type (sub resource)))))
+              (alias export $api "item" (type $item))
+              (import "get" (func $get (result (own $item))))
+              (core func $lower (canon lower (func $get)))
+              (core module $m
+                (import "" "get" (func $get (result i32)))
+                (global $saved (mut i32) (i32.const 0))
+                (func (export "save") (global.set $saved (call $get))))
+              (core instance $i (instantiate $m (with "" (instance (export "get" (func $lower))))))
+              (func (export "save") (canon lift (core func $i "save"))))"#,
+        )
+        .unwrap();
+        for sync in [false, true] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts {
+                        name: "retain".into(),
+                        ..Default::default()
+                    },
+                    cm_runtime_es_module: Some("@test/provider".into()),
+                    cm_runtime_sync_imports: Some(sync),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert!(source.contains("rscTableCreateOwn"));
+            assert!(!source.contains("rscTableRemove"));
+            assert!(!source.contains("_jcoResourceRemoveContext"));
         }
     }
 
