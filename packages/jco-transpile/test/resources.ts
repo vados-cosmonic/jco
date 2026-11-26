@@ -191,6 +191,7 @@ suite('resources', () => {
                 const source = await readFile(setup.esModuleOutputPath, 'utf8');
                 const standardLeaf = runtime === 'inline' || runtime === 'checked';
                 assert.equal(source.includes('initializeHandleTables'), !standardLeaf);
+                assert.equal(/\.resourceTables\.push\(\s*[\w$]+\s*\)/.test(source), standardLeaf);
                 assert.equal(/\._createdReps\s*=\s*new Set\b/.test(source), !standardLeaf);
                 // Each owned argument is dropped immediately. A standard sync leaf
                 // has no transfer_borrow that could ever query its representation.

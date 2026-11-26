@@ -11,6 +11,17 @@ export class IndexedResourceCaptures {
         this.#handles = handles;
     }
 
+    // The first handle table can register this object directly for shutdown.
+    // Reading captures during registration would eagerly migrate live slots.
+    // Shutdown requests the rep map only when it starts collecting owned handles.
+    get handles(): ResourceTable {
+        return this.#handles;
+    }
+
+    get captures(): Map<number, object> {
+        return this.byRep();
+    }
+
     /**
      * Automatically assigned reps can be looked up by guest handle, saving a
      * Map probe on each borrow. An explicit host rep can alias an existing rep

@@ -1854,8 +1854,9 @@ impl<'a> Instantiator<'a, '_> {
             "handleTable{rtid}._componentIdx = {component_idx};"
         );
         if is_imported {
-            if !self.resources_initialized.contains_key(&resource_idx) {
-                let ridx = resource_idx.as_u32();
+            let ridx = resource_idx.as_u32();
+            let first_table = !self.resources_initialized.contains_key(&resource_idx);
+            if first_table {
                 let captures = if self.direct_sync_imports {
                     let class = self.bindgen.intrinsic(Intrinsic::Resource(
                         ResourceIntrinsic::IndexedResourceCaptures,
@@ -1875,22 +1876,24 @@ impl<'a> Instantiator<'a, '_> {
             } else if self.direct_sync_imports {
                 // Two tables can refer to the same resource. Handles only identify
                 // their own table, while a capture by rep is shared between both.
-                let ridx = resource_idx.as_u32();
                 uwriteln!(self.src.js, "captureTable{ridx}.byRep();");
             }
             let store = self
                 .bindgen
                 .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
-            let ridx = resource_idx.as_u32();
-            let captures = if self.direct_sync_imports {
-                format!("get captures() {{ return captureTable{ridx}.byRep(); }}")
+            // The standard capture object already knows its first handle table.
+            // Further tables for the same resource need their own handles entry.
+            // Custom providers only promise byRep(), so keep their original record.
+            let entry = if first_table && self.is_standard_sync_leaf() {
+                format!("captureTable{ridx}")
+            } else if self.direct_sync_imports {
+                format!(
+                    "{{ handles: handleTable{rtid}, get captures() {{ return captureTable{ridx}.byRep(); }} }}"
+                )
             } else {
-                format!("captures: captureTable{ridx}")
+                format!("{{ handles: handleTable{rtid}, captures: captureTable{ridx} }}")
             };
-            uwriteln!(
-                self.src.js,
-                "{store}.resourceTables.push({{ handles: handleTable{rtid}, {captures} }});"
-            );
+            uwriteln!(self.src.js, "{store}.resourceTables.push({entry});");
         } else {
             // Only guest-defined resources register a finalizer here. Explicit
             // resource drops select the removal operation in their own trampoline.

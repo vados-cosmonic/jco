@@ -112,11 +112,13 @@ test('indexed captures recover live reps across sparse and recycled handles', ()
     expect(c).toBe(b);
     captures.slots![c] = last;
 
-    expect(captures.get(0xffffffff)).toBe(first);
+    expect(captures.handles).toBe(handles);
+    expect(captures.slots).toBeDefined();
+    expect(captures.captures.get(0xffffffff)).toBe(first);
     expect(captures.get(10)).toBeUndefined();
     expect(captures.get(0)).toBe(last);
     expect(captures.slots).toBeUndefined();
-    const migrated = captures.byRep();
+    const migrated = captures.captures;
     captures.set(0xffffffff, last);
     captures.delete(0);
     expect(captures.byRep()).toBe(migrated);
