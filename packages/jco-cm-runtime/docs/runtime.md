@@ -194,6 +194,34 @@ component's `.core.wasm` files beside its output entry, keeping the original
 filenames. Test a cold load of each entry independently so a previously loaded
 component cannot hide a missing dependency.
 
+For example, an application with a query component and a table component can
+use this Rolldown configuration. The input keys keep each entry in its own
+directory. Copy the corresponding core Wasm files into `dist/query/` and
+`dist/table/` after the build. Keep the checked runtime installed so Rolldown
+can resolve and tree-shake its named imports.
+
+```js
+// rolldown.config.mjs
+export default {
+    input: {
+        'query/dom_query': 'generated/query/dom_query.js',
+        'table/table_update': 'generated/table/table_update.js',
+    },
+    platform: 'browser',
+    external: [/^node:/],
+    output: {
+        dir: 'dist',
+        format: 'esm',
+        entryFileNames: '[name].js',
+        chunkFileNames: 'shared/[name]-[hash].js',
+        // Preserve the generated component directive on the two entry modules.
+        banner: (chunk) => (chunk.isEntry ? '"use components";' : ''),
+        minify: true,
+        keepNames: true,
+    },
+};
+```
+
 If the application serves the runtime as separate browser modules, it can start
 fetching them alongside the component entry using `rel="modulepreload"`.
 Generate the links from the component's static imports and their dependencies

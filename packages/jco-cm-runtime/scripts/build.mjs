@@ -133,6 +133,10 @@ async function emit(compiled, profile, outDir, destination) {
             minify: true,
             sourcemap: true,
             entryFileNames: '[name].js',
+            // Let each public entry fetch just its dependencies. A common chunk
+            // based on importer count also makes a conversion-only consumer
+            // load task and resource code. An application bundler knows which
+            // entries will actually be loaded together.
             chunkFileNames: 'chunks/[name]-[hash].js',
         });
         for (const item of output) {
