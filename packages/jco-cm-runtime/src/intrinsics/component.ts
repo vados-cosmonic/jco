@@ -328,6 +328,7 @@ export function trackHostOperation<T>(
     return trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose, componentIdx);
 }
 
+/** Keep settlement callbacks and their captured state off the synchronous host-call path. */
 function trackHostPromise<T>(
     context: ComponentHostOperationContext,
     result: T,
@@ -1437,9 +1438,7 @@ function defineComponentAsyncState() {
 }
 let sharedComponentAsyncState: ReturnType<typeof defineComponentAsyncState>;
 
-export function initializeComponentAsyncStateClass(
-    context: StateClassContext,
-): ComponentAsyncStateConstructor {
+export function initializeComponentAsyncStateClass(context: StateClassContext): ComponentAsyncStateConstructor {
     const ComponentAsyncState = (sharedComponentAsyncState ??= defineComponentAsyncState());
     /**
      * Construct a state of a component instance that uses the context.
