@@ -1839,16 +1839,21 @@ impl<'a> Instantiator<'a, '_> {
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
         // Create the relevant handle table
         let rtid = resource_table_idx.as_u32();
+        uwriteln!(
+            self.src.js,
+            "const handleTable{rtid} = [{rsc_table_flag}, 0];"
+        );
+        // Only a transfer between instances can look up a previously created rep.
+        // Checked synchronous leaves pass trackRep=false on every owned insertion.
+        // Custom providers can inspect the table, so keep its original shape there.
+        if !self.is_standard_sync_leaf() {
+            uwriteln!(self.src.js, "handleTable{rtid}._createdReps = new Set();");
+        }
+        uwriteln!(
+            self.src.js,
+            "handleTable{rtid}._componentIdx = {component_idx};"
+        );
         if is_imported {
-            // imported
-            uwriteln!(
-                self.src.js,
-                r#"
-                  const handleTable{rtid} = [{rsc_table_flag}, 0];
-                  handleTable{rtid}._createdReps = new Set();
-                  handleTable{rtid}._componentIdx = {component_idx};
-                "#,
-            );
             if !self.resources_initialized.contains_key(&resource_idx) {
                 let ridx = resource_idx.as_u32();
                 let captures = if self.direct_sync_imports {
@@ -1899,9 +1904,6 @@ impl<'a> Instantiator<'a, '_> {
             uwriteln!(
                 self.src.js,
                 r#"
-                   const handleTable{rtid} = [{rsc_table_flag}, 0];
-                   handleTable{rtid}._createdReps = new Set();
-                   handleTable{rtid}._componentIdx = {component_idx};
                    const finalizationRegistry{rtid} = {finalization_registry_create}((handle) => {{
                        const {{ rep }} = {rsc_table_remove};{maybe_dtor}
                    }});

@@ -63,7 +63,8 @@ export const tableCreateBorrow: ResourceModule['tableCreateBorrow'] = (spaces, t
 };
 // Borrow transfer uses this history to recognize a rep already owned by its
 // destination instance. Checked single-instance bindings can skip recording
-// it: even after a handle is dropped, a tracked rep stays in this set.
+// it and its per-table Set. Keep the lookup inside this guard: these tables
+// have no _createdReps property, and a tracked rep outlives its handle.
 export const tableCreateOwn: ResourceModule['tableCreateOwn'] = (spaces, table, rep, trackRep = true) => {
     rep >>>= 0;
     if (trackRep) {
