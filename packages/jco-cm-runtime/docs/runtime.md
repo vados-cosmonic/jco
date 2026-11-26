@@ -222,11 +222,19 @@ export default {
 };
 ```
 
-A page that knows which entry it will load can also preload that entry's shared
-JavaScript chunk. Read the chunk URL from the application build output and emit
-a `<link rel="modulepreload">` with that URL in the page. This starts the shared
-chunk alongside the entry. Otherwise the browser first downloads the entry to
-discover its import, which delays the guest Wasm fetch as well.
+A page that knows which component it will load can start its guest Wasm fetch
+alongside the entry. For an application bundle, it can also preload the entry's
+shared JavaScript chunk. Otherwise the browser discovers the chunk when it
+reads the entry and starts the Wasm fetch when the bindings execute.
+
+```html
+<link rel="preload" as="fetch" type="application/wasm" crossorigin="anonymous" href="/dist/query/dom_query.core.wasm">
+<link rel="modulepreload" href="/dist/shared/runtime-BUILD_HASH.js">
+```
+
+Use the deployed Wasm URL and the chunk filename from the application build.
+The first link also works for an internal bundle or a separately served
+runtime. Use it for a core that the bindings fetch as a separate file.
 
 If the application serves the runtime as separate browser modules, it can start
 fetching them alongside the component entry using `rel="modulepreload"`.
