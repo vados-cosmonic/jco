@@ -520,15 +520,26 @@ impl FunctionBindgen<'_> {
     fn emit_realloc_check(&mut self, ptr: &str, len: &str, size: usize, align: usize) {
         let runtime_error = self.intrinsic(Intrinsic::WebAssemblyRuntimeError);
         let memory = self.memory.as_ref().unwrap();
+        uwriteln!(self.src, "{ptr} >>>= 0;");
+        if align > 1 {
+            uwriteln!(
+                self.src,
+                "if ({ptr} % {align} !== 0) throw new {runtime_error}('realloc return: result not aligned');"
+            );
+        }
+        // realloc can grow memory. Read the new limit once. A negative
+        // remainder also rejects an out-of-bounds pointer for an empty list.
+        let max_elements = if size == 1 {
+            "remaining".to_owned()
+        } else {
+            format!("Math.floor(remaining / {size})")
+        };
         uwriteln!(
             self.src,
-            r#"
-            {ptr} >>>= 0;
-            if ({ptr} % {align} !== 0) {{ throw new {runtime_error}('realloc return: result not aligned'); }}
-            if ({ptr} > {memory}.buffer.byteLength || {len} > Math.floor(({memory}.buffer.byteLength - {ptr}) / {size})) {{
-                throw new {runtime_error}('realloc return: beyond end of memory');
-            }}
-        "#
+            "{{
+                const remaining = {memory}.buffer.byteLength - {ptr};
+                if (remaining < 0 || {len} > {max_elements}) throw new {runtime_error}('realloc return: beyond end of memory');
+            }}"
         );
     }
 
