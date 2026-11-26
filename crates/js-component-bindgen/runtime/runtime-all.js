@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 7ae9e87c8e71d922199edf01e243d476a7198834
+// generated from commit 5a61b90544288901f77e37a9ee31245df4a1a6a3
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -809,6 +809,7 @@ function trackHostOperation(context, operation, componentIdx) {
 	}
 	return trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose, componentIdx);
 }
+/** Keep settlement callbacks and their captured state off the synchronous host-call path. */
 function trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose, componentIdx) {
 	storeAsyncState.pendingHostOperations++;
 	const owner = componentIdx ?? -1;
