@@ -18,6 +18,25 @@ const leaf = new TextEncoder().encode(`(component
     (core instance $i (instantiate $module (with "" (instance (export "host" (func $lower))))))
     (func (export "run") (param "n" u32) (result u32) (canon lift (core func $i "run"))))`);
 
+test('only the standard synchronous lowers omit subtask diagnostic names', async () => {
+    const checked = '@bytecodealliance/jco-cm-runtime';
+    const cases = [
+        { provider: undefined, specialize: true, named: false },
+        { provider: checked, specialize: true, named: false },
+        { provider: checked, specialize: false, named: true },
+        { provider: './custom-runtime', specialize: true, named: true },
+    ];
+    for (const { provider, specialize, named } of cases) {
+        const { files } = await transpile(leaf, {
+            name: 'leaf',
+            cmRuntimeEsModule: provider,
+            cmRuntimeSyncImports: specialize,
+        });
+        const source = new TextDecoder().decode(files['leaf.js']);
+        expect(/_trampoline\d+\.fnName\s*=/.test(source)).toBe(named);
+    }
+});
+
 describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => {
     async function transpileBytes(component: Uint8Array, options: Parameters<typeof transpile>[1]) {
         const provider = mode === 'external' ? new URL('../../jco-cm-runtime/dist/', import.meta.url).href : undefined;

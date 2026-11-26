@@ -4992,11 +4992,16 @@ impl<'a> Instantiator<'a, '_> {
                     if host_import_generator { ");" } else { "" }
                 );
 
-                uwriteln!(
-                    self.src.js,
-                    "_trampoline{trampoline_idx}.fnName = '{}#{callee_name}';",
-                    iface_name.unwrap_or_default(),
-                );
+                // The general lower copies this name onto its subtask for diagnostics.
+                // A checked synchronous leaf never creates that subtask, even when a
+                // detached import needs its own task. Custom providers may read the name.
+                if !self.is_standard_sync_leaf() {
+                    uwriteln!(
+                        self.src.js,
+                        "_trampoline{trampoline_idx}.fnName = '{}#{callee_name}';",
+                        iface_name.unwrap_or_default(),
+                    );
+                }
 
                 // TODO(breaking): remove once support for manually specified async imports is removed
                 if requires_async_porcelain {
