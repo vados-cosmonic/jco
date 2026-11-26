@@ -935,7 +935,12 @@ export interface ComponentStoreTrap {
     stopped: boolean;
     resourceTables: { handles: ResourceTable; captures: Map<number, object> }[];
     stopWaiters: Set<(error: unknown) => void>;
-    /** Host resources already disposed by a guest drop, skipped during store shutdown. */
+    /**
+     * A guest can own the same host object through two handles. Dropping one
+     * records the object before reading its disposal hook, whose getter or
+     * implementation can reenter stopInstance while the other handle is live.
+     * Shutdown skips that object even if the host subsequently changes its hook.
+     */
     disposed: WeakSet<object>;
     onTrap: ((error: Error) => void) | null;
     trapsReported: WeakSet<object>;

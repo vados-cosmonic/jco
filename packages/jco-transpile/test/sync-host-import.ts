@@ -214,6 +214,21 @@ describe.each(['bundled', 'external'] as const)('%s checked runtime', (mode) => 
             next.onDispose = () => other._util.stop();
             expect(() => other.release(dropping)).toThrow(/instance has been stopped/);
             expect(next.disposals).toBe(1);
+
+            // Even looking up the hook can reenter shutdown. While the getter
+            // runs, the second live handle refers to the object being dropped.
+            const reentrant = await instantiate(undefined, imports);
+            next = new Thing(7);
+            const handleToDrop = reentrant.acquire();
+            reentrant.acquire();
+            Object.defineProperty(next, Symbol.dispose, {
+                get() {
+                    reentrant._util.stop();
+                    return Thing.prototype[Symbol.dispose];
+                },
+            });
+            expect(() => reentrant.release(handleToDrop)).toThrow(/instance has been stopped/);
+            expect(next.disposals).toBe(1);
         } finally {
             await rm(dir, { recursive: true, force: true });
         }

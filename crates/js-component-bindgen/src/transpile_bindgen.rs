@@ -3815,11 +3815,16 @@ impl<'a> Instantiator<'a, '_> {
                         let mut lookup = format!("{table}.get(handleEntry.rep)");
                         let mut release = format!("{table}.delete(handleEntry.rep);");
                         if self.direct_sync_imports {
+                            // Auto-assigned reps use handle-indexed slots. A host-supplied
+                            // rep may have moved all live captures into the map, so the
+                            // drop must consult the current storage just as a borrow does.
                             lookup = format!("{table}.slots ? {table}.slots[handle] : {lookup}");
                             release = format!(
                                 "if ({table}.slots) {table}.slots[handle] = undefined; else {release}"
                             );
                         }
+                        // Mark the drop before looking up Symbol.dispose. Even its getter
+                        // can stop the store while another handle still owns this object.
                         format!(
                             "const rsc = {lookup};
                             if (rsc) {{
