@@ -105,6 +105,7 @@ suite('runtime package', () => {
                     'LowerModule',
                     'FutureModule',
                     'StreamModule',
+                    'SyncImportsModule',
                 ].map((name) => {
                     const body = new RegExp(`export interface ${name} \\{([\\s\\S]*?)^\\}`, 'm').exec(contract)?.[1];
                     expect(body, `${name} must remain a public standalone interface`).toBeDefined();
@@ -131,6 +132,7 @@ suite('runtime package', () => {
                 './intrinsics/resource',
                 './intrinsics/stream',
                 './intrinsics/string',
+                './intrinsics/sync',
                 './intrinsics/waitable',
                 './intrinsics/webidl',
                 './runtime',

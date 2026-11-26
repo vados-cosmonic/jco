@@ -39,6 +39,7 @@ const publicModules: Record<string, Record<string, unknown>> = {
     LowerModule: lower,
     FutureModule: future,
     StreamModule: stream,
+    SyncImportsModule: sync,
 };
 
 const constants = new Set([
