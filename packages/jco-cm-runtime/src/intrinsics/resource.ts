@@ -20,6 +20,8 @@ export const tableGet: ResourceModule['tableGet'] = (context, table, handle) => 
 export const tableFlag = RESOURCE_TABLE_FLAG;
 export const tableOwn = RESOURCE_TABLE_OWN;
 export const initializeHandleIndexSpaces: ResourceModule['initializeHandleIndexSpaces'] = () => new Map();
+// Transfers use table IDs to locate the source and destination. Checked synchronous
+// leaves already refer to their tables directly, so bindgen omits this registry.
 export const initializeHandleTables: ResourceModule['initializeHandleTables'] = () => [];
 export const initializeCallBorrows: ResourceModule['initializeCallBorrows'] = () => ({ borrows: [] });
 export const initializeCurrentBorrows: ResourceModule['initializeCurrentBorrows'] = () => ({ borrows: [] });

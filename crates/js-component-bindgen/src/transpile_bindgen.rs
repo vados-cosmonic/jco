@@ -1834,7 +1834,6 @@ impl<'a> Instantiator<'a, '_> {
                 (true, "".into())
             };
 
-        let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
         let rsc_table_flag = self
             .bindgen
             .intrinsic(Intrinsic::Resource(ResourceIntrinsic::ResourceTableFlag));
@@ -1910,8 +1909,14 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
-        // Add the handle table to the global list
-        uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+        // A checked synchronous leaf addresses each resource table directly. It has
+        // no transfer trampoline or async payload that needs to find a table by ID.
+        // Shutdown has its own list of tables and captures above. Custom providers
+        // can observe the registry and must still receive its entries.
+        if !self.is_standard_sync_leaf() {
+            let handle_tables = self.bindgen.intrinsic(Intrinsic::HandleTables);
+            uwriteln!(self.src.js, "{handle_tables}[{rtid}] = handleTable{rtid};");
+        }
         self.resource_tables_initialized
             .insert(resource_table_idx, true);
     }

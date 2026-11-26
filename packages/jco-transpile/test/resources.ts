@@ -188,6 +188,9 @@ suite('resources', () => {
                 });
                 cleanup = setup.cleanup;
                 const { instance } = setup;
+                const source = await readFile(setup.esModuleOutputPath, 'utf8');
+                const standardLeaf = runtime === 'inline' || runtime === 'checked';
+                assert.equal(source.includes('initializeHandleTables'), !standardLeaf);
                 // Each owned argument is dropped immediately. A standard sync leaf
                 // has no transfer_borrow that could ever query its representation.
                 const rep = 123456;
@@ -204,7 +207,7 @@ suite('resources', () => {
                     Set.prototype.add = add;
                 }
                 assert.equal(owned.disposed, 1);
-                assert.equal(recorded, runtime === 'inline' || runtime === 'checked' ? 0 : 1);
+                assert.equal(recorded, standardLeaf ? 0 : 1);
 
                 // Core Wasm returns i32s as signed JS numbers. Both spellings of a rep
                 // must find the captured object when lifting a borrow, an own, or a drop.
