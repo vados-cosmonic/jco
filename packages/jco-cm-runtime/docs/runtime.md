@@ -26,7 +26,8 @@ Root exports the same metadata and types as `runtime`; there is no root factory.
 | `file:///path/dist/`               | `file:///path/dist/intrinsics/resource.js`             | `file:///path/dist/runtime.js`             |
 | `https://example.test/runtime/`    | `https://example.test/runtime/intrinsics/resource.js`  | `https://example.test/runtime/runtime.js`  |
 
-One optional trailing slash is normalized. Relative bases resolve from the
+One optional trailing slash is normalized. Both spellings of the standard checked
+package select the same synchronous adapters and minified diagnostics behavior. Relative bases resolve from the
 **generated bindings**, not the transpilation process's working directory.
 Directory/URL bases use real `.js` files. Use file URLs for Windows paths.
 Control characters, empty bases, unsupported URL schemes and query/fragment

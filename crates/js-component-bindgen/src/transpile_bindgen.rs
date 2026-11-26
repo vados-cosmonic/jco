@@ -6983,7 +6983,7 @@ impl<'a> Instantiator<'a, '_> {
             // Opting into the host-import adapter permits reusing an enclosing
             // task. A custom provider can still observe creation of the export
             // task itself, so only the standard runtime can elide it here.
-            && self.bindgen.cm_runtime_es_module == Some("@bytecodealliance/jco-cm-runtime")
+            && self.bindgen.cm_runtime_es_module.is_some_and(crate::is_standard_checked_runtime)
             && !self.bindgen.opts.tracing
             && !self.bindgen.opts.asmjs
             && !requires_async_porcelain

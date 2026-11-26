@@ -60,9 +60,11 @@ test('minification strips external binding diagnostics only for the standard che
     const checked = '@bytecodealliance/jco-cm-runtime';
     for (const [base, profile, minify, keepsLogs] of [
         [checked, undefined, true, false],
+        [checked + '/', undefined, true, false],
         [checked, 'debug', true, true],
         [checked, undefined, false, true],
         [checked + '/debug', undefined, true, true],
+        [checked + '/debug/', undefined, true, true],
         ['./runtime', undefined, true, true],
     ] as const) {
         const { files } = await transpileBytes(component, {
@@ -74,6 +76,6 @@ test('minification strips external binding diagnostics only for the standard che
         });
         const source = new TextDecoder().decode(files['component.js']);
         expect(source.includes('Instruction::CallWasm'), base).toBe(keepsLogs);
-        expect(source).toContain(base + '/intrinsics/core');
+        expect(source).toContain(base.replace(/\/$/, '') + '/intrinsics/core');
     }
 });

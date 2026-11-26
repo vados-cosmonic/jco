@@ -270,6 +270,12 @@ pub fn transpile(component: &[u8], opts: TranspileOpts) -> Result<Transpiled> {
     transpile_with_config(component, TranspileConfig::builder().opts(opts).build())
 }
 
+/// Provider selection follows the same optional trailing slash as emitted module specifiers.
+#[cfg(feature = "transpile-bindgen")]
+fn is_standard_checked_runtime(base: &str) -> bool {
+    base.strip_suffix('/').unwrap_or(base) == "@bytecodealliance/jco-cm-runtime"
+}
+
 /// Transpile a component with additional configuration, including an optional
 /// external Component Model runtime provider.
 #[cfg(feature = "transpile-bindgen")]
@@ -293,7 +299,7 @@ pub fn transpile_with_config(component: &[u8], mut config: TranspileConfig) -> R
     // when the caller confirms that its directory or provider supplies it.
     #[cfg(feature = "external-runtime")]
     let provider_supports_sync = cm_runtime_es_module.as_deref().is_some_and(|base| {
-        cm_runtime_sync_imports.unwrap_or(base == "@bytecodealliance/jco-cm-runtime")
+        cm_runtime_sync_imports.unwrap_or_else(|| is_standard_checked_runtime(base))
     });
     #[cfg(not(feature = "external-runtime"))]
     let provider_supports_sync = false;
@@ -761,6 +767,13 @@ mod tests {
             (
                 RuntimeProfile::Checked,
                 false,
+                Some("@bytecodealliance/jco-cm-runtime/"),
+                None,
+                true,
+            ),
+            (
+                RuntimeProfile::Checked,
+                false,
                 Some("@bytecodealliance/jco-cm-runtime"),
                 Some(false),
                 false,
@@ -872,6 +885,13 @@ mod tests {
             (None, RuntimeProfile::Checked, false, false, true),
             (
                 Some("@bytecodealliance/jco-cm-runtime"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                true,
+            ),
+            (
+                Some("@bytecodealliance/jco-cm-runtime/"),
                 RuntimeProfile::Checked,
                 false,
                 false,
