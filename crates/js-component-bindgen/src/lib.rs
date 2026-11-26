@@ -823,6 +823,10 @@ mod tests {
             assert_eq!(source.contains("_lowerSyncImport("), direct);
             let standard_leaf = direct && provider.is_none_or(is_standard_checked_runtime);
             assert_eq!(source.contains("CURRENT_TASK_MAY_BLOCK"), !standard_leaf);
+            assert_eq!(
+                source.contains("canCreateBorrowHandles: false"),
+                standard_leaf
+            );
 
             assert_eq!(
                 source.contains("/intrinsics/sync"),
@@ -834,6 +838,29 @@ mod tests {
                 assert!(!source.contains("_jcoThreadLookupContext"));
             }
         }
+    }
+
+    #[cfg(feature = "external-runtime")]
+    #[test]
+    fn lowering_a_borrowed_export_argument_keeps_the_scope_registry() {
+        let component = wat::parse_str(r#"(component
+            (import "api" (instance $api (export "item" (type (sub resource)))))
+            (alias export $api "item" (type $item))
+            (core module $m (func (export "use") (param i32)))
+            (core instance $i (instantiate $m))
+            (func (export "use") (param "item" (borrow $item)) (canon lift (core func $i "use"))))"#).unwrap();
+        let result = transpile_with_config(
+            &component,
+            TranspileConfig {
+                opts: TranspileOpts::builder().name("borrow".into()).build(),
+                cm_runtime_es_module: Some("@bytecodealliance/jco-cm-runtime".into()),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        let source = generated_javascript(&result);
+        assert!(source.contains("tableCreateBorrow"));
+        assert!(!source.contains("canCreateBorrowHandles: false"));
     }
 
     #[cfg(feature = "external-runtime")]

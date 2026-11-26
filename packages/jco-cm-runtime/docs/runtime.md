@@ -87,6 +87,13 @@ determine whether the current task may block. A checked synchronous leaf has
 no reader for that global, so its exports can enter their tasks without
 allocating or updating the register.
 
+Removing a borrowed handle uses its scope ID to find the task that owns the
+borrow. If the synchronous leaf also has no binding that creates borrowed
+handles, bindgen tells the runtime it can skip inserting and deleting each
+task in that lookup map. Calls still get distinct scope IDs. An export that
+lowers a borrowed host resource keeps the map. Older bindings keep the
+ordinary registration behavior.
+
 For example, when an exported guest function calls a DOM method in a loop,
 each iteration reuses the export task. A core start function can call the same
 import before any export has run. The adapter creates a task when the stack

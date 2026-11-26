@@ -31,6 +31,12 @@ type AsyncConstructors = 'AsyncSubtask' | 'FutureValue' | 'Waitable';
 type TaskClassContext = Omit<AsyncTaskClassContext, AsyncConstructors> &
     Partial<Pick<AsyncTaskClassContext, AsyncConstructors>>;
 
+type TaskStore = {
+    id: bigint;
+    hostThreadID: number;
+    scopeTasks: TaskClassContext['scopeTasks'] | undefined;
+};
+
 /** Stands in for a list that was never allocated. */
 const NONE: readonly never[] = [];
 
@@ -44,7 +50,7 @@ function defineAsyncTask() {
     return class AsyncTask {
         #context: TaskClassContext;
         // What one `initializeAsyncTaskClass` call shares between the instances it constructs.
-        #store: { id: bigint; hostThreadID: number };
+        #store: TaskStore;
 
         static State = {
             INITIAL: TASK_INITIAL,
@@ -121,12 +127,12 @@ function defineAsyncTask() {
         alwaysTaskReturn = false;
         returnCalls = 0;
         tmpRetI64HighBits = 0 | 0;
-        constructor(context: TaskClassContext, store: { id: bigint; hostThreadID: number }, opts: AsyncTaskOptions) {
+        constructor(context: TaskClassContext, store: TaskStore, opts: AsyncTaskOptions) {
             this.#context = context;
             this.#store = store;
             this.#id = ++store.id;
             this.#resourceScopeId = ++this.#context.scopeCounter.value;
-            this.#context.scopeTasks.set(this.#resourceScopeId, this);
+            store.scopeTasks?.set(this.#resourceScopeId, this);
             if (opts?.componentIdx === undefined) {
                 throw new TypeError('missing component id during task creation');
             }
@@ -219,7 +225,7 @@ function defineAsyncTask() {
             if (this.#context.storeTrap.stopped) {
                 this.#resourceLenders = null;
                 this.#resourceScopeExited = true;
-                this.#context.scopeTasks.delete(this.#resourceScopeId);
+                this.#store.scopeTasks?.delete(this.#resourceScopeId);
                 return;
             }
             if (this.#resourceBorrowCount !== 0) {
@@ -235,7 +241,7 @@ function defineAsyncTask() {
             }
             this.#resourceLenders = null;
             this.#resourceScopeExited = true;
-            this.#context.scopeTasks.delete(this.#resourceScopeId);
+            this.#store.scopeTasks?.delete(this.#resourceScopeId);
         }
         /**
          * Create the completion promise if it does not exist yet.
@@ -1390,7 +1396,14 @@ let sharedAsyncTask: ReturnType<typeof defineAsyncTask>;
 
 export function initializeAsyncTaskClass(context: TaskClassContext): AsyncTaskConstructor {
     const AsyncTask = (sharedAsyncTask ??= defineAsyncTask());
-    const store: { id: bigint; hostThreadID: number } = { id: 0n, hostThreadID: 0 };
+    // Removing a borrow handle looks up the task by its resource scope. When
+    // the bindings cannot create such a handle, registering and deleting every
+    // call would churn the map without a reader. Older bindings omit the hint.
+    const store: TaskStore = {
+        id: 0n,
+        hostThreadID: 0,
+        scopeTasks: context.canCreateBorrowHandles === false ? undefined : context.scopeTasks,
+    };
 
     /**
      * Construct a task that uses the context.

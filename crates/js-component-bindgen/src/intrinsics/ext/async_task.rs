@@ -4,7 +4,10 @@ use super::{
     RuntimeImportKind, RuntimeInitializer, WaitableContextIntrinsic,
 };
 use crate::{
-    intrinsics::{Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic},
+    intrinsics::{
+        Intrinsic, RenderIntrinsicsArgs, p3::async_task::AsyncTaskIntrinsic,
+        resource::ResourceIntrinsic,
+    },
     source::Source,
     uwriteln,
 };
@@ -348,8 +351,20 @@ impl TaskContextIntrinsic {
                 } else {
                     ("AsyncSubtask, Waitable, ", ", FutureValue")
                 };
+                // A synchronous leaf has no cross-instance transfer trampolines. A
+                // JS export taking a borrowed resource can still create a borrow
+                // handle when lowering its argument, so check the final intrinsic set.
+                let borrow_hint = if args.sync_import_leaf
+                    && !args
+                        .intrinsics
+                        .contains(&ResourceIntrinsic::ResourceTableCreateBorrow.into())
+                {
+                    "canCreateBorrowHandles: false, "
+                } else {
+                    ""
+                };
                 task_context = format!(
-                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask_and_waitable}lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META{future} }}"
+                    "{{ RuntimeError: WebAssemblyRuntimeError, postReturn: _jcoComponentPostReturnTrapContext, traps: _jcoComponentRecordTrapContext, {subtask_and_waitable}lookup: _jcoComponentStateLookupContext, events: ASYNC_EVENT_CODE, determinism: ASYNC_DETERMINISM, scopeCounter: _jcoResourceScopeCounterContext, scopeTasks: RESOURCE_SCOPE_TASKS, {borrow_hint}storeTrap: STORE_TRAP, clearing: _jcoTaskClearContext, registers: CURRENT_TASK_META{future} }}"
                 );
                 &task_context
             }

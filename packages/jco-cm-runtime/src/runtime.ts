@@ -1784,6 +1784,8 @@ export interface AsyncTaskClassContext extends TrapContext {
     readonly determinism: AsyncDeterminism;
     readonly scopeCounter: ResourceScopeCell;
     readonly scopeTasks: ResourceScopeTasks;
+    /** False when bindgen has proved that no borrow handle can be created in this store. */
+    readonly canCreateBorrowHandles?: boolean;
     readonly storeTrap: Pick<ComponentStoreTrap, 'stopped'>;
     readonly clearing: TaskClearContext;
     readonly registers: TaskRegisters;

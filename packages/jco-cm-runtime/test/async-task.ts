@@ -70,6 +70,20 @@ function finish(task: AsyncTask) {
     }
 }
 
+test.concurrent('bindings without borrow handles keep task scopes distinct without registering them', () => {
+    const store = setup({ canCreateBorrowHandles: false });
+    const [first] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    const [second] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    try {
+        expect(first.resourceScopeId()).not.toBe(second.resourceScopeId());
+        expect([...store.resource.state.scopeTasks.keys()]).toEqual([]);
+    } finally {
+        finish(second);
+        finish(first);
+        store.cleanup();
+    }
+});
+
 test.concurrent('task constructors retain store-local brands, statics and state', () => {
     const a = setup();
     const b = setup();
