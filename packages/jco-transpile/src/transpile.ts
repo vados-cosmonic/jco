@@ -116,6 +116,9 @@ export interface TranspilationOptions {
     /** Whether to perform minification of the JS */
     minify?: boolean;
 
+    /** Ask supporting browsers to compile the entry module's functions when loading it. */
+    eagerCompile?: boolean;
+
     /** Whether to optimize the WebAssembly binary with wasm-opt */
     optimize?: boolean;
 
@@ -165,6 +168,8 @@ export interface TranspilationOptions {
 
     /** Optional experimental runtime package or directory base. Imports runtime and intrinsics/* subpaths; directory/URL bases use .js files. */
     cmRuntimeEsModule?: string;
+    /** The selected external checked provider implements intrinsics/sync. Implicit for the standard package. */
+    cmRuntimeSyncImports?: boolean;
 
     /**
      * Which removable statements the Component Model runtime bundled into the bindings keeps.
@@ -381,6 +386,7 @@ export async function transpileBytes(
         perfStringsSkipCopyUtf8Validation: opts.perfStringsSkipCopyUtf8Validation === true,
         perfStringsSkipCopyUtf16Validation: opts.perfStringsSkipCopyUtf16Validation === true,
         cmRuntimeEsModule: opts.cmRuntimeEsModule,
+        cmRuntimeSyncImports: opts.cmRuntimeSyncImports,
         runtimeProfile: opts.runtimeProfile,
         flagsAsBigint: opts.flagsAsBigInt === true,
         variantsInlineCases: opts.variantsInlineCases === true,
@@ -458,6 +464,15 @@ export async function transpileBytes(
             );
         }
         jsFile[1] = new TextEncoder().encode(minified.code);
+    }
+
+    if (opts.eagerCompile) {
+        // A file-wide compile hint must precede every token and survive minification.
+        const hint = new TextEncoder().encode('//# allFunctionsCalledOnLoad\n');
+        const hinted = new Uint8Array(hint.length + jsFile[1].length);
+        hinted.set(hint);
+        hinted.set(jsFile[1], hint.length);
+        jsFile[1] = hinted;
     }
 
     return { files: Object.fromEntries(files), imports, exports };

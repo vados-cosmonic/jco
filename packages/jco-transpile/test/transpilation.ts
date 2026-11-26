@@ -34,6 +34,9 @@ export const externalRuntime = runtimeBase !== undefined;
 export function runtimeOptions(options: TranspilationOptions = {}): TranspilationOptions {
     return {
         ...(runtimeBase === undefined ? {} : { cmRuntimeEsModule: runtimeBase }),
+        // The workspace URL points to our checked provider. Explicit overrides may
+        // point to a minimal API-v1 provider, so preserve its advertised capabilities.
+        ...(runtimeMode === 'external' && !('cmRuntimeEsModule' in options) ? { cmRuntimeSyncImports: true } : {}),
         ...options,
     };
 }

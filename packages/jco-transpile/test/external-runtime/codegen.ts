@@ -182,7 +182,7 @@ suite('external runtime codegen', () => {
         const { files } = await transpile(resourceFixture, { name: 'component', cmRuntimeEsModule: undefined });
         const source = new TextDecoder().decode(files['component.js']);
         // The runtime is bundled in rather than imported.
-        assert.include(source, '__jcoEmbeddedRuntime$tableGet');
+        assert.include(source, '$cm$tableGet');
         assert.notInclude(source, '@bytecodealliance/jco-cm-runtime');
         assert.notMatch(source, /^import /m);
         assert.notInclude(source, '_jcoRuntime');
