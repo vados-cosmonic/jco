@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 83bfa2d4c4dbca38594e81532d1124ad4cfc9e9a
+// generated from commit 3ffabc739b72a4a8afdcfdd3051d50d5dd1d379f
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -5317,7 +5317,8 @@ function defineAsyncTask() {
 		#resourceLenders = null;
 		#resourceScopeExited = false;
 		#subtasks = null;
-		#threads = [];
+		#firstThread;
+		#threads;
 		#entered = false;
 		#exited = false;
 		#errored = null;
@@ -6012,7 +6013,7 @@ function defineAsyncTask() {
 			this.#state = TASK_CANCEL_PENDING;
 			this.deliverPendingCancel({ cancellable: true });
 			this.cancel({ error: taskErr });
-			if (this.#exited && this.#threads.length === 0) this.#settleCompletionPromise();
+			if (this.#exited && this.#firstThread === void 0) this.#settleCompletionPromise();
 		}
 		resolve(results) {
 			DEBUG: debugLog("[AsyncTask#resolve()] args", {
@@ -6072,7 +6073,7 @@ function defineAsyncTask() {
 			}
 			this.#exited = true;
 			this.removeThread(this.defaultThread());
-			if (this.#threads.length > 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
+			if (this.#firstThread !== void 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
 		}
 		needsExclusiveLock() {
 			if (this.#componentIdx === -1) return false;
@@ -6142,27 +6143,28 @@ function defineAsyncTask() {
 			return this.#entered;
 		}
 		defaultThread() {
-			return this.#threads[0];
+			return this.#firstThread;
 		}
 		removeThread(thread) {
 			this.settleCompletion();
 			const cstate = this.#componentIdx === -1 ? null : getOrCreateAsyncState(this.#context.lookup, this.#componentIdx);
 			if (cstate && thread.hasIndex()) cstate.threads.remove(thread.id());
-			if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
-			else this.#threads = this.#threads.filter((t) => t !== thread);
+			if (this.#threads) {
+				if (this.#threads[this.#threads.length - 1] === thread) this.#threads.pop();
+				else this.#threads = this.#threads.filter((t) => t !== thread);
+				this.#firstThread = this.#threads[0];
+			} else if (this.#firstThread === thread) this.#firstThread = void 0;
 			syncContextSlots(this.#context.registers);
-			if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) cstate.noteUnresolvedExit(this);
+			if (cstate && this.#firstThread === void 0 && !this.isResolvedState() && !this.isRejected()) cstate.noteUnresolvedExit(this);
 			cstate?.checkSyncCallBlocked();
-			if (this.#exited && this.#threads.length === 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
+			if (this.#exited && this.#firstThread === void 0) clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
 		}
 		addThread(thread, opts) {
-			if (this.#componentIdx === -1) {
-				thread.setId(++this.#store.hostThreadID);
-				this.#threads.push(thread);
-				return thread;
-			}
-			this.#threads.push(thread);
-			if (!opts?.indexOnEntry) this.#insertThread(thread);
+			if (this.#componentIdx === -1) thread.setId(++this.#store.hostThreadID);
+			if (this.#threads) this.#threads.push(thread);
+			else if (this.#firstThread) this.#threads = [this.#firstThread, thread];
+			this.#firstThread ??= thread;
+			if (this.#componentIdx !== -1 && !opts?.indexOnEntry) this.#insertThread(thread);
 			return thread;
 		}
 		#insertThread(thread) {
