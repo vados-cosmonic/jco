@@ -36,6 +36,7 @@ use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail, ensure};
 use oxc_allocator::{Allocator, CloneIn};
+use oxc_ast::AstKind;
 use oxc_ast::ast::{
     BindingPattern, Declaration, Expression, Function, ImportDeclarationSpecifier,
     ObjectPropertyKind, Program, Statement,
@@ -43,7 +44,7 @@ use oxc_ast::ast::{
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 use oxc_minifier::{CompressOptions, Minifier, MinifierOptions};
 use oxc_parser::Parser;
-use oxc_semantic::SemanticBuilder;
+use oxc_semantic::{Semantic, SemanticBuilder};
 use oxc_span::SourceType;
 use oxc_str::Ident;
 
@@ -91,6 +92,76 @@ struct Runtime {
     code: String,
     /// Namespaced local name of each exported alias.
     exports: HashMap<String, String>,
+}
+
+/// Give private data fields short spellings in the checked runtime. Methods, accessors,
+/// and anonymous function/class initializers can expose the field's name via Function.name.
+fn compact_private_fields<'a>(codegen: Codegen<'a>, semantic: &Semantic<'_>) -> Codegen<'a> {
+    if semantic
+        .scoping()
+        .root_unresolved_references()
+        .contains_key("eval")
+    {
+        return codegen;
+    }
+    let classes = &semantic.classes().elements;
+    let mut reserved = BTreeSet::new();
+    let mut fields = BTreeSet::new();
+    for element in classes
+        .iter()
+        .flatten()
+        .filter(|element| element.is_private)
+    {
+        let Some(name) = element.name.as_str() else {
+            continue;
+        };
+        if element.kind.is_property() {
+            fields.insert(name);
+        } else {
+            reserved.insert(name);
+        }
+    }
+    for node in semantic.nodes().iter() {
+        if let AstKind::PropertyDefinition(field) = node.kind()
+            && let Some(name) = field.key.private_name()
+            && field
+                .value
+                .as_ref()
+                .is_some_and(Expression::is_anonymous_function_definition)
+        {
+            reserved.insert(name.as_str());
+        }
+    }
+    // Use the same replacement wherever a spelling occurs, including nested classes.
+    // Reserve existing spellings so a generated name cannot capture an outer field.
+    let mut next = 0;
+    let mut replacements = HashMap::new();
+    for &name in fields.difference(&reserved) {
+        let short = loop {
+            let short = format!("${next:x}");
+            next += 1;
+            if !fields.contains(short.as_str()) && !reserved.contains(short.as_str()) {
+                break short;
+            }
+        };
+        if short.len() < name.len() {
+            replacements.insert(name, short);
+        }
+    }
+    let mappings = classes
+        .iter()
+        .map(|elements| {
+            elements
+                .iter()
+                .filter(|e| e.is_private)
+                .filter_map(|element| {
+                    let name = element.name.as_str()?;
+                    Some((name.to_owned(), replacements.get(name)?.as_str().into()))
+                })
+                .collect()
+        })
+        .collect();
+    codegen.with_private_member_mappings(Some(mappings))
 }
 
 impl Runtime {
@@ -159,13 +230,21 @@ impl Runtime {
             "the shipped runtime does not declare debugLog as a variable"
         );
 
-        let semantics = SemanticBuilder::new().build(&program);
+        let compact_fields = matches!(logging, Logging::Disabled);
+        let semantics = SemanticBuilder::new()
+            .with_build_nodes(compact_fields)
+            .with_class_table(compact_fields)
+            .build(&program);
         ensure!(
             semantics.diagnostics.is_empty(),
             "the shipped runtime is not a valid module: {:?}",
             semantics.diagnostics
         );
 
+        let mut codegen = Codegen::new();
+        if compact_fields {
+            codegen = compact_private_fields(codegen, &semantics.semantic);
+        }
         let mut scoping = semantics.semantic.into_scoping();
         let root = scoping.root_scope_id();
         let symbols: Vec<_> = scoping.get_bindings(root).values().copied().collect();
@@ -209,7 +288,7 @@ impl Runtime {
 
         // Keep the annotations that mark calls as free of side effects: this code is
         // parsed again once linked, and what is unreachable is only removed then.
-        let code = Codegen::new()
+        let code = codegen
             .with_options(CodegenOptions {
                 comments: CommentOptions {
                     annotation: true,
@@ -577,6 +656,69 @@ mod tests {
     /// Link with every labeled statement kept, as the tests of linking itself expect.
     fn link(generated: &str, per_instance: bool) -> anyhow::Result<Option<String>> {
         super::link(generated, per_instance, RuntimeProfile::Debug)
+    }
+
+    #[test]
+    fn compact_fields_preserve_brands_and_reflected_names() {
+        use super::{
+            Allocator, Codegen, Parser, SemanticBuilder, SourceType, compact_private_fields,
+        };
+        fn emit(source: &str) -> String {
+            let allocator = Allocator::default();
+            let parsed = Parser::new(&allocator, source, SourceType::mjs()).parse();
+            assert!(parsed.diagnostics.is_empty());
+            let semantics = SemanticBuilder::new()
+                .with_build_nodes(true)
+                .with_class_table(true)
+                .build(&parsed.program);
+            assert!(semantics.diagnostics.is_empty());
+            compact_private_fields(Codegen::new(), &semantics.semantic)
+                .build(&parsed.program)
+                .code
+        }
+        let source = r##"class Outer {
+            #$0; #longOuter; #callback = (() => 1); #klass = class {}; #function = function() {};
+            #method() {} get #getter() { return 2; }
+            test(outer) {
+                return class Inner {
+                    #longInner;
+                    get() { return [this.#longInner, outer.#longOuter, #longOuter in outer]; }
+                };
+            }
+            shadow() { return class Inner { #longOuter; get() { return this.#longOuter; } }; }
+            publicKey() { return "#longInner"; }
+        }"##;
+        let linked = emit(source);
+        for name in [
+            "#$0",
+            "#callback",
+            "#klass",
+            "#function",
+            "#method",
+            "#getter",
+            "publicKey",
+        ] {
+            assert!(linked.contains(name), "{name}: {linked}");
+        }
+        assert_eq!(linked.matches("#longInner").count(), 1); // string literal
+        assert!(!linked.contains("#longOuter"));
+        // Recover the shortened names from declarations to check both the lexical
+        // reference into the outer class and the shadowing field and brand tests.
+        let outer = linked
+            .lines()
+            .map(str::trim)
+            .skip_while(|line| *line != "#$0;")
+            .nth(1)
+            .unwrap()
+            .trim_end_matches(';');
+        assert_ne!(outer, "#$0");
+        assert!(linked.contains(&format!("outer.{outer},")));
+        assert!(linked.contains(&format!("{outer} in outer")));
+        assert!(linked.contains(&format!("return this.{outer};")));
+        assert_eq!(linked.matches(outer).count(), 5);
+        let dynamic =
+            emit("class C { #originalName; read() { return eval('this.#originalName'); } }");
+        assert_eq!(dynamic.matches("#originalName").count(), 2);
     }
 
     #[test]
