@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 36875ba1afd8871bab0d8e5609b6d0e4f66b7d8f
+// generated from commit 070c350c7606b5badcdaf41e2bd94a5886d8ab21
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1383,7 +1383,7 @@ function defineComponentAsyncState() {
 		hasPendingSchedulerWork() {
 			if (this.#pendingTaskStarts > 0) return true;
 			if (this.#lockHandoffScheduled) return true;
-			if (this.#heldBySyncCall()) return false;
+			if (this.#suspendedThreadsByRef.size === 0 || this.#heldBySyncCall()) return false;
 			for (const meta of this.#suspendedThreadsByRef.values()) if (this.suspendedThreadReady(meta.thread)) return true;
 			return false;
 		}
@@ -1425,9 +1425,12 @@ function defineComponentAsyncState() {
 		endSyncCall(task) {
 			const storeAsyncState = this.#context.deadlock.storeAsyncState;
 			const syncCalls = storeAsyncState.syncCalls;
-			const idx = syncCalls.findIndex((call) => call.task === task);
-			if (idx === -1) return;
-			syncCalls.splice(idx, 1);
+			if (syncCalls.length === 1 && syncCalls[0].task === task) syncCalls.pop();
+			else {
+				const idx = syncCalls.findIndex((call) => call.task === task);
+				if (idx === -1) return;
+				syncCalls.splice(idx, 1);
+			}
 			const top = syncCalls.at(-1);
 			const held = storeAsyncState.heldResumptions;
 			for (let i = 0; i < held.length;) {
