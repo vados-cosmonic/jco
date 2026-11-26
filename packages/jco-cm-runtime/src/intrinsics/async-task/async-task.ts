@@ -95,6 +95,9 @@ function defineAsyncTask() {
         #callbackFnName: string | null | undefined = null;
         #postReturnFn: TaskPostReturn | null = null;
         #getCalleeParamsFn: (() => unknown[]) | null = null;
+        // Bindgen leaves the lift metadata at its defaults in checked synchronous
+        // leaves. Their tasks enter and exit normally, but cannot use task.return
+        // or pass memory to a cross-component callee.
         #calleeIsAsync: boolean | null = null;
         #holdsEntrySlot = false;
         #funcTypeIsAsync = false;

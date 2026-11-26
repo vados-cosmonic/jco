@@ -741,9 +741,9 @@ mod tests {
             (import "host" (func $host (param "v" u32) (result u32)))
             (core func $lower (canon lower (func $host)))
             (core module $m (import "" "host" (func $host (param i32) (result i32)))
-                (export "run" (func $host)))
+                (memory (export "memory") 1) (export "run" (func $host)))
             (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
-            (func (export "run") (param "v" u32) (result u32) (canon lift (core func $i "run"))))"#,
+            (func (export "run") (param "v" u32) (result u32) (canon lift (core func $i "run") (memory (core memory $i "memory")))))"#,
         )
         .unwrap();
         for (profile, tracking, provider, provider_sync, direct) in [
@@ -824,6 +824,20 @@ mod tests {
             let standard_leaf = direct && provider.is_none_or(is_standard_checked_runtime);
             assert_eq!(source.contains("CURRENT_TASK_MAY_BLOCK"), !standard_leaf);
             assert_eq!(source.contains("canCreateBorrowHandles:"), standard_leaf);
+            for setter in [
+                "setCalleeIsAsync",
+                "setFuncTypeIsAsync",
+                "setReturnResultTypeIdx",
+                "setReturnMemoryIdx",
+                "setReturnMemory",
+                "setLiftMemory",
+            ] {
+                assert_eq!(
+                    source.contains(&format!("task.{setter}(")),
+                    !standard_leaf,
+                    "{setter} with provider {provider:?} and profile {profile:?}"
+                );
+            }
 
             assert_eq!(
                 source.contains("/intrinsics/sync"),

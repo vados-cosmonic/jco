@@ -811,7 +811,7 @@ impl FunctionBindgen<'_> {
     /// This must run before canonical argument lowering because lowering may
     /// invoke guest core exports such as `realloc`, which can access task-local
     /// context in WASI P3 components.
-    pub(crate) fn start_wasm_export_task(&mut self, publish_may_block: bool) {
+    pub(crate) fn start_wasm_export_task(&mut self, standard_sync_leaf: bool) {
         self.validate_task_management();
         if self.skip_fn_call_task_management {
             return;
@@ -868,17 +868,22 @@ impl FunctionBindgen<'_> {
                   stringEncoding: {string_encoding},
                   indexOnEntry: true,
               }});
-              task.setCalleeIsAsync({canonical_abi_async});
-              task.setFuncTypeIsAsync({func_type_async});
-              {set_return_result_type_idx}
-            "#,
-            canonical_abi_async = self.canonical_abi_async,
-            func_type_async = self.func_type_async,
-            set_return_result_type_idx = self
-                .return_result_type_idx
-                .map(|idx| format!("task.setReturnResultTypeIdx({idx});"))
-                .unwrap_or_default(),
+            "#
         );
+        // A checked synchronous leaf uses the task's synchronous defaults. Only
+        // task.return checks the lifted result type, and this leaf cannot import it.
+        // Custom providers can observe these setters and still receive every call.
+        if !standard_sync_leaf {
+            uwriteln!(
+                self.src,
+                "task.setCalleeIsAsync({});\ntask.setFuncTypeIsAsync({});",
+                self.canonical_abi_async,
+                self.func_type_async
+            );
+            if let Some(idx) = self.return_result_type_idx {
+                uwriteln!(self.src, "task.setReturnResultTypeIdx({idx});");
+            }
+        }
 
         if self.track_call {
             let tracking = self.intrinsic(Intrinsic::Component(ComponentIntrinsic::CallTracking));
@@ -916,7 +921,7 @@ impl FunctionBindgen<'_> {
         // Suspending adapters and cross-component calls read this register.
         // A checked synchronous leaf has neither, so it can enter its task
         // without allocating a WebAssembly.Global or writing it on every call.
-        if publish_may_block {
+        if !standard_sync_leaf {
             let register = self.intrinsic(Intrinsic::AsyncTask(
                 AsyncTaskIntrinsic::CurrentTaskMayBlock,
             ));
@@ -949,31 +954,24 @@ impl FunctionBindgen<'_> {
             uwriteln!(self.src, "{scope_id}++;");
         }
 
-        let (memory_idx_expr, get_memory_fn_expr) = if let Some(state) = &self.component_state {
+        // These memory references belong to task.return and cross-component
+        // calls. The ordinary canonical adapter accesses its memory directly.
+        if standard_sync_leaf {
+            return;
+        }
+        if let Some(state) = &self.component_state {
             let ComponentStateJsExprs {
                 memory_idx,
                 get_memory_fn,
                 ..
             } = state.get_js_exprs();
-            (memory_idx, get_memory_fn)
-        } else {
-            ("null".into(), "() => null".into())
-        };
-        if memory_idx_expr != "null" {
-            uwriteln!(
-                self.src,
-                r#"
-                  task.setReturnMemoryIdx({memory_idx_expr});
-                  task.setReturnMemory(({get_memory_fn_expr})());
-                "#
-            );
-        }
-        if self.component_state.is_some() {
-            // The lift's memory, if any, which a memory named by `task.return` must be
-            uwriteln!(
-                self.src,
-                "task.setLiftMemory(({get_memory_fn_expr})() ?? null);"
-            );
+            if memory_idx != "null" {
+                uwriteln!(
+                    self.src,
+                    "task.setReturnMemoryIdx({memory_idx});\ntask.setReturnMemory(({get_memory_fn})());"
+                );
+            }
+            uwriteln!(self.src, "task.setLiftMemory(({get_memory_fn})() ?? null);");
         }
     }
 

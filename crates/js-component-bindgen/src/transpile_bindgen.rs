@@ -5992,7 +5992,7 @@ impl<'a> Instantiator<'a, '_> {
         });
 
         // Generate function body
-        let publish_may_block = !self.is_standard_sync_leaf();
+        let standard_sync_leaf = self.is_standard_sync_leaf();
         let mut f = FunctionBindgen {
             resource_map,
             guest_resource_class_names: None,
@@ -6103,7 +6103,7 @@ impl<'a> Instantiator<'a, '_> {
             f.skip_fn_call_task_management = false;
         }
         if is_guest_export {
-            f.start_wasm_export_task(publish_may_block);
+            f.start_wasm_export_task(standard_sync_leaf);
             f.begin_wasm_export_body();
         }
 
