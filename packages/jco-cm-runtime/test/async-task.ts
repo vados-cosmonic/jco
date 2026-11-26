@@ -84,6 +84,27 @@ test.concurrent('bindings without borrow handles keep task scopes distinct witho
     }
 });
 
+test.concurrent('the oldest live thread stays the default when sibling threads exit out of order', () => {
+    const store = setup();
+    const [task] = store.asyncTask.createNewCurrentTask({ componentIdx: 0 });
+    const first = task.defaultThread();
+    const spawn = () => task.addThread(new store.asyncTask.AsyncThread({ componentIdx: 0, task }));
+    try {
+        const second = spawn();
+        const third = spawn();
+        task.removeThread(second);
+        expect(task.defaultThread()).toBe(first);
+        task.removeThread(first);
+        expect(task.defaultThread()).toBe(third);
+        task.removeThread(spawn());
+        expect(task.defaultThread()).toBe(third);
+        finish(task);
+        expect(task.defaultThread()).toBeUndefined();
+    } finally {
+        store.cleanup();
+    }
+});
+
 test.concurrent('task constructors retain store-local brands, statics and state', () => {
     const a = setup();
     const b = setup();

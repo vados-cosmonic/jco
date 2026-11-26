@@ -117,7 +117,12 @@ function defineAsyncTask() {
             | null = null;
         #resourceScopeExited = false;
         #subtasks: AsyncSubtaskType[] | null = null;
-        #threads: AsyncThreadType[] = [];
+        // Every export starts with one implicit thread. Store it directly so
+        // that creating and retiring an ordinary task never allocates a thread
+        // array. Once another thread joins, the array keeps insertion order
+        // and its first live entry remains the task's default thread.
+        #firstThread?: AsyncThreadType;
+        #threads?: AsyncThreadType[];
         #entered = false;
         #exited = false;
         #errored: unknown = null;
@@ -1102,7 +1107,7 @@ function defineAsyncTask() {
 
             // A task whose threads all exited unresolved has no thread left to
             // settle its completion on exit, so settle it here.
-            if (this.#exited && this.#threads.length === 0) {
+            if (this.#exited && this.#firstThread === undefined) {
                 this.#settleCompletionPromise();
             }
         }
@@ -1194,7 +1199,7 @@ function defineAsyncTask() {
 
             this.#exited = true;
             this.removeThread(this.defaultThread());
-            if (this.#threads.length > 0) {
+            if (this.#firstThread !== undefined) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id, { preserveTask: true });
             }
         }
@@ -1322,7 +1327,7 @@ function defineAsyncTask() {
         }
 
         defaultThread() {
-            return this.#threads[0];
+            return this.#firstThread!;
         }
 
         removeThread(thread: AsyncThreadType) {
@@ -1333,10 +1338,15 @@ function defineAsyncTask() {
             if (cstate && thread.hasIndex()) {
                 cstate.threads.remove(thread.id());
             }
-            if (this.#threads[this.#threads.length - 1] === thread) {
-                this.#threads.pop();
-            } else {
-                this.#threads = this.#threads.filter((t) => t !== thread);
+            if (this.#threads) {
+                if (this.#threads[this.#threads.length - 1] === thread) {
+                    this.#threads.pop();
+                } else {
+                    this.#threads = this.#threads.filter((t) => t !== thread);
+                }
+                this.#firstThread = this.#threads[0];
+            } else if (this.#firstThread === thread) {
+                this.#firstThread = undefined;
             }
             syncContextSlots(this.#context.registers);
 
@@ -1344,14 +1354,14 @@ function defineAsyncTask() {
             // is not a trap (Canonical ABI `Task.exit_implicit_thread`,
             // component-model#767): the task stays unresolved for good, and only
             // a caller that waits on it is affected.
-            if (cstate && this.#threads.length === 0 && !this.isResolvedState() && !this.isRejected()) {
+            if (cstate && this.#firstThread === undefined && !this.isResolvedState() && !this.isRejected()) {
                 cstate.noteUnresolvedExit(this);
             }
             // A thread exiting returns control to a sync call in progress,
             // which goes on only if it can (Canonical ABI `canon_lift`).
             cstate?.checkSyncCallBlocked();
 
-            if (this.#exited && this.#threads.length === 0) {
+            if (this.#exited && this.#firstThread === undefined) {
                 clearCurrentThread(this.#context.clearing, this.#componentIdx, this.#id);
             }
         }
@@ -1362,11 +1372,14 @@ function defineAsyncTask() {
             // register with (and none may be materialised on their behalf).
             if (this.#componentIdx === -1) {
                 thread.setId(++this.#store.hostThreadID);
-                this.#threads.push(thread);
-                return thread;
             }
-            this.#threads.push(thread);
-            if (!opts?.indexOnEntry) {
+            if (this.#threads) {
+                this.#threads.push(thread);
+            } else if (this.#firstThread) {
+                this.#threads = [this.#firstThread, thread];
+            }
+            this.#firstThread ??= thread;
+            if (this.#componentIdx !== -1 && !opts?.indexOnEntry) {
                 this.#insertThread(thread);
             }
             return thread;
