@@ -820,6 +820,88 @@ mod tests {
 
     #[cfg(feature = "embedded-cm-runtime")]
     #[test]
+    fn isolated_numeric_exports_require_the_standard_unobserved_runtime() {
+        let component = wat::parse_str(
+            r#"(component
+            (core module $m (func (export "f") (param i32) (result i32) local.get 0))
+            (core instance $i (instantiate $m))
+            (func (export "f") (param "n" u32) (result u32) (canon lift (core func $i "f"))))"#,
+        )
+        .unwrap();
+        for (provider, profile, tracking, tracing, specialized) in [
+            (None, RuntimeProfile::Checked, false, false, true),
+            (
+                Some("@bytecodealliance/jco-cm-runtime"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                true,
+            ),
+            (
+                Some("./custom"),
+                RuntimeProfile::Checked,
+                false,
+                false,
+                false,
+            ),
+            (None, RuntimeProfile::Debug, false, false, false),
+            (None, RuntimeProfile::Checked, true, false, false),
+            (None, RuntimeProfile::Checked, false, true, false),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts {
+                        name: "numeric".into(),
+                        instantiation_mode: Some(InstantiationMode::Async),
+                        tracing,
+                        ..Default::default()
+                    },
+                    cm_runtime_es_module: provider.map(String::from),
+                    cm_runtime_sync_imports: Some(true),
+                    runtime_profile: profile,
+                    call_tracking: tracking,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert_eq!(
+                generated_javascript(&result).contains("nativeNumericExports"),
+                specialized
+            );
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn numeric_exports_keep_tasks_for_host_calls_and_post_return() {
+        for component in [
+            r#"(component
+                (import "host" (func $host (result u32)))
+                (core func $lower (canon lower (func $host)))
+                (core module $m (import "" "host" (func $f (result i32))) (export "f" (func $f)))
+                (core instance $i (instantiate $m (with "" (instance (export "host" (func $lower))))))
+                (func (export "f") (result u32) (canon lift (core func $i "f"))))"#,
+            r#"(component
+                (core module $m (func (export "f") (result i32) i32.const 0) (func (export "cleanup") (param i32)))
+                (core instance $i (instantiate $m))
+                (func (export "f") (result u32) (canon lift (core func $i "f") (post-return (core func $i "cleanup")))))"#,
+        ] {
+            let result = transpile(
+                &wat::parse_str(component).unwrap(),
+                TranspileOpts {
+                    name: "numeric".into(),
+                    instantiation_mode: Some(InstantiationMode::Async),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            assert!(!generated_javascript(&result).contains("nativeNumericExports"));
+        }
+    }
+
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
     fn sync_leaf_initializers_only_install_observable_wrappers() {
         let component = wat::parse_str(r#"(component
             (import "length" (func $length (param "n" u32) (result u32)))

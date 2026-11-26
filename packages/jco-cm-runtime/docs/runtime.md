@@ -91,6 +91,14 @@ optimized path a provider's task and state factories may receive contexts
 without the subtask, waitable and future constructors. Shutdown can also omit
 the empty stream and future tables. The debug package keeps the general adapter for task diagnostics.
 
+The standard checked runtime also supports calling a flat numeric export of an
+isolated, import-free core module without allocating a task. Bindgen emits the
+same canonical numeric conversions on both paths. The guest cannot call the
+host, and primitive arguments cannot run JavaScript during coercion. A core
+trap still records the instance error for subsequent calls. A reentrant call,
+an object argument, or a factory with custom instantiation or options uses the
+ordinary task lifecycle so host code can observe entry, traps, and shutdown.
+
 ## Runtime profiles
 
 Runtime diagnostic statements carry a `DEBUG` JavaScript label.

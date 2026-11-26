@@ -301,6 +301,7 @@ struct JsFunctionBindgenArgs<'a> {
     /// The interned index of the function's result tuple type, for exports
     result_type_idx: Option<u32>,
     tracked_export: Option<u32>,
+    isolated_numeric_export: bool,
     /// The class to throw the error of the function's result as, if the
     /// function has one of its own (see `crate::result_error_class`)
     result_error_class: Option<String>,
@@ -804,7 +805,7 @@ impl JsBindgen<'_> {
                 "\
                     export function instantiate(getCoreModule, imports, instantiateCore, options) {{
                         const WebAssembly = options?.shim?.globals?.WebAssembly ?? globalThis.WebAssembly;
-                        if (typeof instantiateCore === 'undefined') {{
+                        {native_numeric_exports}if (typeof instantiateCore === 'undefined') {{
                             if (typeof WebAssembly === 'undefined') throw new Error('no WebAssembly implementation is available: pass instantiateCore or options.shim.globals.WebAssembly');
                             instantiateCore = {};
                         }}
@@ -821,6 +822,9 @@ impl JsBindgen<'_> {
                 &js_intrinsics as &str,
                 &intrinsic_definitions as &str,
                 &compilation_promises as &str,
+                native_numeric_exports = self.local_names.try_get("native numeric export instantiation")
+                    .map(|name| format!("const {name} = instantiateCore === undefined && options == null;\n"))
+                    .unwrap_or_default(),
             );
         } else if early_webidl_intrinsics {
             // Direct WebIDL import destructuring invokes the contextual proxy.
@@ -4947,6 +4951,7 @@ impl<'a> Instantiator<'a, '_> {
                     for_import: true,
                     result_type_idx: None,
                     tracked_export: None,
+                    isolated_numeric_export: false,
                     result_error_class: None,
                 });
                 uwriteln!(
@@ -5772,6 +5777,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import,
             result_type_idx,
             tracked_export,
+            isolated_numeric_export,
             result_error_class,
         } = args;
 
@@ -5914,6 +5920,45 @@ impl<'a> Instantiator<'a, '_> {
             );
         }
 
+        let direct_export = isolated_numeric_export.then(|| {
+            let mut guards = Vec::new();
+            if self.bindgen.opts.instantiation_mode.is_some() {
+                let (name, _) = self.bindgen.local_names.get_or_create(
+                    "native numeric export instantiation",
+                    "nativeNumericExports",
+                );
+                guards.push(name.to_owned());
+            }
+            // Coercing objects can execute user code before the core call.
+            // Keep a real task on the stack throughout those conversions.
+            for (param, arg) in func.params.iter().zip(&params) {
+                let primitive = if matches!(param.ty, Type::U64 | Type::S64) {
+                    "bigint"
+                } else {
+                    "number"
+                };
+                guards.push(format!("typeof {arg} === '{primitive}'"));
+            }
+            let trap = self
+                .bindgen
+                .intrinsic(Intrinsic::Component(ComponentIntrinsic::GlobalStoreTrap));
+            guards.push(format!("{trap}.error === null"));
+            // An object argument on an enclosing call may reenter here from
+            // valueOf. Preserve the nested call's task and lock semantics.
+            let tasks = self.bindgen.intrinsic(Intrinsic::AsyncTask(
+                AsyncTaskIntrinsic::GlobalAsyncCurrentTaskMap,
+            ));
+            let instance = opts.instance.as_u32();
+            guards.push(format!("!{tasks}.get({instance})?.length"));
+            let lookup = self.bindgen.intrinsic_call_prefix(Intrinsic::Component(
+                ComponentIntrinsic::GetOrCreateAsyncState,
+            ));
+            (
+                guards.join(" && "),
+                format!("{lookup}{instance}).markTrapped(err)"),
+            )
+        });
+
         // Generate function body
         let mut f = FunctionBindgen {
             resource_map,
@@ -6003,6 +6048,27 @@ impl<'a> Instantiator<'a, '_> {
                 | AbiVariant::GuestExportAsync
                 | AbiVariant::GuestExportAsyncStackful
         );
+        if let Some((guard, mark_trapped)) = direct_export {
+            // Emit the ordinary canonical conversions on both paths. A core
+            // trap still poisons the instance even when it has never had a task.
+            uwriteln!(self.src.js, "if ({guard}) {{ try {{");
+            f.skip_fn_call_task_management = true;
+            abi::call(
+                self.resolve,
+                abi,
+                LiftLower::LowerArgsLiftResults,
+                func,
+                &mut f,
+                false,
+            );
+            self.src.js(&f.src);
+            uwriteln!(
+                self.src.js,
+                "}} catch (err) {{ {mark_trapped}; throw err; }} }}"
+            );
+            f.src = source::Source::default();
+            f.skip_fn_call_task_management = false;
+        }
         if is_guest_export {
             f.start_wasm_export_task();
             f.begin_wasm_export_body();
@@ -6896,6 +6962,48 @@ impl<'a> Instantiator<'a, '_> {
             self.bindgen.tracked_exports += 1;
             id
         });
+        // An import-free core in a single-instance component cannot call a
+        // host function, another adapter, or a task intrinsic. Flat numeric
+        // arguments and results need neither guest memory nor post-return.
+        // Restrict results to full-width numbers: lifting these cannot trap
+        // after the core call. A narrow result has a separate validation step.
+        let isolated_numeric_export = self.direct_sync_imports
+            // Other providers can instrument task creation even when they
+            // implement the five operations used by synchronous host imports.
+            && self.bindgen.cm_runtime_es_module == Some("@bytecodealliance/jco-cm-runtime")
+            && !self.bindgen.opts.tracing
+            && !self.bindgen.opts.asmjs
+            && !requires_async_porcelain
+            && !is_async
+            && matches!(func.kind, FunctionKind::Freestanding)
+            && options.callback.is_none()
+            && options.post_return.is_none()
+            && export_resource_map.is_empty()
+            && self.instances.len() == 1
+            && matches!(def, CoreDef::Export(export)
+                if matches!(&self.modules[self.instances[export.instance]],
+                    core::Translation::Normal(module) if module.module.imports().len() == 0))
+            && func.params.len() <= MAX_FLAT_PARAMS
+            && func.params.iter().all(|param| {
+                matches!(
+                    param.ty,
+                    Type::U8
+                        | Type::S8
+                        | Type::U16
+                        | Type::S16
+                        | Type::U32
+                        | Type::S32
+                        | Type::U64
+                        | Type::S64
+                        | Type::F32
+                        | Type::F64
+                )
+            })
+            && matches!(
+                func.result,
+                None | Some(Type::U32 | Type::S32 | Type::U64 | Type::S64 | Type::F32 | Type::F64)
+            );
+
         // Perform bindgen
         self.bindgen(JsFunctionBindgenArgs {
             nparams: func.params.len(),
@@ -6930,6 +7038,7 @@ impl<'a> Instantiator<'a, '_> {
             for_import: false,
             result_type_idx: Some(self.types[*func_ty_idx].results.as_u32()),
             tracked_export,
+            isolated_numeric_export,
             result_error_class,
         });
         if let Some(target) = wrapped_function_target {
