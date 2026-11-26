@@ -6002,6 +6002,7 @@ impl<'a> Instantiator<'a, '_> {
             guest_resource_class_names: None,
             skip_fn_call_task_management: false,
             direct_sync_import: for_import && self.direct_sync_imports,
+            standard_sync_leaf,
             track_call: tracked_export.is_some(),
             clear_resource_borrows: false,
             intrinsics: &mut self.bindgen.all_intrinsics,
@@ -6107,7 +6108,7 @@ impl<'a> Instantiator<'a, '_> {
             f.skip_fn_call_task_management = false;
         }
         if is_guest_export {
-            f.start_wasm_export_task(standard_sync_leaf);
+            f.start_wasm_export_task();
             f.begin_wasm_export_body();
         }
 

@@ -173,6 +173,10 @@ pub struct FunctionBindgen<'a> {
     #[builder(default)]
     pub(crate) direct_sync_import: bool,
 
+    /// A single synchronous component instance using the standard checked runtime.
+    #[builder(default)]
+    pub(crate) standard_sync_leaf: bool,
+
     /// Associate a generated host invocation with its private runtime task.
     #[builder(default)]
     pub track_call: bool,
@@ -811,7 +815,7 @@ impl FunctionBindgen<'_> {
     /// This must run before canonical argument lowering because lowering may
     /// invoke guest core exports such as `realloc`, which can access task-local
     /// context in WASI P3 components.
-    pub(crate) fn start_wasm_export_task(&mut self, standard_sync_leaf: bool) {
+    pub(crate) fn start_wasm_export_task(&mut self) {
         self.validate_task_management();
         if self.skip_fn_call_task_management {
             return;
@@ -873,7 +877,7 @@ impl FunctionBindgen<'_> {
         // A checked synchronous leaf uses the task's synchronous defaults. Only
         // task.return checks the lifted result type, and this leaf cannot import it.
         // Custom providers can observe these setters and still receive every call.
-        if !standard_sync_leaf {
+        if !self.standard_sync_leaf {
             uwriteln!(
                 self.src,
                 "task.setCalleeIsAsync({});\ntask.setFuncTypeIsAsync({});",
@@ -921,7 +925,7 @@ impl FunctionBindgen<'_> {
         // Suspending adapters and cross-component calls read this register.
         // A checked synchronous leaf has neither, so it can enter its task
         // without allocating a WebAssembly.Global or writing it on every call.
-        if !standard_sync_leaf {
+        if !self.standard_sync_leaf {
             let register = self.intrinsic(Intrinsic::AsyncTask(
                 AsyncTaskIntrinsic::CurrentTaskMayBlock,
             ));
@@ -956,7 +960,7 @@ impl FunctionBindgen<'_> {
 
         // These memory references belong to task.return and cross-component
         // calls. The ordinary canonical adapter accesses its memory directly.
-        if standard_sync_leaf {
+        if self.standard_sync_leaf {
             return;
         }
         if let Some(state) = &self.component_state {
@@ -3439,13 +3443,16 @@ impl Bindgen for FunctionBindgen<'_> {
                                 // resource was constructed externally.
                                 let symbol_resource_rep =
                                     self.intrinsic(Intrinsic::SymbolResourceRep);
-                                // A leaf without resource transfers never consults the
-                                // representation history used by transfer_borrow.
-                                let track_rep = if self.direct_sync_import {
-                                    ", false"
-                                } else {
-                                    ""
-                                };
+                                // transfer_borrow is the only reader of representation history.
+                                // A checked leaf cannot transfer resources between instances, even
+                                // when JS passes ownership into a guest export. Recording those
+                                // reps would keep one number per call after the guest drops them.
+                                let track_rep =
+                                    if self.standard_sync_leaf || self.direct_sync_import {
+                                        ", false"
+                                    } else {
+                                        ""
+                                    };
                                 let create_own_fn = self.intrinsic_call(
                                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableCreateOwn),
                                     &format!("handleTable{tid}, rep{track_rep}"),
