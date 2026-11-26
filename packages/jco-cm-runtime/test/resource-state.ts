@@ -116,9 +116,11 @@ test('indexed captures recover live reps across sparse and recycled handles', ()
     expect(captures.get(10)).toBeUndefined();
     expect(captures.get(0)).toBe(last);
     expect(captures.slots).toBeUndefined();
+    const migrated = captures.byRep();
     captures.set(0xffffffff, last);
     captures.delete(0);
-    expect([...captures.byRep()]).toEqual([[0xffffffff, last]]);
+    expect(captures.byRep()).toBe(migrated);
+    expect([...migrated]).toEqual([[0xffffffff, last]]);
 });
 
 test.concurrent('component handle kinds share an index space and reuse freed indices LIFO', () => {

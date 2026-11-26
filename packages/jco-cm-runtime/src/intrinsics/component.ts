@@ -516,7 +516,7 @@ function defineComponentAsyncState() {
 
         #componentIdx: number;
         #callingAsyncImport = false;
-        #syncImportWait = promiseWithResolvers<void>();
+        #syncImportWait?: ReturnType<typeof promiseWithResolvers<void>>;
         #lockHolderTaskID: bigint | null = null;
         #lockWaiters: { taskID: bigint; resolve(): void }[] = [];
         #numWaitingToEnter = 0;
@@ -660,12 +660,14 @@ function defineComponentAsyncState() {
 
         #notifySyncImportEnd() {
             const existing = this.#syncImportWait;
-            this.#syncImportWait = promiseWithResolvers<void>();
-            existing.resolve();
+            // A transition with no waiters needs no promise. Clear the current batch
+            // before waking it so a later wait observes the next transition.
+            this.#syncImportWait = undefined;
+            existing?.resolve();
         }
 
         async waitForSyncImportCallEnd() {
-            await this.#syncImportWait.promise;
+            await (this.#syncImportWait ??= promiseWithResolvers<void>()).promise;
         }
 
         setBackpressure(v: number) {

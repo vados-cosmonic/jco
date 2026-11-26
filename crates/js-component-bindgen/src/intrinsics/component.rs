@@ -824,7 +824,7 @@ impl ComponentIntrinsic {
 
                         #componentIdx;
                         #callingAsyncImport = false;
-                        #syncImportWait = {promise_with_resolvers_fn}();
+                        #syncImportWait;
                         #lockHolderTaskID = null;
                         #lockWaiters = [];
                         #numWaitingToEnter = 0;
@@ -963,12 +963,12 @@ impl ComponentIntrinsic {
 
                         #notifySyncImportEnd() {{
                             const existing = this.#syncImportWait;
-                            this.#syncImportWait = {promise_with_resolvers_fn}();
-                            existing.resolve();
+                            this.#syncImportWait = undefined;
+                            existing?.resolve();
                         }}
 
                         async waitForSyncImportCallEnd() {{
-                            await this.#syncImportWait.promise;
+                            await (this.#syncImportWait ??= {promise_with_resolvers_fn}()).promise;
                         }}
 
                         setBackpressure(v) {{

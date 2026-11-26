@@ -5,7 +5,7 @@ import { tableOwn } from './resource.js';
 export class IndexedResourceCaptures {
     slots: (object | undefined)[] | undefined = [];
     readonly #handles: ResourceTable;
-    readonly #reps = new Map<number, object>();
+    #reps?: Map<number, object>;
 
     constructor(handles: ResourceTable) {
         this.#handles = handles;
@@ -18,16 +18,19 @@ export class IndexedResourceCaptures {
      * subsequent borrow or drop observes the same capture.
      */
     byRep(): Map<number, object> {
+        // Ordinary host-created resources stay in slots for their entire lifetime.
+        // Allocate the fallback map when a caller first needs lookup by rep.
+        const reps = (this.#reps ??= new Map<number, object>());
         if (this.slots) {
             for (let handle = 1; handle < this.slots.length; handle++) {
                 const value = this.slots[handle];
                 if (value !== undefined) {
-                    this.#reps.set(this.#handles[handle * 2 + 1] - tableOwn, value);
+                    reps.set(this.#handles[handle * 2 + 1] - tableOwn, value);
                 }
             }
             this.slots = undefined;
         }
-        return this.#reps;
+        return reps;
     }
 
     get(rep: number) {
