@@ -639,6 +639,17 @@ impl JsBindgen<'_> {
         }
     }
 
+    /// Ordinary ES modules already wait for native core compilation and
+    /// instantiation. Custom loaders and TLA-compatible modules keep the
+    /// generator so callers can still observe synchronous completion.
+    fn native_module_init(&self) -> bool {
+        self.opts.instantiation_mode.is_none()
+            && !self.opts.tla_compat
+            && self
+                .cm_runtime_es_module
+                .is_none_or(crate::is_standard_checked_runtime)
+    }
+
     fn finish_component(
         &mut self,
         name: &str,
@@ -918,36 +929,46 @@ impl JsBindgen<'_> {
                 maybe_sync = helper.maybe_sync_return,
             );
         } else {
-            let (maybe_init_export, maybe_init) =
-                if self.opts.tla_compat && opts.instantiation_mode.is_none() {
+            if !early_webidl_intrinsics {
+                output.push_str(&js_intrinsics);
+            }
+            output.push_str(&intrinsic_definitions);
+            output.push_str(&self.src.js);
+            if self.native_module_init() {
+                uwrite!(
+                    output,
+                    "await (async () => {{
+                        try {{
+                            {}\
+                            {}\
+                            {}\
+                        }} catch (e) {{
+                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                                throw new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                            }}
+                            throw e;
+                        }}
+                    }})();",
+                    &compilation_promises as &str,
+                    &self.src.js_init as &str,
+                    &core_exported_funcs as &str,
+                );
+            } else {
+                let (maybe_init_export, maybe_init) = if self.opts.tla_compat {
                     uwriteln!(self.src.js_init, "_initialized = true;");
-                    (
-                        "\
-                        let _initialized = false;
-                        export ",
-                        "",
-                    )
+                    ("let _initialized = false;\nexport ", "")
                 } else {
-                    (
-                        "",
-                        "
-                        await $init;
-                    ",
-                    )
+                    ("", "await $init;")
                 };
-
-            let helper = self.instantiation_helper_names();
-            uwrite!(
-                output,
-                "\
-                    {}
-                    {}
-                    {}
+                let helper = self.instantiation_helper_names();
+                uwrite!(
+                    output,
+                    "\
                     {maybe_init_export}const $init = (() => {{
                         let {gen} = (function* _initGenerator () {{
                             {}\
-                            {}\
-                            {}\
+                                {}\
+                                {}\
                         }})();
                         let {promise}, {resolve}, {reject};
                         function {normalize} (e) {{
@@ -983,21 +1004,19 @@ impl JsBindgen<'_> {
                         return {promise} || {maybe_sync};
                     }})();
                     {maybe_init}\
-                ",
-                if early_webidl_intrinsics { "" } else { &js_intrinsics as &str },
-                &intrinsic_definitions as &str,
-                &self.src.js as &str,
-                &compilation_promises as &str,
-                &self.src.js_init as &str,
-                &core_exported_funcs as &str,
-                gen = helper.generator,
-                promise = helper.promise,
-                resolve = helper.resolve,
-                reject = helper.reject,
-                normalize = helper.normalize_instantiation_error,
-                run_next = helper.run_next,
-                maybe_sync = helper.maybe_sync_return,
-            );
+                    ",
+                    &compilation_promises as &str,
+                    &self.src.js_init as &str,
+                    &core_exported_funcs as &str,
+                    gen = helper.generator,
+                    promise = helper.promise,
+                    resolve = helper.resolve,
+                    reject = helper.reject,
+                    normalize = helper.normalize_instantiation_error,
+                    run_next = helper.run_next,
+                    maybe_sync = helper.maybe_sync_return,
+                );
+            }
 
             self.esm_bindgen.render_exports_with_util_members(
                 &mut output,
@@ -4572,9 +4591,14 @@ impl<'a> Instantiator<'a, '_> {
 
         match self.bindgen.opts.instantiation_mode {
             Some(InstantiationMode::Async) | None => {
+                let wait = if self.bindgen.native_module_init() {
+                    "await"
+                } else {
+                    "yield"
+                };
                 uwriteln!(
                     self.src.js_init,
-                    "({{ exports: exports{iu32} }} = yield {instantiate}yield module{}{imports}));",
+                    "({{ exports: exports{iu32} }} = {wait} {instantiate}{wait} module{}{imports}));",
                     module_idx.as_u32(),
                 )
             }
