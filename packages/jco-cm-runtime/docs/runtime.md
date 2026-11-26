@@ -82,12 +82,22 @@ with one instance and only synchronous calls can reuse its caller's task and
 borrow scope for a host import. Call tracking, asynchronous functions, defined
 guest resources and cross-instance transfers use the general adapter.
 
+For example, when an exported guest function calls a DOM method in a loop,
+each iteration reuses the export task. A core start function can call the same
+import before any export has run. The adapter creates a task when the stack
+is empty so host code can still observe the instance as busy. A borrowed
+resource wrapper expires when its host call
+finishes, including when the host throws. See the implementations of
+[task selection](../src/intrinsics/async-task/lower-import-backwards-compat.ts)
+and [resource captures](../src/intrinsics/resource-captures.ts).
+
 A custom checked provider or a directory URL can opt into this extension with
 `cmRuntimeSyncImports: true` or `jco transpile --cm-runtime-sync-imports`.
 Implement the operations in `SyncImportsModule`, or re-export the standard
 `intrinsics/sync` module. The default custom-provider path uses the original
-API-v1 contract. When using an older standard package, set `cmRuntimeSyncImports: false` or pass `--no-cm-runtime-sync-imports` to retain that contract. On the
-optimized path a provider's task and state factories may receive contexts
+API-v1 contract. When using an older standard package, set
+`cmRuntimeSyncImports: false` or pass `--no-cm-runtime-sync-imports` to retain
+that contract. On the optimized path a provider's task and state factories may receive contexts
 without the subtask, waitable and future constructors. Shutdown can also omit
 the empty stream and future tables. The debug package keeps the general adapter for task diagnostics.
 

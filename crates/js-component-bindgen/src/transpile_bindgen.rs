@@ -331,6 +331,9 @@ pub struct TranspileBindgenResult {
 
 /// A sync-only leaf has no guest-visible subtask handle, task-local intrinsic,
 /// or cross-component borrowing scope. The export task owns its lifetime.
+/// Check the translated trampolines as well as the WIT signatures. A synchronous
+/// signature can still call a task intrinsic or transfer a borrow between
+/// instances. New trampoline kinds use the general adapter until reviewed here.
 fn is_sync_import_leaf(component: &ComponentTranslation, types: &ComponentTypes) -> bool {
     component.component.num_runtime_component_instances == 1
         && component.component.num_future_tables == 0
@@ -6968,8 +6971,9 @@ impl<'a> Instantiator<'a, '_> {
         // Restrict results to full-width numbers: lifting these cannot trap
         // after the core call. A narrow result has a separate validation step.
         let isolated_numeric_export = self.direct_sync_imports
-            // Other providers can instrument task creation even when they
-            // implement the five operations used by synchronous host imports.
+            // Opting into the host-import adapter permits reusing an enclosing
+            // task. A custom provider can still observe creation of the export
+            // task itself, so only the standard runtime can elide it here.
             && self.bindgen.cm_runtime_es_module == Some("@bytecodealliance/jco-cm-runtime")
             && !self.bindgen.opts.tracing
             && !self.bindgen.opts.asmjs
