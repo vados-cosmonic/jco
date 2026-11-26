@@ -3805,8 +3805,7 @@ impl<'a> Instantiator<'a, '_> {
                             );
                         }
                         format!(
-                                            "
-                            const rsc = {lookup};
+                            "const rsc = {lookup};
                             if (rsc) {{
                                 {release}
                                 {store}.disposed.add(rsc);
@@ -3814,7 +3813,7 @@ impl<'a> Instantiator<'a, '_> {
                             }} else if ({imported_resource_local_name}[{symbol_cabi_dispose}]) {{
                                 {imported_resource_local_name}[{symbol_cabi_dispose}](handleEntry.rep);
                             }}"
-                                        )
+                        )
                     } else {
                         // If not, then capture / disposal paths are never called
                         format!(
@@ -3828,9 +3827,13 @@ impl<'a> Instantiator<'a, '_> {
                     Intrinsic::Resource(ResourceIntrinsic::ResourceTableRemove),
                     &format!("handleTable{tid}, handle"),
                 );
+                // Source adjusts indentation once per line. A destructor can end
+                // in its own closing brace, so close the ownership check on a new line.
                 let drop = format!(
                     "const handleEntry = {rsc_table_remove};
-                    if (handleEntry.own) {{ {dtor} }}"
+                    if (handleEntry.own) {{
+                        {dtor}
+                    }}"
                 );
                 if self.direct_sync_imports {
                     let idx = instance.as_u32();
@@ -3846,7 +3849,12 @@ impl<'a> Instantiator<'a, '_> {
                         }} catch (err) {{ throw {record}{idx}, err, true); }}
                     }}");
                 } else {
-                    uwriteln!(self.src.js, "function trampoline{i}(handle) {{ {drop} }}");
+                    uwriteln!(
+                        self.src.js,
+                        "function trampoline{i}(handle) {{
+                            {drop}
+                        }}"
+                    );
                 }
             }
 
