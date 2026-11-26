@@ -57,8 +57,9 @@ const RUNTIME_SOURCE: &str = include_str!("../runtime/runtime-all.js");
 const RUNTIME_EXPORT_MAP: &str = include_str!("../runtime/runtime-export-map.tsv");
 
 /// Prefix given to the runtime's top-level names so they cannot capture or be
-/// captured by names in generated bindings.
-const NAMESPACE: &str = "__jcoEmbeddedRuntime$";
+/// captured by names in generated bindings. Every reference carries this prefix in
+/// unminified modules, so keep it short while preserving each intrinsic’s name.
+const NAMESPACE: &str = "$cm$";
 
 /// Name, within the namespace, of the function that creates a runtime for one logging choice.
 const INSTANCE_RUNTIME: &str = "$instance";
@@ -627,7 +628,7 @@ mod tests {
             "use components";
             import { toInt8 } from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
             import { consume } from 'consumer';
-            export const __jcoEmbeddedRuntime$toInt8 = 42;
+            export const $cm$toInt8 = 42;
             export function run(value) { return consume(toInt8({ strict: false }, value)); }
             export const location = import.meta.url;
         "#;
@@ -635,8 +636,8 @@ mod tests {
         assert!(!linked.contains("@bytecodealliance/jco-cm-runtime"));
         assert!(linked.contains("consumer"));
         assert!(linked.contains("import.meta.url"));
-        assert!(linked.contains("__jcoEmbeddedRuntime$toInt8 = 42"));
-        assert!(linked.contains("__jcoEmbeddedRuntime$$toInt8"));
+        assert!(linked.contains("$cm$toInt8 = 42"));
+        assert!(linked.contains("$cm$$toInt8"));
         assert!(!linked.contains("TextEncoder"));
         assert!(linked.starts_with("\"use components\";"));
         assert_eq!(linked.matches("use components").count(), 1);

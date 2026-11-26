@@ -1061,7 +1061,7 @@ mod tests {
         // the shipped runtime when that feature is enabled, and rendered inline otherwise.
         #[cfg(feature = "embedded-cm-runtime")]
         {
-            assert!(direct_source.contains("__jcoEmbeddedRuntime$tableGet"));
+            assert!(direct_source.contains("$cm$tableGet"));
             assert!(!direct_source.contains(crate::embedded_runtime::PACKAGE));
             assert!(!direct_source.contains("\nimport "));
         }
