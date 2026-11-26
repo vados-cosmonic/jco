@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit b51743055ea7205d972b6aa1fd0e83db1c218198
+// generated from commit 687c155d22b03754fb0910f5f2e270b9fa7ab44f
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -941,7 +941,7 @@ function defineComponentAsyncState() {
 		#nextHandlerID = 0n;
 		/** Cancels the scheduled tick while the tick loop runs. */
 		#tickLoop = null;
-		#onExclusiveReleaseHandlers = [];
+		#onExclusiveReleaseHandlers;
 		#mayLeave = true;
 		handles;
 		subtasks;
@@ -1216,13 +1216,16 @@ function defineComponentAsyncState() {
 				return false;
 			}
 			this.#lockHolderTaskID = null;
-			this.#onExclusiveReleaseHandlers = this.#onExclusiveReleaseHandlers.filter((v) => !!v);
-			for (const [idx, f] of this.#onExclusiveReleaseHandlers.entries()) try {
-				this.#onExclusiveReleaseHandlers[idx] = null;
-				f();
-			} catch (err) {
-				DEBUG: debugLog("error while executing handler for next exclusive release", err);
-				throw err;
+			const handlers = this.#onExclusiveReleaseHandlers;
+			if (handlers?.size) for (const registration of handlers) {
+				handlers.delete(registration);
+				const { fn } = registration;
+				try {
+					fn();
+				} catch (err) {
+					DEBUG: debugLog("error while executing handler for next exclusive release", err);
+					throw err;
+				}
 			}
 			this.#scheduleLockHandoff();
 			return true;
@@ -1241,7 +1244,7 @@ function defineComponentAsyncState() {
 		}
 		onNextExclusiveRelease(fn) {
 			DEBUG: debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
-			this.#onExclusiveReleaseHandlers.push(fn);
+			(this.#onExclusiveReleaseHandlers ??= /* @__PURE__ */ new Set()).add({ fn });
 		}
 		async waitForExclusiveRelease() {
 			while (this.isExclusivelyLocked()) await new Promise((resolve) => this.onNextExclusiveRelease(resolve));
