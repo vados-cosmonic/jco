@@ -2101,10 +2101,10 @@ impl Bindgen for FunctionBindgen<'_> {
                 );
                 self.emit_realloc_check(&result, &len, size, align);
 
-                // ... then consume the vector and use the block to lower the
-                // result.
                 self.emit_list_bounds_check(&result, &len, size);
-                uwriteln!(self.src, "for (let i = 0; i < {vec}.length; i++) {{");
+                // Realloc and element access can call host code. Lower exactly the
+                // number of elements we allocated and will report to the guest.
+                uwriteln!(self.src, "for (let i = 0; i < {len}; i++) {{");
                 uwriteln!(self.src, "const e = {vec}[i];");
                 uwrite!(self.src, "const base = {result} + i * {size};");
                 self.src.push_str(&body);
