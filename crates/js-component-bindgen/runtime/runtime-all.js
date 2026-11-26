@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 3ffabc739b72a4a8afdcfdd3051d50d5dd1d379f
+// generated from commit c873ff950abc6bcf280129f6d97e781a4d0dcebe
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -11775,6 +11775,12 @@ var IndexedResourceCaptures = class {
 	#reps;
 	constructor(handles) {
 		this.#handles = handles;
+	}
+	get handles() {
+		return this.#handles;
+	}
+	get captures() {
+		return this.byRep();
 	}
 	/**
 	* Automatically assigned reps can be looked up by guest handle, saving a
