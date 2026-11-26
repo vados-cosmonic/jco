@@ -35,8 +35,11 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::OnceLock;
 
 use anyhow::{Context, Result, bail, ensure};
-use oxc_allocator::Allocator;
-use oxc_ast::ast::{BindingPattern, Declaration, Function, ImportDeclarationSpecifier, Statement};
+use oxc_allocator::{Allocator, CloneIn};
+use oxc_ast::ast::{
+    BindingPattern, Declaration, Expression, Function, ImportDeclarationSpecifier,
+    ObjectPropertyKind, Program, Statement,
+};
 use oxc_codegen::{Codegen, CodegenOptions, CommentOptions};
 use oxc_minifier::{CompressOptions, Minifier, MinifierOptions};
 use oxc_parser::Parser;
@@ -342,6 +345,7 @@ pub(crate) fn link(
     // Pair each imported name with the runtime's implementation of it.
     let aliases = export_aliases()?;
     let mut imported: Vec<(&str, &str)> = Vec::new();
+    let mut module_initializers = Vec::new();
     for statement in &bindings.body {
         let Some(subpath) = runtime_subpath(statement) else {
             continue;
@@ -364,7 +368,14 @@ pub(crate) fn link(
             let target = runtime.exports.get(*alias).with_context(|| {
                 format!("the shipped runtime does not define {export} of {subpath}")
             })?;
-            imported.push((specifier.local.name.as_str(), target.as_str()));
+            let binding = (specifier.local.name.as_str(), target.as_str());
+            imported.push(binding);
+            if !per_instance
+                && matches!(logging, Logging::Disabled)
+                && export.starts_with("initialize")
+            {
+                module_initializers.push(binding);
+            }
         }
     }
     bindings
@@ -449,6 +460,9 @@ pub(crate) fn link(
         parsed.diagnostics
     );
     let mut program = parsed.program;
+    if !module_initializers.is_empty() {
+        inline_module_initializers(&allocator, &mut program, &module_initializers);
+    }
     // Labeled statements go before what only they reach is looked for, so that
     // the arguments of a removed diagnostic are removed with it.
     let mut compress = CompressOptions::dce();
@@ -473,6 +487,85 @@ pub(crate) fn link(
         .build(&program)
         .code;
     Ok(Some(code))
+}
+
+/// Evaluate simple runtime factories directly at module-level initialization sites.
+/// Both expressions live in the same lexical scope. Each use still creates its
+/// own value, in the original order, and nested scopes can keep calling the factory.
+fn inline_module_initializers<'a>(
+    allocator: &'a Allocator,
+    program: &mut Program<'a>,
+    imported: &[(&str, &str)],
+) {
+    let mut factories = HashMap::new();
+    for statement in &program.body {
+        let Statement::VariableDeclaration(vars) = statement else {
+            continue;
+        };
+        if !vars.kind.is_const() {
+            continue;
+        }
+        for var in &vars.declarations {
+            let (
+                BindingPattern::BindingIdentifier(id),
+                Some(Expression::ArrowFunctionExpression(arrow)),
+            ) = (&var.id, &var.init)
+            else {
+                continue;
+            };
+            if arrow.r#async || !arrow.params.items.is_empty() || arrow.params.rest.is_some() {
+                continue;
+            }
+            let Some(value) = arrow.get_expression() else {
+                continue;
+            };
+            if is_initializer_value(value) {
+                factories.insert(id.name.as_str(), value);
+            }
+        }
+    }
+    let initializers: HashMap<_, _> = imported
+        .iter()
+        .filter_map(|&(local, target)| Some((local, factories.get(target)?.clone_in(allocator))))
+        .collect();
+    for statement in &mut program.body {
+        let Statement::VariableDeclaration(vars) = statement else {
+            continue;
+        };
+        for var in &mut vars.declarations {
+            let Some(Expression::CallExpression(call)) = &var.init else {
+                continue;
+            };
+            let Expression::Identifier(callee) = &call.callee else {
+                continue;
+            };
+            if !call.optional
+                && call.arguments.is_empty()
+                && let Some(value) = initializers.get(callee.name.as_str())
+            {
+                var.init = Some(value.clone_in(allocator));
+            }
+        }
+    }
+}
+
+/// Only copy the data expressions used to initialize runtime state. A function or
+/// class, direct eval, or a tagged template can observe its original expression site.
+fn is_initializer_value(value: &Expression<'_>) -> bool {
+    match value.get_inner_expression() {
+        Expression::ArrayExpression(array) => array.elements.iter().all(|e| e.as_expression().is_some_and(is_initializer_value)),
+        Expression::ObjectExpression(object) => object.properties.iter().all(|p| matches!(p,
+            ObjectPropertyKind::ObjectProperty(p) if !p.computed && !p.method && is_initializer_value(&p.value))),
+        Expression::NewExpression(new) => matches!(new.callee, Expression::Identifier(_)) &&
+            new.arguments.iter().all(|a| a.as_expression().is_some_and(is_initializer_value)),
+        Expression::CallExpression(call) => (call.callee.is_specific_id("Symbol") || call.callee.is_specific_member_access("Symbol", "for")) &&
+            call.arguments.iter().all(|a| a.as_expression().is_some_and(is_initializer_value)),
+        Expression::StaticMemberExpression(member) => is_initializer_value(&member.object),
+        Expression::LogicalExpression(logical) => is_initializer_value(&logical.left) && is_initializer_value(&logical.right),
+        Expression::UnaryExpression(unary) => is_initializer_value(&unary.argument),
+        Expression::Identifier(_) => true,
+        literal => literal.is_literal(),
+    }
 }
 
 #[cfg(test)]
@@ -559,6 +652,46 @@ mod tests {
         assert!(linked.contains("globalThis?.process?.env?.JCO_DEBUG ?"));
         assert_eq!(linked.matches("JCO_DEBUG").count(), 1);
         assert!(!linked.contains(&format!("{NAMESPACE}$")));
+    }
+
+    #[test]
+    fn checked_module_initializers_allocate_at_the_original_site() {
+        let source = r#"
+            import { initializeInstanceFlags as makeFlags } from '@bytecodealliance/jco-cm-runtime/intrinsics/component';
+            import { observe } from 'host';
+            const first = makeFlags();
+            observe(first);
+            const second = makeFlags();
+            const withArgument = makeFlags(observe(second));
+            export function nested(Map) { return [makeFlags(), Map]; }
+            export { first, second, withArgument };
+        "#;
+        let output = super::link(source, false, RuntimeProfile::Checked)
+            .unwrap()
+            .unwrap();
+        let first = output.find("first = new Map()").unwrap();
+        let observation = output.find("observe(first)").unwrap();
+        let second = output.find("second = new Map()").unwrap();
+        assert!(first < observation && observation < second);
+        assert!(output.contains("makeFlags(observe(second))"));
+        assert!(output.contains("[makeFlags(), Map]"));
+    }
+
+    #[test]
+    fn keeps_factories_with_site_sensitive_expressions() {
+        let allocator = super::Allocator::default();
+        for source in [
+            "({ item: tag`value` })",
+            "eval('value')",
+            "class {}",
+            "({ [effect()]: 1 })",
+            "(...args) => args",
+        ] {
+            let value = super::Parser::new(&allocator, source, super::SourceType::mjs())
+                .parse_expression()
+                .unwrap();
+            assert!(!super::is_initializer_value(&value), "{source}");
+        }
     }
 
     #[test]
