@@ -222,6 +222,23 @@ test.concurrent('a task whose threads all exited unresolved deadlocks its unreso
     }
 });
 
+test.concurrent('finishing a synchronous call removes only its own scheduler entry', () => {
+    const { component } = create();
+    const state = component.getOrCreateAsyncState(0);
+    const first = task(1n, 0).value;
+    const second = task(2n, 0).value;
+    const active = () => component.storeAsyncState.syncCalls.map((call) => call.task.id());
+
+    state.beginSyncCall(first);
+    state.endSyncCall(second);
+    expect(active()).toEqual([1n]);
+    state.beginSyncCall(second);
+    state.endSyncCall(first);
+    expect(active()).toEqual([2n]);
+    state.endSyncCall(second);
+    expect(active()).toEqual([]);
+});
+
 test.concurrent('a synchronous call holds back threads of other instances until it ends', () => {
     const { component } = create();
     const caller = component.getOrCreateAsyncState(0);

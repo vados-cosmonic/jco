@@ -1212,7 +1212,9 @@ function defineComponentAsyncState() {
             if (this.#lockHandoffScheduled) {
                 return true;
             }
-            if (this.#heldBySyncCall()) {
+            // A synchronous export checks at return even in a store that has
+            // never suspended a thread. There is then no thread to wake.
+            if (this.#suspendedThreadsByRef.size === 0 || this.#heldBySyncCall()) {
                 return false;
             }
             for (const meta of this.#suspendedThreadsByRef.values()) {
@@ -1301,11 +1303,18 @@ function defineComponentAsyncState() {
         endSyncCall(task: ComponentTask) {
             const storeAsyncState = this.#context.deadlock.storeAsyncState;
             const syncCalls = storeAsyncState.syncCalls;
-            const idx = syncCalls.findIndex((call) => call.task === task);
-            if (idx === -1) {
-                return;
+            // A JS caller usually has just one guest call in progress. Pop it
+            // without allocating the array of removed calls that splice returns.
+            // Nested or suspended calls can resolve out of order.
+            if (syncCalls.length === 1 && syncCalls[0]!.task === task) {
+                syncCalls.pop();
+            } else {
+                const idx = syncCalls.findIndex((call) => call.task === task);
+                if (idx === -1) {
+                    return;
+                }
+                syncCalls.splice(idx, 1);
             }
-            syncCalls.splice(idx, 1);
             // Stacks held back by the call resume in the order their promises
             // settled, unless another sync call still holds them back.
             const top = syncCalls.at(-1);
