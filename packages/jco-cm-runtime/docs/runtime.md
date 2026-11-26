@@ -169,6 +169,18 @@ unused operations. With code splitting, components can reuse one copy of the
 shared runtime modules. If the application loads additional components later,
 their bindings must also be able to resolve every runtime export they import.
 
+If the application serves the runtime as separate browser modules, it can start
+fetching them alongside the component entry using `rel="modulepreload"`.
+Generate the links from the component's static imports and their dependencies
+in the deployed runtime. Use the same resolved URLs as the browser's import
+map, including the current build's chunk filenames. For example, an application
+serving the runtime at `/runtime/` can include this link for a synchronous
+adapter that imports the sync entry point.
+
+```html
+<link rel="modulepreload" href="/runtime/intrinsics/sync.js">
+```
+
 ### Building profiles
 
 `pnpm --filter @bytecodealliance/jco-cm-runtime build` builds the package:
