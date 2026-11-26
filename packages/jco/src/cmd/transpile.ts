@@ -160,6 +160,7 @@ export interface TranspileOpts extends TypegenOptions {
     base64Cutoff?: number;
     js?: boolean;
     minify?: boolean;
+    eagerCompile?: boolean;
     optimize?: boolean;
     namespacedExports?: boolean;
     outDir?: string;

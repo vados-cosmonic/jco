@@ -46,6 +46,7 @@ Options include:
 
 * `--name`: Give a custom name for the component JS file in `out-dir/[name].js`
 * `--minify`: Minify the component JS
+* `--eager-compile` adds a file-wide compile hint to the generated JavaScript entry module. Supporting browsers can spend more time importing the module and less time compiling functions during the first call. This can reduce first-interaction latency when an application imports a component ahead of use. If the application imports and calls the component together, measure both steps. The option also works with `--minify`. [V8 compile hints](https://v8.dev/blog/explicit-compile-hints)
 * `--optimize`: Runs the internal core Wasm files through Binaryen for optimization. Optimization options can be passed with a `-- <binaryen options>` flag separator.
 * `--tla-compat`: Instead of relying on top-level-await, requires an `$init` promise to be imported and awaited first.
 * `--js`: Converts core Wasm files to JavaScript for environments that don't even support core Wasm.

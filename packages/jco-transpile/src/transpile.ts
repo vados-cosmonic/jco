@@ -116,6 +116,9 @@ export interface TranspilationOptions {
     /** Whether to perform minification of the JS */
     minify?: boolean;
 
+    /** Ask supporting browsers to compile the entry module's functions when loading it. */
+    eagerCompile?: boolean;
+
     /** Whether to optimize the WebAssembly binary with wasm-opt */
     optimize?: boolean;
 
@@ -458,6 +461,15 @@ export async function transpileBytes(
             );
         }
         jsFile[1] = new TextEncoder().encode(minified.code);
+    }
+
+    if (opts.eagerCompile) {
+        // A file-wide compile hint must precede every token and survive minification.
+        const hint = new TextEncoder().encode('//# allFunctionsCalledOnLoad\n');
+        const hinted = new Uint8Array(hint.length + jsFile[1].length);
+        hinted.set(hint);
+        hinted.set(jsFile[1], hint.length);
+        jsFile[1] = hinted;
     }
 
     return { files: Object.fromEntries(files), imports, exports };

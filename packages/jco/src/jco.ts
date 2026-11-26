@@ -138,6 +138,7 @@ program
     .option("--name <name>", "custom output name")
     .requiredOption("-o, --out-dir <out-dir>", "output directory")
     .option("-m, --minify", "minify the JS output (--optimize / opt cmd still required)")
+    .option("--eager-compile", "ask supporting browsers to compile the generated JavaScript functions on load")
     .option("-O, --optimize", `optimize the component first (use -- and arguments to wasm-opt)`)
     .option("--no-typescript", "do not output TypeScript .d.ts types")
     .option(
