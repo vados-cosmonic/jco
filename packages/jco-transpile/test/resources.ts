@@ -224,6 +224,14 @@ suite('resources', () => {
                     instance.drop(first);
                     assert.strictEqual(first.disposed, 1);
                 }
+
+                // Shutdown must still find the live handle through its registration.
+                const retained = new Thing(123, 42);
+                instance.retain(retained);
+                assert.equal(retained.disposed, 0);
+                instance._util.stop();
+                instance._util.stop();
+                assert.equal(retained.disposed, 1);
             } finally {
                 await cleanup?.();
                 await rm(providerDir, { recursive: true, force: true });
