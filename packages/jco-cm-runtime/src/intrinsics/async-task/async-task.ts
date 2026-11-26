@@ -27,7 +27,7 @@ import { syncContextSlots } from './context.js';
 
 // Only the bundled synchronous leaf adapter can omit these constructors. External
 // runtime providers continue to receive the full AsyncTaskClassContext.
-type AsyncConstructors = 'AsyncSubtask' | 'FutureValue';
+type AsyncConstructors = 'AsyncSubtask' | 'FutureValue' | 'Waitable';
 type TaskClassContext = Omit<AsyncTaskClassContext, AsyncConstructors> &
     Partial<Pick<AsyncTaskClassContext, AsyncConstructors>>;
 
@@ -1223,11 +1223,11 @@ function defineAsyncTask() {
             if (!cstate) {
                 throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
             }
-            const AsyncSubtask = this.#context.AsyncSubtask;
-            if (!AsyncSubtask) {
+            const { AsyncSubtask, Waitable } = this.#context;
+            if (!AsyncSubtask || !Waitable) {
                 throw new TypeError('this task context does not support subtasks');
             }
-            const waitable = new this.#context.Waitable({
+            const waitable = new Waitable({
                 componentIdx: this.#componentIdx,
                 target: `subtask (internal ID [${this.#id}])`,
             });

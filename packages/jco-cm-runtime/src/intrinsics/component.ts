@@ -382,6 +382,10 @@ const TICK_IDLE = 'idle';
 
 const IDLE_POLL_MS = 10;
 
+// A bundled synchronous leaf has no stream or future endpoints to give a waitable.
+type StateClassContext = Omit<ComponentAsyncStateContext, 'Waitable'> &
+    Partial<Pick<ComponentAsyncStateContext, 'Waitable'>>;
+
 function afterDelay(callback: () => void, ms: number): () => void {
     const handle = setTimeout(callback, ms);
     return () => clearTimeout(handle);
@@ -389,7 +393,7 @@ function afterDelay(callback: () => void, ms: number): () => void {
 
 function defineComponentAsyncState() {
     return class ComponentAsyncState {
-        #context: ComponentAsyncStateContext;
+        #context: StateClassContext;
 
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
 
@@ -436,7 +440,7 @@ function defineComponentAsyncState() {
         subtasks: RepTableType;
         threads: RepTableType<ComponentThread>;
 
-        constructor(context: ComponentAsyncStateContext, args: { componentIdx: number }) {
+        constructor(context: StateClassContext, args: { componentIdx: number }) {
             this.#context = context;
             this.#componentIdx = args.componentIdx;
             this.handles = new this.#context.RepTable({
@@ -1244,14 +1248,18 @@ function defineComponentAsyncState() {
         }
 
         createWaitable(args?: { target?: unknown }) {
-            return new this.#context.Waitable({ target: args?.target });
+            const Waitable = this.#context.Waitable;
+            if (!Waitable) {
+                throw new TypeError('this component state does not support waitables');
+            }
+            return new Waitable({ target: args?.target });
         }
     };
 }
 let sharedComponentAsyncState: ReturnType<typeof defineComponentAsyncState>;
 
 export function initializeComponentAsyncStateClass(
-    context: ComponentAsyncStateContext,
+    context: StateClassContext,
 ): ComponentAsyncStateConstructor {
     const ComponentAsyncState = (sharedComponentAsyncState ??= defineComponentAsyncState());
     /**
