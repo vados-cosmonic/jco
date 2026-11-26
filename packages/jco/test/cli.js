@@ -564,7 +564,7 @@ suite("CLI", () => {
                 [
                     "processed-by",
                     [
-                        ["wit-component", "0.259.0"],
+                        ["wit-component", "0.262.0"],
                         ["dummy-gen", "test"],
                     ],
                 ],
