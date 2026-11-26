@@ -174,6 +174,11 @@ unused operations. With code splitting, components can reuse one copy of the
 shared runtime modules. If the application loads additional components later,
 their bindings must also be able to resolve every runtime export they import.
 
+For repeat visits, a versioned deployment can cache the component JS, its
+runtime modules and its core Wasm files with `Cache-Control: public, max-age=31536000, immutable`.
+A new version needs a new URL for each changed asset. Publishing the generated
+files under a versioned directory keeps relative imports and Wasm URLs valid.
+
 For a multi-entry browser build, give each generated component JS file its own
 entry and let the application bundler share the runtime imports. Publish every
 emitted shared chunk. Generated bindings locate their external core Wasm files
