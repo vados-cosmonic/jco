@@ -811,7 +811,7 @@ impl FunctionBindgen<'_> {
     /// This must run before canonical argument lowering because lowering may
     /// invoke guest core exports such as `realloc`, which can access task-local
     /// context in WASI P3 components.
-    pub(crate) fn start_wasm_export_task(&mut self) {
+    pub(crate) fn start_wasm_export_task(&mut self, publish_may_block: bool) {
         self.validate_task_management();
         if self.skip_fn_call_task_management {
             return;
@@ -828,10 +828,6 @@ impl FunctionBindgen<'_> {
         let start_current_task_fn = self.intrinsic_call_prefix(Intrinsic::AsyncTask(
             AsyncTaskIntrinsic::CreateNewCurrentImplicitThread,
         ));
-        let current_task_may_block = self.intrinsic(Intrinsic::AsyncTask(
-            AsyncTaskIntrinsic::CurrentTaskMayBlock,
-        ));
-
         let (component_idx_expr, get_callback_fn_expr, callback_fn_name) =
             if let Some(state) = &self.component_state {
                 let ComponentStateJsExprs {
@@ -916,10 +912,16 @@ impl FunctionBindgen<'_> {
         } else {
             uwriteln!(self.src, "const started = task.enterSync();");
         }
-        uwriteln!(
-            self.src,
-            "const threadID = task.defaultThread().id();\n{current_task_may_block}.value = task.mayBlock() ? 1 : 0;"
-        );
+        uwriteln!(self.src, "const threadID = task.defaultThread().id();");
+        // Suspending adapters and cross-component calls read this register.
+        // A checked synchronous leaf has neither, so it can enter its task
+        // without allocating a WebAssembly.Global or writing it on every call.
+        if publish_may_block {
+            let register = self.intrinsic(Intrinsic::AsyncTask(
+                AsyncTaskIntrinsic::CurrentTaskMayBlock,
+            ));
+            uwriteln!(self.src, "{register}.value = task.mayBlock() ? 1 : 0;");
+        }
 
         if self.callee_resource_dynamic {
             let resource_borrows =

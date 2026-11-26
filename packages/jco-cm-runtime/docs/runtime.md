@@ -82,6 +82,10 @@ by js-component-bindgen share the `intrinsics/sync` entry point. A component
 with one instance and only synchronous calls can reuse its caller's task and
 borrow scope for a host import. Call tracking, asynchronous functions, defined
 guest resources and cross-instance transfers use the general adapter.
+Suspending adapters and cross-component calls read a mutable Wasm global to
+determine whether the current task may block. A checked synchronous leaf has
+no reader for that global, so its exports can enter their tasks without
+allocating or updating the register.
 
 For example, when an exported guest function calls a DOM method in a loop,
 each iteration reuses the export task. A core start function can call the same

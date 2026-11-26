@@ -821,6 +821,9 @@ mod tests {
             .unwrap();
             let source = generated_javascript(&result);
             assert_eq!(source.contains("_lowerSyncImport("), direct);
+            let standard_leaf = direct && provider.is_none_or(is_standard_checked_runtime);
+            assert_eq!(source.contains("CURRENT_TASK_MAY_BLOCK"), !standard_leaf);
+
             assert_eq!(
                 source.contains("/intrinsics/sync"),
                 direct && provider.is_some()

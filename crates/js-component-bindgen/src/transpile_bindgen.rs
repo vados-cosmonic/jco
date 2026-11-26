@@ -1228,6 +1228,16 @@ impl<'a> ManagesIntrinsics for Instantiator<'a, '_> {
 }
 
 impl<'a> Instantiator<'a, '_> {
+    /// Custom providers can observe export-task operations even when they opt
+    /// into reusing the caller's task for synchronous imports.
+    fn is_standard_sync_leaf(&self) -> bool {
+        self.direct_sync_imports
+            && self
+                .bindgen
+                .cm_runtime_es_module
+                .is_some_and(crate::is_standard_checked_runtime)
+    }
+
     fn stream_elem_meta_js(&mut self, table_idx: TypeStreamTableIndex) -> String {
         let stream_ty = &self.types[self.types[table_idx].ty];
         self.async_payload_meta_js(stream_ty.payload)
@@ -5972,6 +5982,7 @@ impl<'a> Instantiator<'a, '_> {
         });
 
         // Generate function body
+        let publish_may_block = !self.is_standard_sync_leaf();
         let mut f = FunctionBindgen {
             resource_map,
             guest_resource_class_names: None,
@@ -6082,7 +6093,7 @@ impl<'a> Instantiator<'a, '_> {
             f.skip_fn_call_task_management = false;
         }
         if is_guest_export {
-            f.start_wasm_export_task();
+            f.start_wasm_export_task(publish_may_block);
             f.begin_wasm_export_body();
         }
 
@@ -6979,11 +6990,7 @@ impl<'a> Instantiator<'a, '_> {
         // arguments and results need neither guest memory nor post-return.
         // Restrict results to full-width numbers: lifting these cannot trap
         // after the core call. A narrow result has a separate validation step.
-        let isolated_numeric_export = self.direct_sync_imports
-            // Opting into the host-import adapter permits reusing an enclosing
-            // task. A custom provider can still observe creation of the export
-            // task itself, so only the standard runtime can elide it here.
-            && self.bindgen.cm_runtime_es_module.is_some_and(crate::is_standard_checked_runtime)
+        let isolated_numeric_export = self.is_standard_sync_leaf()
             && !self.bindgen.opts.tracing
             && !self.bindgen.opts.asmjs
             && !requires_async_porcelain
