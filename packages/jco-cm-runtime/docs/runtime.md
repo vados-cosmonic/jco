@@ -173,6 +173,13 @@ jco transpile component.wasm --cm-runtime-es-module @bytecodealliance/jco-cm-run
 Modules of different profiles do not share state or private brands,
 so one program should import a single profile.
 
+A normal ES module import waits for core Wasm compilation and instantiation
+before exposing the guest exports. Bindgen uses native `await` for this path
+with either the bundled runtime or the checked package above. An explicit
+`instantiate()` call can use synchronous loaders, and `--tla-compat` exposes
+a separate `$init`. Those bindings keep a driver that runs synchronously until
+it receives a promise.
+
 A browser loading the checked package directly fetches each imported entry point
 and its shared dependencies. If the application knows its components at build
 time, pass their generated bindings to the same application bundler build and

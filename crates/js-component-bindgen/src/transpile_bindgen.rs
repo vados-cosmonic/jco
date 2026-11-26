@@ -578,6 +578,56 @@ struct InstantiationHelperNames {
     maybe_sync_return: String,
 }
 
+impl InstantiationHelperNames {
+    /// Drive a custom or TLA-compatible initializer synchronously until it
+    /// yields a promise. A completed generator's value belongs to the caller.
+    /// In module mode it is undefined, so never try to resume it with .then().
+    fn write_driver(&self, output: &mut source::Source) {
+        uwriteln!(
+            output,
+            "\
+                let {promise}, {resolve}, {reject};
+                function {normalize} (e) {{
+                    // Native JSPI rejects a suspending import called from a
+                    // core start function before entering its JS wrapper.
+                    // At component instantiation time that always means the
+                    // implicit synchronous task attempted to block.
+                    if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
+                        return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
+                    }}
+                    return e;
+                }}
+                function {run_next} (value) {{
+                    try {{
+                        let done;
+                        do {{
+                            ({{ value, done }} = {gen}.next(value));
+                        }} while (!(value instanceof Promise) && !done);
+                        if (done) {{
+                            return {resolve} ? {resolve}(value) : value;
+                        }}
+                        if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
+                        value.then({run_next}, e => {reject}({normalize}(e)));
+                    }}
+                    catch (e) {{
+                        e = {normalize}(e);
+                        if ({reject}) {reject}(e);
+                        else throw e;
+                    }}
+                }}
+                const {maybe_sync} = {run_next}(null);
+                return {promise} || {maybe_sync};",
+            gen = self.generator,
+            promise = self.promise,
+            resolve = self.resolve,
+            reject = self.reject,
+            normalize = self.normalize_instantiation_error,
+            run_next = self.run_next,
+            maybe_sync = self.maybe_sync_return,
+        );
+    }
+}
+
 impl JsBindgen<'_> {
     /// Return the JS binding for a host import's typed Wasm dispatcher.
     /// Generate its bytes and emit module loading/compilation code once per interned
@@ -883,51 +933,14 @@ impl JsBindgen<'_> {
                             {}\
                             {};
                         }})();
-                        let {promise}, {resolve}, {reject};
-                        function {normalize} (e) {{
-                            // Native JSPI rejects a suspending import called from a
-                            // core start function before entering its JS wrapper.
-                            // At component instantiation time that always means the
-                            // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
-                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
-                            }}
-                            return e;
-                        }}
-                        function {run_next} (value) {{
-                            try {{
-                                let done;
-                                do {{
-                                    ({{ value, done }} = {gen}.next(value));
-                                }} while (!(value instanceof Promise) && !done);
-                                if (done) {{
-                                    if ({resolve}) return {resolve}(value);
-                                    else return value;
-                                }}
-                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
-                                value.then(nextVal => done ? {resolve}() : {run_next}(nextVal), e => {reject}({normalize}(e)));
-                            }}
-                            catch (e) {{
-                                e = {normalize}(e);
-                                if ({reject}) {reject}(e);
-                                else throw e;
-                            }}
-                        }}
-                        const {maybe_sync} = {run_next}(null);
-                        return {promise} || {maybe_sync};
-                    }};
                 ",
                 &conditional_suspending_compilations as &str,
                 &self.src.js_init as &str,
                 &self.src.js as &str,
                 gen = helper.generator,
-                promise = helper.promise,
-                resolve = helper.resolve,
-                reject = helper.reject,
-                normalize = helper.normalize_instantiation_error,
-                run_next = helper.run_next,
-                maybe_sync = helper.maybe_sync_return,
             );
+            helper.write_driver(&mut output);
+            uwriteln!(output, "}};");
         } else {
             if !early_webidl_intrinsics {
                 output.push_str(&js_intrinsics);
@@ -967,55 +980,17 @@ impl JsBindgen<'_> {
                     {maybe_init_export}const $init = (() => {{
                         let {gen} = (function* _initGenerator () {{
                             {}\
-                                {}\
-                                {}\
+                            {}\
+                            {}\
                         }})();
-                        let {promise}, {resolve}, {reject};
-                        function {normalize} (e) {{
-                            // Native JSPI rejects a suspending import called from a
-                            // core start function before entering its JS wrapper.
-                            // At component instantiation time that always means the
-                            // implicit synchronous task attempted to block.
-                            if (typeof WebAssembly !== 'undefined' && typeof WebAssembly.SuspendError === 'function' && e instanceof WebAssembly.SuspendError) {{
-                                return new WebAssembly.RuntimeError('cannot block a synchronous task before returning');
-                            }}
-                            return e;
-                        }}
-                        function {run_next} (value) {{
-                            try {{
-                                let done;
-                                do {{
-                                    ({{ value, done }} = {gen}.next(value));
-                                }} while (!(value instanceof Promise) && !done);
-                                if (done) {{
-                                    if ({resolve}) {resolve}(value);
-                                    else return value;
-                                }}
-                                if (!{promise}) {promise} = new Promise((_resolve, _reject) => ({resolve} = _resolve, {reject} = _reject));
-                                value.then({run_next}, e => {reject}({normalize}(e)));
-                            }}
-                            catch (e) {{
-                                e = {normalize}(e);
-                                if ({reject}) {reject}(e);
-                                else throw e;
-                            }}
-                        }}
-                        const {maybe_sync} = {run_next}(null);
-                        return {promise} || {maybe_sync};
-                    }})();
-                    {maybe_init}\
                     ",
                     &compilation_promises as &str,
                     &self.src.js_init as &str,
                     &core_exported_funcs as &str,
                     gen = helper.generator,
-                    promise = helper.promise,
-                    resolve = helper.resolve,
-                    reject = helper.reject,
-                    normalize = helper.normalize_instantiation_error,
-                    run_next = helper.run_next,
-                    maybe_sync = helper.maybe_sync_return,
                 );
+                helper.write_driver(&mut output);
+                uwriteln!(output, "}})();\n{maybe_init}");
             }
 
             self.esm_bindgen.render_exports_with_util_members(
