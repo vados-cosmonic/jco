@@ -1,3 +1,4 @@
+import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
@@ -59,6 +60,8 @@ for (const [name, exports] of Object.entries(expectedExports)) {
     }
 }
 const defaultModule: ResourceModule = resource;
+const syncProvider: NonNullable<RuntimeModuleContracts['intrinsics/sync']> = sync;
+void syncProvider;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
 const defaultHost: RuntimeModuleContracts['intrinsics/host'] = host;

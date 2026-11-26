@@ -47,6 +47,7 @@ export interface ResourceModule {
         spaces: ResourceHandleIndexSpaces,
         table: ResourceTable,
         rep: ResourceRep,
+        trackRep?: boolean,
     ) => ResourceHandle;
     readonly tableGet: (
         context: ResourceTableGetContext,
@@ -160,8 +161,34 @@ export interface ResourceDestructorContext {
     readonly registers: TaskRegisters;
 }
 
+/** Additional operations supplied by checked providers that opt into synchronous leaf adapters. */
+export interface SyncImportsModule {
+    readonly lowerSyncImport: (
+        context: TaskCompatImportRuntimeContext,
+        componentIdx: number,
+        importFn: TaskLowerImportOptions['importFn'],
+        ...params: unknown[]
+    ) => unknown;
+    readonly guardSyncRealloc: (flags: { value: number }, realloc: StringRealloc) => StringRealloc;
+    readonly tableRep: (context: ResourceTableGetContext, table: ArrayLike<number>, handle: number) => number;
+    readonly IndexedResourceCaptures: new (table: ResourceTable) => {
+        readonly slots: (object | undefined)[] | undefined;
+        byRep(): Map<number, object>;
+        get(rep: number): object | undefined;
+        set(rep: number, value: object): void;
+        delete(rep: number): void;
+    };
+    readonly encodeSyncUtf8: (
+        context: { encoder: StringEncodeInto; bytes?: Uint8Array; busy: boolean },
+        value: unknown,
+        realloc: StringRealloc,
+        memory: StringMemory,
+    ) => { ptr: number; len: number };
+}
+
 /** Type-only conformance map. No runtime registry or factory is required. */
 export interface RuntimeModuleContracts {
+    readonly 'intrinsics/sync'?: SyncImportsModule;
     readonly 'intrinsics/resource': ResourceModule;
     readonly 'intrinsics/conversion': ConversionModule;
     readonly 'intrinsics/js-helper': JsHelperModule;
@@ -313,6 +340,8 @@ export interface StringModule {
         value: unknown,
         realloc: StringRealloc,
         memory: StringMemory,
+        /** Write short ASCII strings directly when using the standard UTF-8 encoder. */
+        shortAscii?: boolean,
     ) => StringAllocation;
     readonly utf8EncodeAsync: (
         encoder: StringEncodeInto,
@@ -1648,6 +1677,8 @@ export interface TaskReturnOptions {
 }
 
 export interface TaskLowerImportOptions {
+    /** The sync adapter lifts arguments and returns the lowered result directly. */
+    directSync?: boolean;
     componentIdx: number;
     functionIdx?: number;
     trampolineIdx?: number;
@@ -2083,6 +2114,8 @@ export interface LiftModule {
         RuntimeError: RuntimeErrorConstructor,
         decoder: StringDecoder,
         input: ArrayBufferLike | ArrayBufferView,
+        /** Lift short ASCII byte slices directly when using the standard stateless UTF-8 codec. */
+        shortAscii?: boolean,
     ) => string;
     readonly initializeLiftVariant: () => LiftVariantContext;
     readonly liftFlatBool: (ctx: TaskLiftContext) => [unknown, TaskLiftContext];

@@ -34,7 +34,35 @@ import { getOrCreateAsyncState } from './component.js';
 import { errCtxGetLocalTable, errCtxGlobalRefCountAdd } from './error-context.js';
 
 /** Decode UTF-8 while distinguishing malformed bytes from truncated sequences. */
-export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, input) => {
+export const decodeUtf8: LiftModule['decodeUtf8'] = (RuntimeError, decoder, input, shortAscii = false) => {
+    // Short attribute names and IDs can be lifted without entering TextDecoder.
+    // A high bit in any byte sends the whole input through the decoder so malformed
+    // or truncated UTF-8 still has the usual validation and trap behavior.
+    ascii: if (shortAscii && input instanceof Uint8Array && input.length > 0 && input.length <= 32) {
+        const length = input.length;
+        if (length === 2) {
+            const a = input[0],
+                b = input[1];
+            if ((a | b) >= 0x80) break ascii;
+            return String.fromCharCode(a, b);
+        }
+        let text = '';
+        let i = 0;
+        for (; i + 4 <= length; i += 4) {
+            const a = input[i],
+                b = input[i + 1],
+                c = input[i + 2],
+                d = input[i + 3];
+            if ((a | b | c | d) >= 0x80) break ascii;
+            text += String.fromCharCode(a, b, c, d);
+        }
+        for (; i < length; i++) {
+            const byte = input[i];
+            if (byte >= 0x80) break ascii;
+            text += String.fromCharCode(byte);
+        }
+        return text;
+    }
     try {
         return decoder.decode(input);
     } catch (error) {

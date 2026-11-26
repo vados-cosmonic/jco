@@ -25,6 +25,12 @@ import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread, TASK_ALREADY_RESOLVED } from './task-operations.js';
 import { syncContextSlots } from './context.js';
 
+// A synchronous leaf cannot produce futures or subtasks. Omitting their
+// constructors lets a bundler drop the channel and scheduler implementations.
+type AsyncConstructors = 'AsyncSubtask' | 'FutureValue' | 'Waitable';
+type TaskClassContext = Omit<AsyncTaskClassContext, AsyncConstructors> &
+    Partial<Pick<AsyncTaskClassContext, AsyncConstructors>>;
+
 /** Stands in for a list that was never allocated. */
 const NONE: readonly never[] = [];
 
@@ -36,7 +42,7 @@ const TASK_RESOLVED = 'resolved';
 
 function defineAsyncTask() {
     return class AsyncTask {
-        #context: AsyncTaskClassContext;
+        #context: TaskClassContext;
         // What one `initializeAsyncTaskClass` call shares between the instances it constructs.
         #store: { id: bigint; hostThreadID: number };
 
@@ -115,11 +121,7 @@ function defineAsyncTask() {
         alwaysTaskReturn = false;
         returnCalls = 0;
         tmpRetI64HighBits = 0 | 0;
-        constructor(
-            context: AsyncTaskClassContext,
-            store: { id: bigint; hostThreadID: number },
-            opts: AsyncTaskOptions,
-        ) {
+        constructor(context: TaskClassContext, store: { id: bigint; hostThreadID: number }, opts: AsyncTaskOptions) {
             this.#context = context;
             this.#store = store;
             this.#id = ++store.id;
@@ -271,7 +273,11 @@ function defineAsyncTask() {
                 reject(this.#errored);
             } else if (this.#rejected) {
                 reject(this.#completionValue);
-            } else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) {
+            } else if (
+                this.#preserveFutureResult &&
+                this.#context.FutureValue &&
+                this.#completionValue instanceof this.#context.FutureValue
+            ) {
                 this.#completionValue.resolveAsValue(resolve);
             } else {
                 resolve(this.#completionValue);
@@ -366,7 +372,7 @@ function defineAsyncTask() {
             this.#calleeIsAsync = value;
         }
         setParentSubtask(subtask: AsyncSubtaskType | null) {
-            if (!subtask || !(subtask instanceof this.#context.AsyncSubtask)) {
+            if (!subtask || !this.#context.AsyncSubtask || !(subtask instanceof this.#context.AsyncSubtask)) {
                 return;
             }
             if (this.#parentSubtask) {
@@ -1220,11 +1226,15 @@ function defineAsyncTask() {
             if (!cstate) {
                 throw new Error(`invalid/missing async state for component idx [${componentIdx}]`);
             }
-            const waitable = new this.#context.Waitable({
+            const { AsyncSubtask, Waitable } = this.#context;
+            if (!AsyncSubtask || !Waitable) {
+                throw new TypeError('this task context does not support subtasks');
+            }
+            const waitable = new Waitable({
                 componentIdx: this.#componentIdx,
                 target: `subtask (internal ID [${this.#id}])`,
             });
-            const newSubtask = new this.#context.AsyncSubtask({
+            const newSubtask = new AsyncSubtask({
                 componentIdx,
                 childTask,
                 parentTask: this,
@@ -1378,7 +1388,7 @@ function defineAsyncTask() {
 }
 let sharedAsyncTask: ReturnType<typeof defineAsyncTask>;
 
-export function initializeAsyncTaskClass(context: AsyncTaskClassContext): AsyncTaskConstructor {
+export function initializeAsyncTaskClass(context: TaskClassContext): AsyncTaskConstructor {
     const AsyncTask = (sharedAsyncTask ??= defineAsyncTask());
     const store: { id: bigint; hostThreadID: number } = { id: 0n, hostThreadID: 0 };
 

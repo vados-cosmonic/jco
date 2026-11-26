@@ -91,6 +91,10 @@
             "types": "./dist/intrinsics/stream.d.ts",
             "default": "./dist/intrinsics/stream.js"
         },
+        "./intrinsics/sync": {
+            "types": "./dist/intrinsics/sync.d.ts",
+            "default": "./dist/intrinsics/sync.js"
+        },
         "./debug": {
             "types": "./dist/index.d.ts",
             "default": "./dist/debug/index.js"

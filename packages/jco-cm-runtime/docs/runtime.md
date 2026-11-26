@@ -74,6 +74,23 @@ registry. Context-free operations take no dummy context argument.
 
 See the [intrinsic contracts](intrinsics/README.md) for individual operations and capabilities.
 
+## Synchronous host imports
+
+The checked `@bytecodealliance/jco-cm-runtime` package and the runtime bundled
+by js-component-bindgen share the `intrinsics/sync` entry point. A component
+with one instance and only synchronous calls can reuse its caller's task and
+borrow scope for a host import. Call tracking, asynchronous functions, defined
+guest resources and cross-instance transfers use the general adapter.
+
+A custom checked provider or a directory URL can opt into this extension with
+`cmRuntimeSyncImports: true` or `jco transpile --cm-runtime-sync-imports`.
+Implement the five operations in `SyncImportsModule`, or re-export the standard
+`intrinsics/sync` module. The default custom-provider path uses the original
+API-v1 contract. When using an older standard package, set `cmRuntimeSyncImports: false` or pass `--no-cm-runtime-sync-imports` to retain that contract. On the
+optimized path a provider's task and state factories may receive contexts
+without the subtask, waitable and future constructors. Shutdown can also omit
+the empty stream and future tables. The debug package keeps the general adapter for task diagnostics.
+
 ## Runtime profiles
 
 Runtime diagnostic statements carry a `DEBUG` JavaScript label.

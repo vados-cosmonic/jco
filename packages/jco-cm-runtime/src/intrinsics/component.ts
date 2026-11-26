@@ -325,6 +325,18 @@ export function trackHostOperation<T>(
         return result;
     }
 
+    return trackHostPromise(context, result, storeTrap, storeAsyncState, asyncState, symbolDispose, componentIdx);
+}
+
+function trackHostPromise<T>(
+    context: ComponentHostOperationContext,
+    result: T,
+    storeTrap: ComponentHostOperationContext['storeTrap'],
+    storeAsyncState: ComponentHostOperationContext['storeAsyncState'],
+    asyncState: ComponentHostOperationContext['asyncState'],
+    symbolDispose: ComponentHostOperationContext['symbolDispose'],
+    componentIdx?: number | null,
+): Promise<Awaited<T>> {
     storeAsyncState.pendingHostOperations++;
     const owner = componentIdx ?? -1;
     // (allocated on first use, so a store without host work pays nothing for it)
@@ -477,6 +489,10 @@ const TICK_IDLE = 'idle';
 
 const IDLE_POLL_MS = 10;
 
+// A synchronous leaf has no stream or future endpoints that could create a waitable.
+type StateClassContext = Omit<ComponentAsyncStateContext, 'Waitable'> &
+    Partial<Pick<ComponentAsyncStateContext, 'Waitable'>>;
+
 function afterDelay(callback: () => void, ms: number): () => void {
     const handle = setTimeout(callback, ms);
     return () => clearTimeout(handle);
@@ -484,7 +500,7 @@ function afterDelay(callback: () => void, ms: number): () => void {
 
 function defineComponentAsyncState() {
     return class ComponentAsyncState {
-        #context: ComponentAsyncStateContext;
+        #context: StateClassContext;
 
         static EVENT_HANDLER_EVENTS = ['backpressure-change'];
 
@@ -531,7 +547,7 @@ function defineComponentAsyncState() {
         subtasks: RepTableType;
         threads: RepTableType<ComponentThread>;
 
-        constructor(context: ComponentAsyncStateContext, args: { componentIdx: number }) {
+        constructor(context: StateClassContext, args: { componentIdx: number }) {
             this.#context = context;
             this.#componentIdx = args.componentIdx;
             this.handles = new this.#context.RepTable({
@@ -1411,14 +1427,18 @@ function defineComponentAsyncState() {
         }
 
         createWaitable(args?: { target?: unknown }) {
-            return new this.#context.Waitable({ target: args?.target });
+            const Waitable = this.#context.Waitable;
+            if (!Waitable) {
+                throw new TypeError('this component state does not support waitables');
+            }
+            return new Waitable({ target: args?.target });
         }
     };
 }
 let sharedComponentAsyncState: ReturnType<typeof defineComponentAsyncState>;
 
 export function initializeComponentAsyncStateClass(
-    context: ComponentAsyncStateContext,
+    context: StateClassContext,
 ): ComponentAsyncStateConstructor {
     const ComponentAsyncState = (sharedComponentAsyncState ??= defineComponentAsyncState());
     /**
