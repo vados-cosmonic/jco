@@ -758,6 +758,57 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "embedded-cm-runtime")]
+    #[test]
+    fn sync_leaf_initializers_only_install_observable_wrappers() {
+        let component = wat::parse_str(r#"(component
+            (import "length" (func $length (param "n" u32) (result u32)))
+            (core func $lower (canon lower (func $length)))
+            (core module $core
+                (import "" "length" (func $length (param i32) (result i32)))
+                (memory (export "mem") 1)
+                (func (export "alloc") (param i32 i32 i32 i32) (result i32) i32.const 64)
+                (func (export "post") (param i32))
+                (func (export "run") (param i32 i32) (result i32) local.get 1 call $length))
+            (core instance $guest (instantiate $core (with "" (instance (export "length" (func $lower))))))
+            (func (export "run") (param "text" string) (result u32)
+                (canon lift (core func $guest "run") (memory (core memory $guest "mem"))
+                    (realloc (core func $guest "alloc")) (post-return (core func $guest "post")))))"#).unwrap();
+        for (profile, instantiation, wrappers, markers) in [
+            (RuntimeProfile::Checked, None, false, false),
+            (
+                RuntimeProfile::Checked,
+                Some(InstantiationMode::Async),
+                false,
+                true,
+            ),
+            (RuntimeProfile::Debug, None, true, true),
+        ] {
+            let result = transpile_with_config(
+                &component,
+                TranspileConfig {
+                    opts: TranspileOpts::builder()
+                        .name("sync".into())
+                        .maybe_instantiation_mode(instantiation)
+                        .build(),
+                    runtime_profile: profile,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+            let source = generated_javascript(&result);
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.alloc)"),
+                wrappers
+            );
+            assert_eq!(
+                source.contains("WebAssembly.promising(exports0.post)"),
+                wrappers
+            );
+            assert_eq!(source.contains("_jcoMaySuspend:"), markers);
+        }
+    }
+
     #[cfg(feature = "transpile-bindgen")]
     #[test]
     fn debug_logger_is_initialized_once_for_a_module_or_an_instance() {

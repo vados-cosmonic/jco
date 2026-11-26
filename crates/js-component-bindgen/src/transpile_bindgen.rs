@@ -4220,7 +4220,6 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, true);
                 uwriteln!(self.src.js, "let realloc{idx};");
-                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // Core functions return pointers as signed 32-bit integers, which are negative
                 // for allocations at or above 2GiB, so make them unsigned for use as offsets
                 let call = format!(
@@ -4242,6 +4241,12 @@ impl<'a> Instantiator<'a, '_> {
                     guard(self, &format!("{call} >>> 0"))
                 };
                 uwriteln!(self.src.js_init, "realloc{idx} = {realloc};");
+                // All canonical options and guest functions of this leaf are synchronous.
+                // Only async bindings ever reference the companion allocator.
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let realloc{idx}Async;");
                 // NOTE: sometimes we may be fed a realloc that isn't a webassembly function at all
                 // but has instead been converted to JS (see 'flavorful' test in test/runtime.js')
                 let realloc_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -4266,9 +4271,12 @@ impl<'a> Instantiator<'a, '_> {
                 let guard =
                     |this: &mut Self, func: &str| this.guard_cannot_leave(owner, func, false);
                 uwriteln!(self.src.js, "let postReturn{idx};");
-                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 let post_return = guard(self, &def);
                 uwriteln!(self.src.js_init, "postReturn{idx} = {post_return};");
+                if self.direct_sync_imports {
+                    return;
+                }
+                uwriteln!(self.src.js, "let postReturn{idx}Async;");
                 // NOTE: sometimes we may be fed a post return fn that isn't a webassembly function
                 // at all but has instead been converted to JS (see 'flavorful' test in test/runtime.js)
                 let post_return_promising = guard(self, &format!("WebAssembly.promising({def})"));
@@ -6046,10 +6054,16 @@ impl<'a> Instantiator<'a, '_> {
     fn augmented_import_def(&mut self, def: &core::AugmentedImport<'_>) -> String {
         match def {
             core::AugmentedImport::CoreDef(def) => {
-                let is_non_suspending_function =
-                    self.core_def_is_function(def) && !self.core_def_may_suspend(def);
                 let value = self.core_def(def);
-                if is_non_suspending_function {
+                // Only callback dispatch and cross-component calls read the marker. Keep it
+                // on imports exposed to custom core instantiators as well.
+                let mark_functions = !self.direct_sync_imports
+                    || self.bindgen.opts.instantiation_mode.is_some()
+                    || self.bindgen.opts.asmjs;
+                if mark_functions
+                    && self.core_def_is_function(def)
+                    && !self.core_def_may_suspend(def)
+                {
                     format!("Object.assign({value}, {{ _jcoMaySuspend: false }})")
                 } else {
                     value
