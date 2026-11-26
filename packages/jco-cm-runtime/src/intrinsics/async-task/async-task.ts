@@ -25,9 +25,11 @@ import { coinFlip as _coinFlip } from '../core.js';
 import { clearCurrentThread, TASK_ALREADY_RESOLVED } from './task-operations.js';
 import { syncContextSlots } from './context.js';
 
-// Only the bundled synchronous leaf adapter can omit this constructor. External
+// Only the bundled synchronous leaf adapter can omit these constructors. External
 // runtime providers continue to receive the full AsyncTaskClassContext.
-type TaskClassContext = Omit<AsyncTaskClassContext, 'AsyncSubtask'> & Partial<Pick<AsyncTaskClassContext, 'AsyncSubtask'>>;
+type AsyncConstructors = 'AsyncSubtask' | 'FutureValue';
+type TaskClassContext = Omit<AsyncTaskClassContext, AsyncConstructors> &
+    Partial<Pick<AsyncTaskClassContext, AsyncConstructors>>;
 
 /** Stands in for a list that was never allocated. */
 const NONE: readonly never[] = [];
@@ -119,11 +121,7 @@ function defineAsyncTask() {
         alwaysTaskReturn = false;
         returnCalls = 0;
         tmpRetI64HighBits = 0 | 0;
-        constructor(
-            context: TaskClassContext,
-            store: { id: bigint; hostThreadID: number },
-            opts: AsyncTaskOptions,
-        ) {
+        constructor(context: TaskClassContext, store: { id: bigint; hostThreadID: number }, opts: AsyncTaskOptions) {
             this.#context = context;
             this.#store = store;
             this.#id = ++store.id;
@@ -275,7 +273,11 @@ function defineAsyncTask() {
                 reject(this.#errored);
             } else if (this.#rejected) {
                 reject(this.#completionValue);
-            } else if (this.#preserveFutureResult && this.#completionValue instanceof this.#context.FutureValue) {
+            } else if (
+                this.#preserveFutureResult &&
+                this.#context.FutureValue &&
+                this.#completionValue instanceof this.#context.FutureValue
+            ) {
                 this.#completionValue.resolveAsValue(resolve);
             } else {
                 resolve(this.#completionValue);
