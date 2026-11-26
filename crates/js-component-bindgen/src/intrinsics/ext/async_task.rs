@@ -354,7 +354,8 @@ impl TaskContextIntrinsic {
                 // A synchronous leaf has no cross-instance transfer trampolines. A
                 // JS export taking a borrowed resource can still create a borrow
                 // handle when lowering its argument, so check the final intrinsic set.
-                let borrow_hint = if args.sync_import_leaf
+                let borrow_hint = if args.standard_runtime
+                    && args.sync_import_leaf
                     && !args
                         .intrinsics
                         .contains(&ResourceIntrinsic::ResourceTableCreateBorrow.into())

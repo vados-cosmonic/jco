@@ -770,7 +770,12 @@ impl JsBindgen<'_> {
             .call_tracking(self.call_tracking)
             .sync_import_leaf(sync_import_leaf);
         #[cfg(feature = "external-runtime")]
-        let render_args = render_args.external_runtime(self.cm_runtime_es_module.is_some());
+        let render_args = render_args
+            .external_runtime(self.cm_runtime_es_module.is_some())
+            .standard_runtime(
+                self.cm_runtime_es_module
+                    .is_some_and(crate::is_standard_checked_runtime),
+            );
         let js_intrinsics = render_intrinsics(render_args.build());
         let mut util_members = format!("stop: {stop_instance}, whenIdle: {when_idle},");
         if let Some(tracking) = call_tracking {

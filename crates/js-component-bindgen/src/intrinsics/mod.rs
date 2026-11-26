@@ -3341,6 +3341,11 @@ pub struct RenderIntrinsicsArgs<'a> {
     #[cfg(feature = "external-runtime")]
     #[builder(default)]
     pub(crate) external_runtime: bool,
+    /// The standard provider's own task bookkeeping can be specialized. Custom
+    /// providers may observe their tasks even when they opt into sync imports.
+    #[cfg(feature = "external-runtime")]
+    #[builder(default)]
+    pub(crate) standard_runtime: bool,
     /// Intrinsic dependencies discovered while rendering one intrinsic
     #[builder(default)]
     discovered_intrinsics: Mutex<BTreeSet<Intrinsic>>,
