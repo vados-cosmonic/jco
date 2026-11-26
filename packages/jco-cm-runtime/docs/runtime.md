@@ -170,6 +170,14 @@ unused operations. With code splitting, components can reuse one copy of the
 shared runtime modules. If the application loads additional components later,
 their bindings must also be able to resolve every runtime export they import.
 
+For a multi-entry browser build, give each generated component JS file its own
+entry and let the application bundler share the runtime imports. Publish every
+emitted shared chunk. Generated bindings locate their external core Wasm files
+relative to the entry URL. If the bundler preserves those URLs, copy each
+component's `.core.wasm` files beside its output entry, keeping the original
+filenames. Test a cold load of each entry independently so a previously loaded
+component cannot hide a missing dependency.
+
 If the application serves the runtime as separate browser modules, it can start
 fetching them alongside the component entry using `rel="modulepreload"`.
 Generate the links from the component's static imports and their dependencies
