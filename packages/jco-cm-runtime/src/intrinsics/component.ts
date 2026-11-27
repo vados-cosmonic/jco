@@ -543,7 +543,7 @@ function defineComponentAsyncState() {
         /** Cancels the scheduled tick while the tick loop runs. */
         #tickLoop: (() => void) | null = null;
 
-        #onExclusiveReleaseHandlers?: Set<{ fn: () => void }>;
+        #onExclusiveReleaseHandlers?: { callbacks: ((() => void) | undefined)[]; next: number };
 
         #mayLeave = true;
 
@@ -980,14 +980,15 @@ function defineComponentAsyncState() {
             // lock-free fallback code.
             this.#lockHolderTaskID = null;
 
-            // Most synchronous exits have no release callbacks. A callback can reenter
-            // and release the lock again, so consume each registration before invoking it.
-            // Separate registrations of the same function must each run once.
+            // Ordinary synchronous exits have no callbacks. When a handler releases the lock
+            // reentrantly, both releases drain the same FIFO. Advance the shared cursor before
+            // calling the handler so it runs once, even if it reenters or throws.
             const handlers = this.#onExclusiveReleaseHandlers;
-            if (handlers?.size) {
-                for (const registration of handlers) {
-                    handlers.delete(registration);
-                    const { fn } = registration;
+            if (handlers?.callbacks.length) {
+                while (handlers.next < handlers.callbacks.length) {
+                    const index = handlers.next++;
+                    const fn = handlers.callbacks[index]!;
+                    handlers.callbacks[index] = undefined;
                     try {
                         fn();
                     } catch (err) {
@@ -995,6 +996,8 @@ function defineComponentAsyncState() {
                         throw err;
                     }
                 }
+                handlers.callbacks.length = 0;
+                handlers.next = 0;
             }
             this.#scheduleLockHandoff();
             return true;
@@ -1027,7 +1030,8 @@ function defineComponentAsyncState() {
 
         onNextExclusiveRelease(fn: () => void) {
             DEBUG: debugLog('[ComponentAsyncState#()onNextExclusiveRelease] registering');
-            (this.#onExclusiveReleaseHandlers ??= new Set()).add({ fn });
+            const handlers = (this.#onExclusiveReleaseHandlers ??= { callbacks: [], next: 0 });
+            handlers.callbacks.push(fn);
         }
 
         async waitForExclusiveRelease() {

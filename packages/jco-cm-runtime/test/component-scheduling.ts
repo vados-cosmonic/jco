@@ -12,11 +12,12 @@ test.concurrent('reentrant exclusive release consumes each callback registration
         state.exclusiveLock(2n);
         state.exclusiveRelease(2n);
         order.push('returned');
+        state.onNextExclusiveRelease(() => order.push('added'));
     });
     state.onNextExclusiveRelease(later);
     state.onNextExclusiveRelease(later);
     state.exclusiveRelease(1n);
-    expect(order).toEqual(['first', 'later', 'later', 'returned']);
+    expect(order).toEqual(['first', 'later', 'later', 'returned', 'added']);
 });
 
 test.concurrent('a throwing release callback leaves later registrations pending', () => {
