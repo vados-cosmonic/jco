@@ -64,6 +64,21 @@ of public suffixes to their interfaces; no assembled runtime object is required.
 Function-property signatures support strict parameter checking. Type-only
 consumption produces no runtime imports.
 
+The checked package also exposes the optional `intrinsics/sync` subpath.
+A provider that implements it can check its namespace against
+`SyncImportsModule`. It contains three operations shared with the embedded runtime.
+
+- `lowerSyncImport` checks whether the guest may leave, then calls a synchronous
+  host leaf under the active guest task. Core initialization and a saved lower
+  invoked directly by the host can run without an active task. In that case the
+  runtime creates an implicit task and retires it on return or throw.
+- `tableRep` checks a guest handle and reads its representation without allocating
+  an intermediate result on every borrow.
+- `IndexedResourceCaptures` keeps host objects in slots indexed by guest handle
+  while a resource has a single unambiguous handle table. A caller that needs
+  lookup by representation migrates live entries into a map before an explicit
+  representation can alias an existing one. Shutdown uses the same captures.
+
 Structural conformance does not prove package resolution, exact JavaScript arity,
 or Canonical ABI behavior. TypeScript permits implementations to ignore arguments.
 Test the installed package and its behavior, especially traps and shared state.
