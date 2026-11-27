@@ -31,6 +31,10 @@
             "types": "./dist/runtime.d.ts",
             "default": "./dist/runtime.js"
         },
+        "./intrinsics/sync": {
+            "types": "./dist/intrinsics/sync.d.ts",
+            "default": "./dist/intrinsics/sync.js"
+        },
         "./intrinsics/resource": {
             "types": "./dist/intrinsics/resource.d.ts",
             "default": "./dist/intrinsics/resource.js"

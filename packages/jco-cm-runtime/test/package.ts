@@ -129,6 +129,7 @@ suite('runtime package', () => {
                 './intrinsics/lift',
                 './intrinsics/lower',
                 './intrinsics/resource',
+                './intrinsics/sync',
                 './intrinsics/stream',
                 './intrinsics/string',
                 './intrinsics/waitable',

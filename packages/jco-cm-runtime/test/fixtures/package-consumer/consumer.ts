@@ -1,3 +1,4 @@
+import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
@@ -300,3 +301,6 @@ if (
 ) {
     throw new Error('consumer failed');
 }
+
+const syncOps: NonNullable<import('@bytecodealliance/jco-cm-runtime/runtime').RuntimeModuleContracts['intrinsics/sync']> = sync;
+void syncOps;
