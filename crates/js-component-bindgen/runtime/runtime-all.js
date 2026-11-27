@@ -1,5 +1,5 @@
 // @bytecodealliance/jco-cm-runtime@0.1.0
-// generated from commit 687c155d22b03754fb0910f5f2e270b9fa7ab44f
+// generated from commit e1a24edc50748ea7953667770e1bf6d2c284e325
 //#region runtime/runtime.js
 /** Experimental JavaScript Component Model runtime contract, independent of package version. */
 const CM_RUNTIME_API_VERSION = 1;
@@ -1217,15 +1217,20 @@ function defineComponentAsyncState() {
 			}
 			this.#lockHolderTaskID = null;
 			const handlers = this.#onExclusiveReleaseHandlers;
-			if (handlers?.size) for (const registration of handlers) {
-				handlers.delete(registration);
-				const { fn } = registration;
-				try {
-					fn();
-				} catch (err) {
-					DEBUG: debugLog("error while executing handler for next exclusive release", err);
-					throw err;
+			if (handlers?.callbacks.length) {
+				while (handlers.next < handlers.callbacks.length) {
+					const index = handlers.next++;
+					const fn = handlers.callbacks[index];
+					handlers.callbacks[index] = void 0;
+					try {
+						fn();
+					} catch (err) {
+						DEBUG: debugLog("error while executing handler for next exclusive release", err);
+						throw err;
+					}
 				}
+				handlers.callbacks.length = 0;
+				handlers.next = 0;
 			}
 			this.#scheduleLockHandoff();
 			return true;
@@ -1244,7 +1249,10 @@ function defineComponentAsyncState() {
 		}
 		onNextExclusiveRelease(fn) {
 			DEBUG: debugLog("[ComponentAsyncState#()onNextExclusiveRelease] registering");
-			(this.#onExclusiveReleaseHandlers ??= /* @__PURE__ */ new Set()).add({ fn });
+			(this.#onExclusiveReleaseHandlers ??= {
+				callbacks: [],
+				next: 0
+			}).callbacks.push(fn);
 		}
 		async waitForExclusiveRelease() {
 			while (this.isExclusivelyLocked()) await new Promise((resolve) => this.onNextExclusiveRelease(resolve));
