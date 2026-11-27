@@ -91,6 +91,7 @@ suite('runtime package', () => {
             const contractExports = Object.fromEntries(
                 [
                     'ResourceModule',
+                    'SyncImportsModule',
                     'ConversionModule',
                     'JsHelperModule',
                     'StringModule',

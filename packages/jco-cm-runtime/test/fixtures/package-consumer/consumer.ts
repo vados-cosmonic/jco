@@ -1,7 +1,7 @@
-import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import expectedExports from './contract-exports.js';
 import { CM_RUNTIME_API_VERSION as rootVersion } from '@bytecodealliance/jco-cm-runtime';
 import { CM_RUNTIME_API_VERSION } from '@bytecodealliance/jco-cm-runtime/runtime';
+import * as sync from '@bytecodealliance/jco-cm-runtime/intrinsics/sync';
 import * as resource from '@bytecodealliance/jco-cm-runtime/intrinsics/resource';
 import * as conversion from '@bytecodealliance/jco-cm-runtime/intrinsics/conversion';
 import * as core from '@bytecodealliance/jco-cm-runtime/intrinsics/core';
@@ -24,6 +24,7 @@ import type {
     RuntimeModuleContracts,
 } from '@bytecodealliance/jco-cm-runtime/runtime';
 const publicModules: Record<string, Record<string, unknown>> = {
+    SyncImportsModule: sync,
     ResourceModule: resource,
     ConversionModule: conversion,
     JsHelperModule: jsHelper,
@@ -59,6 +60,7 @@ for (const [name, exports] of Object.entries(expectedExports)) {
         }
     }
 }
+const defaultSync: NonNullable<RuntimeModuleContracts['intrinsics/sync']> = sync;
 const defaultModule: ResourceModule = resource;
 const defaultCore: RuntimeModuleContracts['intrinsics/core'] = core;
 const defaultTasks: RuntimeModuleContracts['intrinsics/async-task'] = asyncTask;
@@ -297,10 +299,8 @@ const entry = defaultModule.tableGet({ RuntimeError: WebAssembly.RuntimeError },
 if (
     version !== CM_RUNTIME_API_VERSION ||
     entry.rep !== 42 ||
+    defaultSync.tableRep({ RuntimeError: WebAssembly.RuntimeError }, [1 << 30, 0, 7, 42], 1) !== entry.rep ||
     customModule.tableGet({ RuntimeError: Error }, [1 << 30, 0, 7, 24], 1).rep !== 24
 ) {
     throw new Error('consumer failed');
 }
-
-const syncOps: NonNullable<import('@bytecodealliance/jco-cm-runtime/runtime').RuntimeModuleContracts['intrinsics/sync']> = sync;
-void syncOps;
